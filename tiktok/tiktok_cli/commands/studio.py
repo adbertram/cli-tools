@@ -1,5 +1,5 @@
 """Prepare, check, and inspect journaled Studio operations; publish or post only with --yes."""
-from contextlib import contextmanager
+from contextlib import closing
 from pathlib import Path
 
 import typer
@@ -43,14 +43,9 @@ def _require_yes(yes):
         raise StudioPublishError("Refusing Studio public Post without --yes.")
 
 
-@contextmanager
 def _publisher():
     """One StudioPublisher for one command, closed however the command ends."""
-    publisher = StudioPublisher(get_config())
-    try:
-        yield publisher
-    finally:
-        publisher.close()
+    return closing(StudioPublisher(get_config()))
 
 
 @app.command("prepare")
@@ -222,12 +217,9 @@ def studio_inventory(
     from ..client import get_web_client
     ids = _read_inventory_input(manifest)
     checkpoint = _read_inventory_input(continuation) if continuation is not None else None
-    client = get_web_client()
-    try:
+    with closing(get_web_client()) as client:
         result = client.get_studio_videos(username, ids, expected_account_id=account_id,
                                          continuation=checkpoint, max_pages=max_pages)
-    finally:
-        client.close()
     if table:
         columns = ["id", "url", "observed_at", "server_timestamp_ms"]
         print_table(result["records"], columns, columns)
@@ -249,11 +241,8 @@ def studio_watch(
     Uses one bounded insight request and verifies both post and account identity.
     """
     from ..client import TikTokWebClient
-    client = TikTokWebClient(config=get_config())
-    try:
+    with closing(TikTokWebClient(config=get_config())) as client:
         result = client.get_studio_watch_metrics(username, video_id, expected_account_id=account_id)
-    finally:
-        client.close()
     if table:
         row = {"id": result["id"], **{k: v for k, v in result["metrics"].items() if k != "retention"},
                "retention_points": len(result["metrics"]["retention"] or []), "unavailable": result["watch_metrics_error"]}
