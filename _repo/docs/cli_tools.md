@@ -25,7 +25,7 @@
 | `claude-code-sessions` | The `claude-code-sessions` CLI wraps claude with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `clickbank` | The `clickbank` CLI provides a command-line interface for Clickbank API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cliclick` | The `cliclick` CLI wraps cliclick with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
-| `clipster` | Read Clipster's public clipping campaign catalog |
+| `clipster` | Clipster creator client: public campaign catalog, unattended email-passcode login, campaign rules and eligibility, linked social accounts, duplicate-safe TikTok submissions, submissions and earnings |
 | `cloudflare` | The `cloudflare` CLI provides a command-line interface for Cloudflare API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `codex-helper` | Codex local app-server helper commands |
 | `codex-sessions` | The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |

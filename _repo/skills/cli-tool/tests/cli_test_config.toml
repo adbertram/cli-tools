@@ -379,6 +379,10 @@ excluded_from_list_required = ["account", "earnings"]
 excluded_from_list_required = ["account"]
 excluded_from_get_required = ["social-accounts"]
 
+[cli_specific.clipster]
+# The signed-in creator and its balance/earnings totals are singletons with no IDs to discover.
+excluded_from_list_required = ["account", "earnings"]
+
 [cli_specific.frameio]
 # A share is addressed only by its public URL; Frame.io exposes no way to
 # enumerate shares, so `shares get <share-url>` has no collection command.

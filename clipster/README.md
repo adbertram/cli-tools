@@ -2,15 +2,14 @@
 
 ## DESCRIPTION
 
-A command-line interface for Clipster. Read Clipster's public clipping campaign catalog.
+A command-line interface for Clipster, the creator clipping platform. Read the public campaign catalog, sign in to a creator account unattended (emailed passcode read from Gmail), read campaign rules and eligibility, list linked social accounts and their recent posts, submit TikTok posts to campaigns without double-submitting, and read submissions, balances and earnings.
 
 Use this CLI when you need scriptable, JSON-first access to Clipster from agents, automation, or terminal workflows.
 
 ## Docs
 
-- API documentation: https://www.clipster.gg/discover
-- Base URL: https://api.clipster.gg
-
+- Web app: https://www.clipster.gg/discover
+- Base URL: https://api.clipster.gg (internal web-app API; no public docs)
 
 ## Installation
 
@@ -23,49 +22,137 @@ After installation, the `clipster` command will be available in your terminal.
 ## Quick Start
 
 ```bash
-# List campaigns (default --limit 100)
-clipster campaigns list
-
-# Table output of the first 10
+# Public catalog (no login)
 clipster campaigns list --limit 10 --table
 
-# Get one campaign by id
-clipster campaigns get 63d03ef9-d6b4-45b1-ada3-48f72bc2e948
+# Sign in (emailed passcode is read from Gmail automatically)
+clipster auth login
+clipster auth status
+
+# Creator reads
+clipster account get
+clipster social-accounts list
+clipster campaigns get c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3
+clipster submissions list
+
+# Prove a submission without sending it
+clipster submissions create c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3 \
+  --url https://www.tiktok.com/@ata_clipper/video/7696592655307787533 --dry-run
 ```
 
-Clipster's campaign catalog is public: no account, API key, or `auth` command is needed.
+## Authentication
+
+```bash
+# Sign in (first run prompts once for the account email; later runs reuse it)
+clipster auth login
+
+# Sign in again even when the saved session works
+clipster auth login --force
+
+# Live check (refreshes an expired session, never sends a passcode)
+clipster auth status
+clipster auth test
+
+# Clear the saved session and email
+clipster auth logout
+```
+
+Login is fully unattended and HTTP-only:
+
+1. `POST /auth/initialize` with `{"email", "user_kind": "Creator"}` makes Clipster email a 6-digit passcode from `no-reply@clipster.gg`.
+2. The CLI runs `google gmail search` / `google gmail read` (the `google` CLI, as a subprocess) and takes the code from the first passcode email that was not already in the inbox.
+3. `POST /auth/finalize` with `{"auth_id", "code"}` returns an access token (7 days) and a single-use refresh token (about 100 days), saved in the active profile.
+
+Every command refreshes the access token automatically (`POST /auth/refresh`) when it is within 5 minutes of expiry or the API answers 401. Refresh and login hold a per-profile file lock, so parallel commands never reuse a rotated refresh token. When refresh is rejected, commands sign in again through the same passcode path; `auth status` / `auth test` never do. The `google` CLI must be signed in to the Gmail inbox that receives the passcode.
 
 ## Commands
 
 ### Campaigns
 
 ```bash
-# List campaigns: every API field as returned, plus web_url
+# Public catalog: every API field plus web_url (no login, cached 5 minutes)
 clipster campaigns list
+clipster campaigns list --limit 200 --filter "type:eq:CAMPAIGN_TYPE_CLIPPING" --properties "id,name,allowed_platforms"
 
-# Read up to 250 campaigns (follows pages until the limit or the last page)
-clipster campaigns list --limit 250
+# Authenticated detail: guidelines, sounds, caption_requirements.required_tags,
+# minimum_submission_duration_seconds, minimum_views_for_earnings, limits,
+# user_earnings, requirement_changes, plus account_eligibility
+clipster campaigns get c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3
+clipster campaigns get c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3 --table
+clipster campaigns get c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3 --properties "name,guidelines,account_eligibility"
 
-# Table output
-clipster campaigns list --limit 25 --table
-
-# Filter rows (applied to the rows read within --limit)
-clipster campaigns list --filter "status:eq:CAMPAIGN_STATUS_ACTIVE"
-
-# Restrict output fields
-clipster campaigns list --properties "id,name,web_url"
-
-# Get one campaign by id (found by reading the catalog; errors if the id is absent)
-clipster campaigns get 63d03ef9-d6b4-45b1-ada3-48f72bc2e948
-
-# Get one campaign as a field/value table
-clipster campaigns get 63d03ef9-d6b4-45b1-ada3-48f72bc2e948 --table
-
-# Get selected fields of one campaign
-clipster campaigns get 63d03ef9-d6b4-45b1-ada3-48f72bc2e948 --properties "id,name,web_url"
+# Join: open campaigns need nothing (status not_required); application-only
+# campaigns get an application (status applied, or existing)
+clipster campaigns join 989c8f2a-51ca-4ad6-9db4-dc49685d2a85 --dry-run
+clipster campaigns join 989c8f2a-51ca-4ad6-9db4-dc49685d2a85 --yes
 ```
 
-`campaigns list` reads `https://api.clipster.gg/campaigns/public?page=N&limit=100`, sending an explicit `User-Agent` (the API answers Python's default one with HTTP 403) and `Accept: application/json`. It stops once `--limit` rows are collected or `metadata.pagination.total_pages` is reached. A response whose `data.campaigns` is not a list is an error. The catalog has no verified detail route, so `campaigns get` reads the whole catalog and returns the row with the matching id.
+### Account
+
+```bash
+# Signed-in creator: id, email, username, permissions, account_type, bio_linking_enabled
+clipster account get
+clipster account get --table
+```
+
+### Social Accounts
+
+```bash
+# Linked accounts: account_id, platform, username, follower_count, oauth_connected, linked_at
+clipster social-accounts list
+clipster social-accounts list --filter "platform:eq:SOCIAL_MEDIA_PLATFORM_TIKTOK" --table
+
+# One linked account by account_id
+clipster social-accounts get 365109a0-fc0b-458b-a49a-012edc220d71
+
+# Recent posts Clipster sees on a linked account (post_id, post_url, published_at)
+clipster social-accounts posts 365109a0-fc0b-458b-a49a-012edc220d71 --limit 5
+
+# Bio-code linking (only when account get shows bio_linking_enabled: true)
+clipster social-accounts link --platform tiktok --username ata_clipper --dry-run
+clipster social-accounts link --platform tiktok --username ata_clipper --yes
+clipster social-accounts verify <LINK_ID> --yes
+```
+
+`link` returns Clipster's `verification_code`, `expires_at` and `link_id`; put the code in the account bio, then run `verify`. Otherwise accounts link through TikTok OAuth in the web app (Connect Account).
+
+### Submissions
+
+```bash
+# This account's submissions: id, campaign_id, campaign_name, status, post_url,
+# view_count, eligible_view_count, potential_earnings, paid_out_earnings, created_at
+clipster submissions list
+clipster submissions list --campaign-id c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3 --table
+clipster submissions list --filter "status:eq:processing"
+
+# One submission
+clipster submissions get <SUBMISSION_ID>
+
+# Submit once (dry run first)
+clipster submissions create c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3 \
+  --url https://www.tiktok.com/@ata_clipper/video/7696592655307787533 --dry-run
+clipster submissions create c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3 \
+  --url https://www.tiktok.com/@ata_clipper/video/7696592655307787533 --yes
+```
+
+`submissions create` takes a full `https://www.tiktok.com/@<user>/video/<id>` URL (short links are refused; query strings are dropped). Before sending it:
+
+1. Looks for a submission of the same video in that campaign; if one exists it returns `status: existing` with that record and sends nothing.
+2. Checks the TikTok handle is a linked account, the campaign is `CAMPAIGN_STATUS_ACTIVE`, accepts TikTok, has dashboard submissions open, has an approved application when application-only, and lists the account as eligible.
+3. `--dry-run` stops here and returns the exact request. `--yes` sends `POST /campaigns/<id>/submissions-async` with `{"campaign_id", "content_list": [{"content_url"}]}` and returns `status: created` with the native submission record and Clipster's response.
+
+`--yes` affirms the post follows the campaign's guidelines (length, sound, tags, niche); Clipster reviews submissions asynchronously.
+
+### Earnings
+
+```bash
+# campaign_balance, referral_balance, pending_balance, lifetime_earnings,
+# money_earned, total_videos, total_views, total_actual_views, total_balance
+clipster earnings get
+
+# Balance transactions
+clipster earnings transactions --table
+```
 
 ## Output Formats
 
@@ -81,24 +168,30 @@ The CLI must not call an LLM or include required pre-action command lists. Optio
 ### JSON Output Example
 
 ```bash
-clipster campaigns list --limit 1 --properties "id,name,status,web_url"
+clipster submissions create c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3 \
+  --url https://www.tiktok.com/@ata_clipper/video/7696592655307787533 --dry-run
 ```
 
 ```json
-[
-  {
-    "id": "63d03ef9-d6b4-45b1-ada3-48f72bc2e948",
-    "name": "You cant please everyone (Slideshow)",
-    "status": "CAMPAIGN_STATUS_ACTIVE",
-    "web_url": "https://www.clipster.gg/discover?openedCampaignId=63d03ef9-d6b4-45b1-ada3-48f72bc2e948"
+{
+  "status": "dry_run",
+  "submission": null,
+  "url": "https://www.tiktok.com/@ata_clipper/video/7696592655307787533",
+  "request": {
+    "method": "POST",
+    "url": "https://api.clipster.gg/campaigns/c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3/submissions-async",
+    "body": {
+      "campaign_id": "c2a1d9e0-562c-47e8-82e7-c87f8b4aafc3",
+      "content_list": [{"content_url": "https://www.tiktok.com/@ata_clipper/video/7696592655307787533"}]
+    }
   }
-]
+}
 ```
 
 ### Table Output Example
 
 ```bash
-clipster campaigns list --limit 5 --table
+clipster social-accounts list --table
 ```
 
 ## Options Reference
@@ -109,16 +202,20 @@ clipster campaigns list --limit 5 --table
 | `--limit` | `-l` | Maximum number of results |
 | `--filter` | `-f` | Filter results using `field:op:value` syntax |
 | `--properties` | `-p` | Restrict output to selected fields |
+| `--yes` |  | Authorize a change (join, link, verify, submit) |
+| `--dry-run` |  | Run every check and print the request without sending it |
 | `--version` | `-v` | Show version and exit |
-| `--no-cache` |  | Bypass cached read responses for this execution |
+| `--no-cache` |  | Bypass cached catalog reads for this execution |
 
 ## Configuration
 
-Non-authentication configuration is stored in `~/.local/share/cli-tools/clipster/.env`. CLI-managed runtime auth state is stored in the active profile at `~/.local/share/cli-tools/clipster/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
+Non-authentication configuration is stored in `~/.local/share/cli-tools/clipster/.env`. The active profile `~/.local/share/cli-tools/clipster/authentication_profiles/<profile>/.env` (mode 600) holds the session tokens written by login and refresh, and `EMAIL=secret://clipster-email`; the email itself lives in the CLI-tools secret manager:
 
-Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
+```bash
+<cli-tools-root>/_repo/_secret-manager/secrets.sh set clipster-email
+```
 
-Do not put reusable credentials in any `.env` file. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. `.env` files are limited to non-secret config and CLI-managed runtime auth state.
+Do not put reusable credentials in any `.env` file. `.env` files are limited to non-secret config and CLI-managed runtime auth state.
 
 Root config variables:
 
@@ -131,7 +228,6 @@ CACHE_ENABLED=true
 CACHE_TTL=3600
 ```
 
-
 ## Cache
 
 ```bash
@@ -142,43 +238,53 @@ clipster cache clear
 clipster --no-cache campaigns list --limit 10
 ```
 
+Only the public catalog is cached; authenticated reads are always live.
 
 ## Exit Codes
 
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error |
-| 2 | Client/config/authentication error |
+| 1 | General error (API error, refused mutation, failed check) |
+| 2 | Authentication error (no session, passcode not received) |
 | 130 | User interrupted (Ctrl+C) |
 
 ## Examples
 
-### List Campaign IDs with jq
+### Submit only when not already submitted
 
 ```bash
-clipster campaigns list --limit 200 | jq -r '.[].id'
+clipster submissions create "$CAMPAIGN_ID" --url "$POST_URL" --yes | jq -r '.status'   # created | existing
 ```
 
-### Export the Catalog to a JSON File
+### Total views across submissions
 
 ```bash
-clipster campaigns list --limit 200 > campaigns.json
+clipster submissions list --limit 1000 | jq '[.[].view_count // 0] | add'
 ```
 
 ## Output Contract
 
-Both commands print JSON on stdout. Each campaign is the row exactly as the API returns it (all fields, nothing pruned) plus one added field:
+All commands print JSON on stdout; messages go to stderr.
 
-| Field | Description |
-|-------|-------------|
-| `web_url` | `https://www.clipster.gg/discover?openedCampaignId=<id>` |
-
-`campaigns list` prints an array of rows; `campaigns get` prints one row object (an array when `--properties` is given). Reads are cached for 5 minutes; pass `--no-cache` for a fresh read.
+| Command | Shape |
+|---------|-------|
+| `campaigns list` | array of native public campaign rows plus `web_url` |
+| `campaigns get` | native campaign detail object plus `web_url` and `account_eligibility` |
+| `campaigns join` | `{status: not_required\|existing\|applied\|dry_run, campaign_id, application\|request}` |
+| `account get` | native `user` object plus `show_oauth_modal`, `bio_linking_enabled` |
+| `social-accounts list` / `posts` | arrays of native rows |
+| `social-accounts get` | one native linked-account row |
+| `social-accounts link` / `verify` | native response `data`, or `{status: dry_run, request}` |
+| `submissions list` / `get` | native submission rows / one row |
+| `submissions create` | `{status: created\|existing\|dry_run, submission, url, request?, response?}` |
+| `earnings get` | `/balance` and `/users/statistics` fields merged |
+| `earnings transactions` | array of native transaction rows |
 
 ## Requirements
 
 - Python 3.11+
+- The `google` CLI, signed in to the Gmail inbox that receives Clipster passcodes (login only)
 - Dependencies (installed automatically):
   - typer
   - python-dotenv
