@@ -48,7 +48,7 @@ class Client:
 
 
 def payload(items, cursor=12, more=1):
-    return {'data':[{'type':1,'item':i} for i in items], 'cursor':cursor, 'has_more':more, 'extra':{'logid':'123'}}
+    return {'status_code':0,'data':[{'type':1,'item':i} for i in items], 'cursor':cursor, 'has_more':more, 'extra':{'logid':'123'}}
 
 
 def test_bounded_dedup_pagination():
@@ -108,13 +108,15 @@ def test_native_first_response_never_replays_fetch():
     import json
     from types import SimpleNamespace
     class NativePage(Page):
+        def evaluate(self, script, arg=None):
+            return ["https://www.tiktok.com/api/search/general/full/?keyword=%23other", super().evaluate(script)]
         def begin_network_observation(self, **options):
             assert options['method'] == 'GET'
             return 'owner'
         def goto(self, url):
             assert url.endswith('/search?q=%23boxabl')
         def network_observations(self, session, **options):
-            return [{'kind':'request','request_id':'one'}, {'kind':'response','request_id':'one','status':200,'route_matches':True},{'kind':'finished','request_id':'one'}]
+            return [{'kind':'request','request_id':'one','url_sha256':__import__('hashlib').sha256(Page().evaluate('').encode()).hexdigest()}, {'kind':'response','request_id':'one','status':200,'route_matches':True},{'kind':'finished','request_id':'one'}]
         def network_response_body(self, session, request_id):
             return json.dumps(payload([item()],more=0))
         def end_network_observation(self, session):

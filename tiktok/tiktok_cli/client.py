@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, parse_qsl, urlencode
 
 from cli_tools_shared.http_session import (
     DEFAULT_REQUESTS_BASE_DELAY,
@@ -410,6 +410,11 @@ def normalize_account_identity(payload: dict) -> Dict:
     return {"account_id": account_id, "username": username}
 
 
+def _validate_feed_limit(limit):
+    if type(limit) is not int or not 1 <= limit <= ITEM_PAGE_SIZE * ITEM_MAX_PAGES:
+        raise ClientError("Feed limit must be 1–1500.", code="invalid_feed_limit", category="validation")
+
+
 class TikTokWebClient:
     """Drives a live tiktok.com page and calls its own signed web API."""
 
@@ -680,31 +685,47 @@ class TikTokWebClient:
         from .studio import MAX_STUDIO_ITEMS
         return self._studio_read(username, limit=MAX_STUDIO_ITEMS, video_id=video_id, expected_account_id=expected_account_id)[0]
 
-    def _list_items(self, page, path: str, normalize, limit: int) -> List[Dict]:
-        """Walk an ``itemList``/``hasMore``/``cursor`` feed up to ``limit`` items."""
-        items: List[Dict] = []
-        seen = set()
-        cursor = 0
-        pages = 0
-
-        while len(items) < limit and pages < ITEM_MAX_PAGES:
-            page_size = min(ITEM_PAGE_SIZE, max(limit - len(items), 1))
-            payload = self._fetch_json(page, f"{path}&count={page_size}&cursor={cursor}")
-            for item in payload.get("itemList") or []:
-                video_id = item.get("id")
-                if not video_id or video_id in seen:
-                    continue
-                seen.add(video_id)
-                items.append(normalize(item))
-            pages += 1
-            if not payload.get("hasMore"):
-                break
+    def _list_items(self, page, path: str, normalize, limit: int, initial_payload=None, expected_author=None) -> List[Dict]:
+        """Read a bounded native feed; reject missing data and stalled pagination."""
+        _validate_feed_limit(limit)
+        url = urlsplit(path)
+        params = dict(parse_qsl(url.query))
+        for key in ("msToken", "X-Bogus", "X-Gnarly", "X-Dynosaur"):
+            params.pop(key, None)
+        items, seen, cursors = [], set(), set()
+        cursor = "0"
+        for page_index in range(ITEM_MAX_PAGES):
+            params.update(count=str(min(ITEM_PAGE_SIZE, limit - len(items))), cursor=cursor)
+            try:
+                payload = initial_payload if page_index == 0 and initial_payload is not None else self._fetch_json(page, url.path + "?" + urlencode(params))
+            except ClientError as exc:
+                raise ClientError("TikTok native feed request failed.", code=exc.code, category=exc.category, status=exc.status, retry_after_seconds=exc.retry_after_seconds) from None
+            more = payload.get("hasMore")
+            raw = payload.get("itemList")
+            if raw is None and more is False and type(payload.get("total")) is int and payload["total"] == 0:
+                raw = []  # Observed native empty Favorites response explicitly carries total=0.
+            if not isinstance(raw, list) or type(more) not in (bool, int) or more not in (0, 1):
+                raise ClientError("TikTok feed response is malformed; absence was not verified.", code="feed_malformed", category="provider")
+            new_count = 0
+            for item in raw:
+                if not isinstance(item, dict) or not item.get("id"):
+                    raise ClientError("TikTok feed item is malformed.", code="feed_malformed", category="provider")
+                author = item.get("author") or item.get("authorInfo")
+                if not isinstance(author, dict) or not isinstance(author.get("uniqueId"), str) or not author["uniqueId"]:
+                    raise ClientError("TikTok feed author is malformed.", code="feed_malformed", category="provider")
+                record = normalize(item)
+                if expected_author and record["author"].casefold() != expected_author.casefold():
+                    raise ClientError("TikTok feed returned another profile's video.", code="feed_identity_mismatch", category="provider")
+                video_id = record["id"]
+                if video_id not in seen:
+                    seen.add(video_id); items.append(record); new_count += 1
+            if len(items) >= limit or not more:
+                return items[:limit]
             next_cursor = payload.get("cursor")
-            if next_cursor is None or str(next_cursor) == str(cursor):
-                break
-            cursor = next_cursor
-
-        return items[:limit]
+            if not isinstance(next_cursor, (str, int)) or isinstance(next_cursor, bool) or not str(next_cursor).isdigit() or str(next_cursor) == cursor or str(next_cursor) in cursors or not new_count:
+                raise ClientError("TikTok feed pagination did not advance.", code="feed_pagination_stalled", category="provider")
+            cursors.add(cursor); cursor = str(next_cursor)
+        raise ClientError("TikTok feed exceeded its pagination bound.", code="feed_incomplete", category="provider")
 
     def get_account(self, expected_username: Optional[str] = None, expected_account_id: Optional[str] = None) -> Dict:
         """Read verified current identity without exporting passport secrets.
@@ -747,33 +768,56 @@ class TikTokWebClient:
         return search_hashtag_videos(self, hashtag, limit=limit, max_pages=max_pages)
 
     def list_favorites(self, limit: int = 100) -> List[Dict]:
-        """List the logged-in account's saved (favorited) TikTok videos."""
-        return self._list_items(self._page(), FAVORITES_PATH, normalize_favorite, limit)
+        """Read the verified session owner's native Favorites feed."""
+        from .native import observe_get
+        _validate_feed_limit(limit)
+        actor = self.get_account()
+        def navigate(page):
+            page.goto(self.config.base_url.rstrip('/') + '/@' + quote(actor['username'], safe=''))
+            for _ in range(20):
+                ready = page.evaluate("""() => {
+                    const tab = Array.from(document.querySelectorAll('[role=tab]')).find(el => el.innerText === 'Favorites');
+                    if (!tab) return false;
+                    performance.clearResourceTimings(); tab.click(); return true;
+                }""")
+                if ready:
+                    return
+                time.sleep(.25)
+            raise ClientError("TikTok native Favorites tab is unavailable.", code="favorites_unavailable", category="provider")
+        page, payload, native_url = observe_get(self, urlsplit(FAVORITES_PATH).path, navigate)
+        url = urlsplit(native_url)
+        if url.hostname != 'www.tiktok.com' or url.path != urlsplit(FAVORITES_PATH).path:
+            raise ClientError("TikTok Favorites request origin is invalid.", code="feed_malformed", category="provider")
+        return self._list_items(page, native_url, normalize_favorite, limit, initial_payload=payload)
 
     def list_posted_videos(self, username: str, limit: int = 100) -> List[Dict]:
-        """List a profile's posted videos; private posts appear only for the
-        logged-in owner's own profile."""
+        """Read a public profile's native feed; provider failure is never absence."""
+        from .native import observe_get
+        _validate_feed_limit(limit)
         handle = (username or "").strip().lstrip("@")
-        if not handle:
-            raise ClientError("A TikTok username is required.")
-        page = self._page(f"/@{quote(handle)}")
-        sec_uid = page.evaluate(_SEC_UID_JS)
-        if isinstance(sec_uid, dict) and sec_uid.get("error") == "account_not_found":
-            raise ClientError(f"account_not_found: TikTok profile @{handle} was not found.")
-        if not sec_uid:
-            raise ClientError(
-                f"TikTok profile page for @{handle} did not expose "
-                "webapp.user-detail userInfo.user.secUid."
-            )
-        path = f"{POSTS_PATH}&secUid={quote(sec_uid, safe='')}"
-        return self._list_items(page, path, normalize_posted_video, limit)
+        if not re.fullmatch(r'[A-Za-z0-9_.]{1,256}', handle):
+            raise ClientError("A valid TikTok username is required.")
+        sec_uid = None
+        def navigate(page):
+            nonlocal sec_uid
+            page.goto(self.config.base_url.rstrip('/') + '/@' + quote(handle, safe=''))
+            sec_uid = page.evaluate(_SEC_UID_JS)
+            if isinstance(sec_uid, dict) and sec_uid.get('error') == 'account_not_found':
+                raise ClientError(f"account_not_found: TikTok profile @{handle} was not found.")
+            if not isinstance(sec_uid, str) or not sec_uid:
+                raise ClientError("TikTok profile did not expose its native secUid.", code="feed_identity_unavailable", category="provider")
+        page, payload, native_url = observe_get(self, urlsplit(POSTS_PATH).path, navigate)
+        url = urlsplit(native_url)
+        if url.hostname != 'www.tiktok.com' or url.path != urlsplit(POSTS_PATH).path or dict(parse_qsl(url.query)).get('secUid') != sec_uid:
+            raise ClientError("TikTok post request does not match the requested profile.", code="feed_identity_mismatch", category="provider")
+        return self._list_items(page, native_url, normalize_posted_video, limit, initial_payload=payload, expected_author=handle)
 
     def get_posted_video(self, username: str, video_id: str) -> Dict:
         """Find one of a profile's posted videos by id."""
         for video in self.list_posted_videos(username, limit=ITEM_PAGE_SIZE * ITEM_MAX_PAGES):
             if video["id"] == str(video_id):
                 return video
-        raise ClientError(f"Video {video_id} not found in @{username.lstrip('@')}'s posts.")
+        raise ClientError(f"Video {video_id} not found in @{username.lstrip('@')}'s bounded post scan.", code="feed_lookup_inconclusive", category="provider")
 
     def delete_video(self, video_id: str) -> Dict:
         """Delete one of the logged-in account's videos."""

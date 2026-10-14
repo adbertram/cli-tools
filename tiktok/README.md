@@ -698,3 +698,26 @@ The initial native GET response is captured once through the shared bounded
 network observer; only later pages issue signed in-page fetches.
 Live verification on October 13, 2026 returned 19 exact `#boxabl` videos across
 two pages, including post 7696124366349782305 with 633 views and 26 likes.
+
+### Native Favorites and public profile feeds
+
+Favorites and public profile listing now capture the website's initial signed
+GET response instead of assembling a minimal request or repeating that first
+request. Later pages retain the observed native parameters. The session uses the
+installed Chrome's real user agent through the shared browser helper; an explicit
+`BROWSER_USER_AGENT` override remains supported. This keeps headed and headless
+session identity consistent across Chrome updates.
+
+Favorites verifies the current account, opens that account's native Favorites
+tab, and accepts an omitted `itemList` only when TikTok explicitly returns
+`hasMore: false` and integer `total: 0`. Missing or malformed feeds, unrelated
+profile videos, repeated pages/cursors, and incomplete bounded scans are explicit
+errors. Limits are checked before browser access. Captured request URL digests
+associate each response with its exact native request without exporting signed
+queries or headers. `favorites list` always closes its browser client.
+
+Live checks on October 14, 2026 verified zero saved posts for `clipper` in JSON
+and table output. TikTok's own public Videos tab currently returns HTTP 200 with
+an empty response for both `ata_clipper` and `joecoxtech`, in authenticated,
+anonymous, headed, and headless comparisons. The CLI preserves this as
+`tiktok_empty_response`, never an empty profile or a Studio substitute.

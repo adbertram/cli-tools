@@ -1,7 +1,5 @@
 """Bounded hashtag search through TikTok's observed native search endpoint."""
-import json
 import re
-import time
 from urllib.parse import urlencode, urlsplit, parse_qsl
 from datetime import datetime, timezone
 
@@ -57,53 +55,9 @@ def normalize_search_video(raw, hashtag):
 
 
 def _open_search(client, hashtag):
-    """Capture the page's first native GET response without repeating it."""
-    page = client._page('/')
-    session = page.begin_network_observation(method='GET', origin='https://www.tiktok.com', path=SEARCH_PATH)
-    request_ids, statuses = set(), {}
-    try:
-        page.goto(client.config.base_url.rstrip('/') + '/search?' + urlencode({'q':'#'+hashtag}))
-        deadline = time.monotonic() + 15
-        while time.monotonic() < deadline:
-            events = page.network_observations(session, method='GET', origin='https://www.tiktok.com', path=SEARCH_PATH, request_ids=tuple(request_ids))
-            for event in events:
-                request_id = event['request_id']
-                if event['kind'] == 'request':
-                    request_ids.add(request_id)
-                elif event['kind'] == 'response':
-                    if not event['route_matches']:
-                        raise ClientError('TikTok native search response changed route.', code='search_malformed', category='provider')
-                    statuses[request_id] = event['status']
-                elif event['kind'] == 'failed':
-                    raise ClientError('TikTok native search request failed.', code='search_native_failed', category='transient')
-                elif event['kind'] == 'finished':
-                    status = statuses.get(request_id)
-                    if status != 200:
-                        raise ClientError('TikTok native search request failed.', code=f'tiktok_http_{status}', category='auth' if status in (401,403) else 'rate_limit' if status == 429 else 'provider', status=status)
-                    body = page.network_response_body(session, request_id)
-                    if not body:
-                        raise ClientError('TikTok native search response is empty.', code='tiktok_empty_response', category='provider', status=status)
-                    try:
-                        payload = json.loads(body)
-                    except ValueError:
-                        raise ClientError('TikTok native search response is not JSON.', code='tiktok_non_json_response', category='provider', status=status) from None
-                    if not isinstance(payload, dict):
-                        raise ClientError('TikTok native search response is malformed.', code='search_malformed', category='provider', status=status)
-                    code = payload.get('status_code', payload.get('statusCode'))
-                    if code not in (None,0):
-                        raise ClientError('TikTok native search rejected the request.', code=f'tiktok_provider_{code}' if type(code) is int else 'tiktok_provider_status', category='provider', status=status)
-                    native_url = page.evaluate("() => performance.getEntriesByType('resource').map(e=>e.name).find(x=>new URL(x).pathname === '/api/search/general/full/') || null")
-                    if not native_url:
-                        raise ClientError('TikTok native search request metadata is missing.', code='search_malformed', category='provider')
-                    return page, payload, native_url
-            time.sleep(.25)
-        raise ClientError('TikTok native search response timed out.', code='search_unavailable', category='transient')
-    except ClientError:
-        raise
-    except Exception:
-        raise ClientError('TikTok native search capture failed.', code='search_capture_failed', category='provider') from None
-    finally:
-        page.end_network_observation(session)
+    """Capture the page's first native search GET without replaying it."""
+    from .native import observe_get
+    return observe_get(client, SEARCH_PATH, lambda page: page.goto(client.config.base_url.rstrip('/') + '/search?' + urlencode({'q':'#'+hashtag})))
 
 
 def search_hashtag_videos(client, hashtag, *, limit=30, max_pages=2):

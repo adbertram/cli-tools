@@ -45,7 +45,11 @@ def list_favorites(
         except FilterValidationError as e:
             raise ClientError(str(e)) from e
 
-    favorites = get_web_client().list_favorites(limit=limit)
+    client = get_web_client()
+    try:
+        favorites = client.list_favorites(limit=limit)
+    finally:
+        client.close()
     if filter:
         favorites = apply_filters(favorites, filter)
     if properties:

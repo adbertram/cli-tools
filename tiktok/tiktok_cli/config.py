@@ -159,6 +159,12 @@ class Config(BaseConfig):
         return "https://www.tiktok.com"
 
     @property
+    def browser_user_agent(self) -> str:
+        """Keep the saved session on the installed real Chrome user agent."""
+        from cli_tools_shared.browser.user_agent import derive_real_chrome_user_agent
+        return self._get("BROWSER_USER_AGENT") or derive_real_chrome_user_agent()
+
+    @property
     def headless(self) -> bool:
         val = self._get("HEADLESS")
         return val is None or val.lower() == "true"

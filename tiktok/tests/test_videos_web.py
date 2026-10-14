@@ -54,6 +54,22 @@ class FakeConfig:
         return self.browser
 
 
+@pytest.fixture(autouse=True)
+def fake_native_feed(monkeypatch):
+    from tiktok_cli import native
+    from urllib.parse import quote
+    def capture(client, path, navigate):
+        page = client._page('/')
+        page.goto = lambda url: client.config.browser.urls.append(url)
+        navigate(page)
+        status, payload = page.responses.pop(0)
+        if status != 200:
+            raise ClientError('native HTTP failure', code=f'tiktok_http_{status}', status=status)
+        url = 'https://www.tiktok.com' + path + '?aid=1988&secUid=' + quote(page.sec_uid, safe='') + '&count=16&cursor=0'
+        return page, payload, url
+    monkeypatch.setattr(native, 'observe_get', capture)
+
+
 def _client(page):
     return TikTokWebClient(config=FakeConfig(page), max_retries=0)
 
@@ -100,9 +116,8 @@ def test_list_posted_videos_resolves_sec_uid_and_pages():
 
     videos = client.list_posted_videos("@adam", limit=5)
 
-    assert client.config.browser.urls == ["https://www.tiktok.com/@adam"]
+    assert client.config.browser.urls == ["https://www.tiktok.com/", "https://www.tiktok.com/@adam"]
     assert [r["path"] for r in page.requests] == [
-        "/api/post/item_list/?aid=1988&secUid=SEC%2FUID%2B1&count=5&cursor=0",
         "/api/post/item_list/?aid=1988&secUid=SEC%2FUID%2B1&count=4&cursor=99",
     ]
     assert videos == [
