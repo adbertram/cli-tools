@@ -172,6 +172,28 @@ def test_native_capture_freezes_first_ready_request_and_never_exports_signed_mat
     assert run_node(script)=='FROZEN_NO_SIGNING_EXPORT'
 
 
+def test_views_control_sort_is_accepted_and_replayed_by_post_time_only():
+    script='''
+    const semantics=SEMANTICS,read=FETCH;
+    const views={field_name:'play_count',order:2},post={field_name:'post_time',order:2};
+    const native=sorts=>({cursor:0,size:50,query:{sort_orders:sorts,conditions:[],is_recent_posts:false}});
+    const check=sorts=>{global.window={owned:{request:{url:'https://www.tiktok.com/signed',headers:{},body:native(sorts)}}};return semantics('owned')};
+    const expected=JSON.stringify([post]);
+    if(JSON.stringify(check([views,post]).query.sort_orders)!==expected)throw Error('views-first sort rejected');
+    if(JSON.stringify(check([post]).query.sort_orders)!==expected)throw Error('post-time sort rejected');
+    for(const bad of [[post,views],[views],[views,views,post],[{field_name:'post_time',order:1}],[{...views,extra:1},post],[{field_name:'play_count',order:true},post]])
+      if(check(bad)!==null)throw Error('accepted '+JSON.stringify(bad));
+    let sent=null;global.setTimeout=()=>1;global.clearTimeout=()=>{};global.AbortController=class{constructor(){this.signal={}}abort(){}};
+    global.fetch=async(url,opts)=>{sent=JSON.parse(opts.body);return {status:200,body:{getReader(){return {async read(){return {done:true}},releaseLock(){}}}}}};
+    check([views,post]);
+    (async()=>{await read({key:'owned',cursor:50,max_body:8});
+      if(sent.cursor!==50||JSON.stringify(sent.query.sort_orders)!==expected||sent.query.is_recent_posts!==false)throw Error('replay kept views sort');
+      console.log('POST_TIME_REPLAY');
+    })().catch(e=>{console.error(e);process.exitCode=1});
+    '''.replace('SEMANTICS','('+SEMANTICS_JS+')').replace('FETCH','('+FETCH_JS+')')
+    assert run_node(script)=='POST_TIME_REPLAY'
+
+
 def test_native_fetch_streams_cancels_oversize_and_aborts_with_one_request():
     script='''
     let calls=0,cancels=0,releases=0,clears=0,aborts=0;

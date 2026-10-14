@@ -158,7 +158,9 @@ READY_JS = "(key) => Boolean(window[key] && window[key].request)"
 FETCH_JS = r"""async (opts) => {
  const state=window[opts.key];if(!state||!state.request)return {status:0,body:''};
  const request=state.request;
- const body={...request.body,cursor:opts.cursor};
+ // Page by post time only: Studio's Views control adds a views-first sort key, and views
+ // change during a scan, which would make cursor pagination skip or repeat videos.
+ const body={...request.body,cursor:opts.cursor,query:{...request.body.query,sort_orders:[{field_name:'post_time',order:2}]}};
  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);
  try {
    const response=await fetch(request.url,{method:'POST',headers:request.headers,credentials:'include',body:JSON.stringify(body),signal:controller.signal,redirect:'error'});
@@ -185,10 +187,15 @@ SEMANTICS_JS = r"""(key) => {
  const q=body.query;
  if(!q||Object.keys(q).sort().join(',')!=='conditions,is_recent_posts,sort_orders'||
     !Array.isArray(q.conditions)||q.conditions.length||q.is_recent_posts!==false||
-    !Array.isArray(q.sort_orders)||q.sort_orders.length!==1||
-    Object.keys(q.sort_orders[0]).sort().join(',')!=='field_name,order'||
-    q.sort_orders[0].field_name!=='post_time'||q.sort_orders[0].order!==2)return null;
- return {path:'/tiktok/creator/manage/item_list/v1/',size:body.size,query:q};
+    !Array.isArray(q.sort_orders)||q.sort_orders.length<1||q.sort_orders.length>2)return null;
+ // The Views control may put one views sort key ahead of the post-time key; the replay
+ // drops it, so only the post-time tiebreaker is part of the read's semantics.
+ const sorts=q.sort_orders,last=sorts[sorts.length-1];
+ if(sorts.some(s=>!s||typeof s!=='object'||Object.keys(s).sort().join(',')!=='field_name,order'||
+    typeof s.field_name!=='string'||!Number.isInteger(s.order))||
+    last.field_name!=='post_time'||last.order!==2)return null;
+ return {path:'/tiktok/creator/manage/item_list/v1/',size:body.size,
+         query:{conditions:q.conditions,is_recent_posts:q.is_recent_posts,sort_orders:[{field_name:'post_time',order:2}]}};
 }"""
 
 class StudioReader:
