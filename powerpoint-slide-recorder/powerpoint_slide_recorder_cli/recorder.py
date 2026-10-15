@@ -191,6 +191,7 @@ SLIDE_ADVANCE_CONFIRM_SECONDS = 3.0
 SLIDESHOW_ENDED_MARKER = "ended"
 PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
 PACKAGE_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
+DOCUMENT_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 SLIDE_LAYOUT_RELATIONSHIP_SUFFIX = "/slideLayout"
 # Hard bound on how late a scheduled slide advance may fire before the recording is
 # aborted. Every action time is absolute against the narration timeline, so lateness
@@ -1193,9 +1194,40 @@ def terminal_next_click_after_effect_in_xml(part_xml):
     )
 
 
+def slide_part_member(deck, slide_number):
+    """Return the OOXML member of the slide at PowerPoint's 1-based ``slide_number`` in the show.
+
+    The index is the slide's position in ``<p:sldIdLst>``, not its part name: PowerPoint keeps a
+    slide's part name when other slides are deleted, so parts can read ``slide1, slide2, slide4``.
+    """
+    try:
+        presentation_root = ElementTree.fromstring(deck.read("ppt/presentation.xml"))
+        rels_root = ElementTree.fromstring(deck.read("ppt/_rels/presentation.xml.rels"))
+    except KeyError as error:
+        raise FileNotFoundError(f"{deck.filename}: presentation parts not found for slide index {slide_number}") from error
+    except ElementTree.ParseError as error:
+        raise ValueError(f"{deck.filename}: presentation parts are not valid XML") from error
+
+    slide_ids = list(presentation_root.iter(f"{{{PRESENTATIONML_NAMESPACE}}}sldId"))
+    if not 1 <= slide_number <= len(slide_ids):
+        raise ValueError(f"{deck.filename}: slide index {slide_number} is outside the {len(slide_ids)} slides in presentation.xml")
+    relationship_id = slide_ids[slide_number - 1].get(f"{{{DOCUMENT_RELATIONSHIPS_NAMESPACE}}}id")
+    targets = {
+        relationship.get("Id"): relationship.get("Target")
+        for relationship in rels_root.iter(f"{{{PACKAGE_RELATIONSHIPS_NAMESPACE}}}Relationship")
+    }
+    if relationship_id not in targets:
+        raise ValueError(f"{deck.filename}: slide index {slide_number} relationship {relationship_id} not found")
+    member = posixpath.normpath(posixpath.join("ppt", targets[relationship_id]))
+    if member not in deck.namelist():
+        raise FileNotFoundError(f"{deck.filename}: slide index {slide_number} part not found: {member}")
+    return member
+
+
 def slide_layout_member_for_slide(deck, slide_number):
     """Return the slide-layout OOXML member referenced by ``slide_number``."""
-    rels_member = f"ppt/slides/_rels/slide{slide_number}.xml.rels"
+    slide_member = slide_part_member(deck, slide_number)
+    rels_member = posixpath.join(posixpath.dirname(slide_member), "_rels", f"{posixpath.basename(slide_member)}.rels")
     try:
         rels_root = ElementTree.fromstring(deck.read(rels_member))
     except KeyError as error:
@@ -1214,9 +1246,9 @@ def slide_layout_member_for_slide(deck, slide_number):
 
 def slide_animation_parts(deck_path, slide_number):
     """Return the slide's OOXML and its slide layout's OOXML: the two parts whose timing plays."""
-    slide_member = f"ppt/slides/slide{slide_number}.xml"
     try:
         with zipfile.ZipFile(deck_path) as deck:
+            slide_member = slide_part_member(deck, slide_number)
             layout_member = slide_layout_member_for_slide(deck, slide_number)
             parts = []
             for member in (slide_member, layout_member):

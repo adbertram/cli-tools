@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -2249,9 +2250,16 @@ class LiveClickStepProbeTests(unittest.TestCase):
           <Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
                         Target="../slideLayouts/custom/slideLayout53.xml"/>
         </Relationships>'''
-        deck = SimpleNamespace(read=mock.Mock(return_value=relationships))
+        presentation, presentation_relationships = self._presentation_parts([26])
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as written:
+            written.writestr("ppt/presentation.xml", presentation)
+            written.writestr("ppt/_rels/presentation.xml.rels", presentation_relationships)
+            written.writestr("ppt/slides/slide26.xml", "<p:sld/>")
+            written.writestr("ppt/slides/_rels/slide26.xml.rels", relationships)
 
-        member = record.slide_layout_member_for_slide(deck, 26)
+        with zipfile.ZipFile(buffer) as deck:
+            member = record.slide_layout_member_for_slide(deck, 1)
 
         self.assertEqual(member, "ppt/slideLayouts/custom/slideLayout53.xml")
 
@@ -2330,7 +2338,10 @@ class LiveClickStepProbeTests(unittest.TestCase):
         import zipfile
 
         deck_path = root / "deck.pptx"
+        presentation, presentation_relationships = self._presentation_parts(range(1, 9))
         with zipfile.ZipFile(deck_path, "w") as deck:
+            deck.writestr("ppt/presentation.xml", presentation)
+            deck.writestr("ppt/_rels/presentation.xml.rels", presentation_relationships)
             deck.writestr("ppt/slides/slide8.xml", self._timing_part(slide_steps))
             deck.writestr("ppt/slideLayouts/slideLayout2.xml", self._timing_part(layout_steps))
             deck.writestr(
@@ -2367,6 +2378,94 @@ class LiveClickStepProbeTests(unittest.TestCase):
                     record.click_settle_seconds_for_slide(deck_path, 8),
                     record.SLIDE_CLICK_PROBE_SETTLE_SECONDS,
                 )
+
+    @staticmethod
+    def _presentation_parts(part_numbers):
+        # presentation.xml lists the show's slides in play order; the rels map each r:id to its part.
+        ids = "".join(f'<p:sldId id="{256 + i}" r:id="rId{10 + i}"/>' for i in range(len(part_numbers)))
+        rels = "".join(
+            f'<Relationship Id="rId{10 + i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" '
+            f'Target="slides/slide{part}.xml"/>'
+            for i, part in enumerate(part_numbers)
+        )
+        presentation = (
+            f'<p:presentation xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            f"<p:sldIdLst>{ids}</p:sldIdLst></p:presentation>"
+        )
+        relationships = f'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}</Relationships>'
+        return presentation, relationships
+
+    def _renumbered_deck(self, root, with_part_four=True):
+        # A deck whose slide 3 was left as part 4 after the old slide 3 was deleted: parts [1, 2, 4].
+        layout_rels = (
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" '
+            'Target="../slideLayouts/slideLayout{layout}.xml"/></Relationships>'
+        )
+        presentation, relationships = self._presentation_parts([1, 2, 4])
+        deck_path = root / "renumbered.pptx"
+        with zipfile.ZipFile(deck_path, "w") as deck:
+            deck.writestr("ppt/presentation.xml", presentation)
+            deck.writestr("ppt/_rels/presentation.xml.rels", relationships)
+            deck.writestr("ppt/slides/slide1.xml", self._timing_part(""))
+            deck.writestr("ppt/slides/slide2.xml", self._timing_part(self._click_step(self._effect("clickEffect", 300))))
+            deck.writestr("ppt/slideLayouts/slideLayout1.xml", self._timing_part(""))
+            deck.writestr("ppt/slideLayouts/slideLayout3.xml", self._timing_part(""))
+            for part, layout in ((1, 1), (2, 1), (4, 3)):
+                deck.writestr(f"ppt/slides/_rels/slide{part}.xml.rels", layout_rels.format(layout=layout))
+            if with_part_four:
+                deck.writestr("ppt/slides/slide4.xml", self._timing_part(self._click_step(self._effect("clickEffect", 1800))))
+        return deck_path
+
+    def test_slide_animation_parts_resolves_the_slide_index_through_presentation_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            parts = record.slide_animation_parts(deck_path, 3)
+
+            with zipfile.ZipFile(deck_path) as deck:
+                self.assertEqual(parts, [deck.read("ppt/slides/slide4.xml"), deck.read("ppt/slideLayouts/slideLayout3.xml")])
+
+    def test_slide_index_two_still_reads_part_two_in_a_renumbered_deck(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            parts = record.slide_animation_parts(deck_path, 2)
+
+            with zipfile.ZipFile(deck_path) as deck:
+                self.assertEqual(parts, [deck.read("ppt/slides/slide2.xml"), deck.read("ppt/slideLayouts/slideLayout1.xml")])
+
+    def test_click_settle_seconds_reads_the_renumbered_slides_builds(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            settle = record.click_settle_seconds_for_slide(deck_path, 3)
+            terminal_step = record.terminal_next_click_after_effect_step(deck_path, 3)
+
+        self.assertAlmostEqual(settle, 1.8 + record.CLICK_BUILD_SETTLE_MARGIN_SECONDS)
+        self.assertEqual(terminal_step, 0)
+
+    def test_slide_animation_parts_rejects_an_index_past_the_end_of_the_show(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            with self.assertRaisesRegex(ValueError, r"renumbered\.pptx.*slide index 4.*3 slides"):
+                record.slide_animation_parts(deck_path, 4)
+
+    def test_slide_animation_parts_rejects_a_slide_index_below_one(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            with self.assertRaisesRegex(ValueError, r"renumbered\.pptx.*slide index 0.*3 slides"):
+                record.slide_animation_parts(deck_path, 0)
+
+    def test_slide_animation_parts_names_the_deck_and_index_when_the_part_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir), with_part_four=False)
+
+            with self.assertRaisesRegex(FileNotFoundError, r"renumbered\.pptx.*slide index 3.*ppt/slides/slide4\.xml"):
+                record.slide_animation_parts(deck_path, 3)
 
     def test_walk_settles_each_press_for_the_current_and_next_slide(self):
         # Slide 7 (0.7s) has one build, then advances into slide 8 (2.8s), which has two.
