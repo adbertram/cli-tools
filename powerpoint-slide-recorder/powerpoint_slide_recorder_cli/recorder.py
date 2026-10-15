@@ -169,15 +169,16 @@ OPEN_DECK_DISMISS_ATTEMPTS = 8
 DIALOG_PROBE_ATTEMPTS = 3
 DIALOG_PROBE_RETRY_SECONDS = 0.5
 DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS = 2.0
-# Settle window between a probe Space press and reading the live slide index. The
-# click-build fades on these decks run 500ms; 0.7s leaves the show quiescent so the
-# index read reflects the press that just landed and never a press still in flight.
+# Floor for the settle window after a Space press, before the next press or a slide
+# index read. A press that lands while a click build is still playing is absorbed by
+# PowerPoint (it finishes the build instead of starting the next step), so each slide
+# settles for its own longest click build read from the deck (see
+# click_settle_seconds_for_slide). 0.7s is the measured window for the plain 500ms
+# fade builds and stays the minimum for every slide.
 SLIDE_CLICK_PROBE_SETTLE_SECONDS = 0.7
-# Keep the recording drive quiescent after a terminal next-click after-effect.
-# These effects use the same 500ms build timing as the probed click effects, so
-# the same measured 0.7s interval prevents the real slide advance from colliding
-# with an after-effect that is still in flight.
-TERMINAL_AFTER_EFFECT_SETTLE_SECONDS = SLIDE_CLICK_PROBE_SETTLE_SECONDS
+# Headroom added to a slide's longest authored click build: the same 200ms margin the
+# 0.7s floor gives a 500ms build, covering keystroke delivery and show-index latency.
+CLICK_BUILD_SETTLE_MARGIN_SECONDS = 0.2
 # Hard upper bound on click steps the probe will tolerate on a single slide before
 # declaring the walk runaway. Real authored slides are far below this; the bound only
 # exists so a slide that never advances cannot loop forever.
@@ -1117,6 +1118,53 @@ def click_steps_from_slide_index_walk(slide_numbers, observed_indexes):
     )
 
 
+def time_node_end_ms(time_node):
+    """Milliseconds from the parent's start until ``time_node`` and all its children finish.
+
+    A ``<p:cTn>`` starts at its numeric ``stCondLst`` delay (a click-triggered
+    ``indefinite`` delay counts from the press, so zero) and runs for the longer of its
+    own ``dur`` (times ``repeatCount``, in thousandths, and doubled by ``autoRev``) and
+    the latest end among its child time nodes. Child nodes run in parallel from the
+    parent's start, which is how After Previous chains are written: one parallel group
+    per chained effect, offset by its predecessors' durations in ``delay``.
+    """
+    delays = [
+        int(cond.get("delay"))
+        for cond in time_node.findall(f"{{{PRESENTATIONML_NAMESPACE}}}stCondLst/{{{PRESENTATIONML_NAMESPACE}}}cond")
+        if (cond.get("delay") or "").isdigit()
+    ]
+    own_ms = int(time_node.get("dur")) if (time_node.get("dur") or "").isdigit() else 0
+    if (time_node.get("repeatCount") or "").isdigit():
+        own_ms = own_ms * int(time_node.get("repeatCount")) // 1000
+    if time_node.get("autoRev") in ("1", "true"):
+        own_ms = own_ms * 2
+    time_node_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    children = time_node.find(f"{{{PRESENTATIONML_NAMESPACE}}}childTnLst")
+    # Each child element (par/seq/excl or an effect behavior) owns its time node as the
+    # first cTn in document order: the container's own cTn, or the behavior's cBhvr/cTn.
+    child_ends = [time_node_end_ms(next(child.iter(time_node_tag))) for child in (children if children is not None else [])]
+    return (min(delays) if delays else 0) + max([own_ms, *child_ends])
+
+
+def click_build_ms_in_xml(part_xml):
+    """Return each main-sequence click step's build length in milliseconds, in step order.
+
+    Only the animation that plays counts: ``<p:timing>/<p:tnLst>``, never the
+    ``<p:bldLst>`` build templates.
+    """
+    root = ElementTree.fromstring(part_xml)
+    timeline = root.find(f"{{{PRESENTATIONML_NAMESPACE}}}timing/{{{PRESENTATIONML_NAMESPACE}}}tnLst")
+    if timeline is None:
+        return []
+    time_node_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    return [
+        time_node_end_ms(next(step.iter(time_node_tag)))
+        for main_sequence in timeline.iter(time_node_tag)
+        if main_sequence.get("nodeType") == "mainSeq"
+        for step in main_sequence.find(f"{{{PRESENTATIONML_NAMESPACE}}}childTnLst")
+    ]
+
+
 def terminal_next_click_after_effect_in_xml(part_xml):
     """Return whether the main sequence's final click effect owns a next-click after-effect.
 
@@ -1164,22 +1212,34 @@ def slide_layout_member_for_slide(deck, slide_number):
     raise ValueError(f"Slide {slide_number} has no slide-layout relationship")
 
 
-def terminal_next_click_after_effect_step(deck_path, slide_number):
-    """Return one when the final slide effect has a separate next-click after-effect."""
+def slide_animation_parts(deck_path, slide_number):
+    """Return the slide's OOXML and its slide layout's OOXML: the two parts whose timing plays."""
     slide_member = f"ppt/slides/slide{slide_number}.xml"
     try:
         with zipfile.ZipFile(deck_path) as deck:
             layout_member = slide_layout_member_for_slide(deck, slide_number)
+            parts = []
             for member in (slide_member, layout_member):
                 try:
-                    part_xml = deck.read(member)
+                    parts.append(deck.read(member))
                 except KeyError as error:
                     raise FileNotFoundError(f"Slide animation part not found: {member}") from error
-                if terminal_next_click_after_effect_in_xml(part_xml):
-                    return 1
+            return parts
     except zipfile.BadZipFile as error:
         raise ValueError(f"PowerPoint deck is not a readable OOXML presentation: {deck_path}") from error
-    return 0
+
+
+def terminal_next_click_after_effect_step(deck_path, slide_number):
+    """Return one when the final slide effect has a separate next-click after-effect."""
+    return int(any(terminal_next_click_after_effect_in_xml(part) for part in slide_animation_parts(deck_path, slide_number)))
+
+
+def click_settle_seconds_for_slide(deck_path, slide_number):
+    """Seconds to wait after any press on this slide so its longest click build has finished."""
+    longest_build_ms = max(
+        [0, *(ms for part in slide_animation_parts(deck_path, slide_number) for ms in click_build_ms_in_xml(part))]
+    )
+    return max(SLIDE_CLICK_PROBE_SETTLE_SECONDS, longest_build_ms / 1000 + CLICK_BUILD_SETTLE_MARGIN_SECONDS)
 
 
 def render_live_slideshow_slide_index():
@@ -1219,16 +1279,22 @@ def exit_slideshow_if_running():
     )
 
 
-def walk_slideshow_slide_indexes(press_budget):
-    """Press Space up to ``press_budget`` times, returning the live index after each."""
+def walk_slideshow_slide_indexes(press_budget, first_slide, settle_seconds):
+    """Press Space up to ``press_budget`` times, returning the live index after each.
+
+    A press on slide N either plays N's next click build or advances to N+1, so it
+    settles for the longer of the two slides' windows before the index is read.
+    """
     observed_indexes = []
+    current_slide = first_slide
     for _ in range(press_budget):
         press_space()
-        time.sleep(SLIDE_CLICK_PROBE_SETTLE_SECONDS)
+        time.sleep(max(settle_seconds.get(current_slide, 0), settle_seconds.get(current_slide + 1, 0)))
         observed_index = live_slideshow_slide_index()
         observed_indexes.append(observed_index)
         if observed_index is None:
             return observed_indexes
+        current_slide = observed_index
     return observed_indexes
 
 
@@ -1239,10 +1305,16 @@ def measure_slide_click_steps(config, slide_numbers):
     manual advance, and presses Space through the whole range while reading the live
     slide index. A final ``nextClick`` after-effect can consume one extra press only to
     dim the last build, so that terminal styling step is excluded from narration cues
-    but returned separately for the recording drive.
+    but returned separately for the recording drive. The third result is each slide's
+    settle window (``click_settle_seconds_for_slide``), which both this walk and the
+    recording drive wait after a press so no press lands inside a playing build.
     """
     terminal_after_effects = {
         slide_number: terminal_next_click_after_effect_step(config["deck_path"], slide_number)
+        for slide_number in slide_numbers
+    }
+    settle_seconds = {
+        slide_number: click_settle_seconds_for_slide(config["deck_path"], slide_number)
         for slide_number in slide_numbers
     }
     open_deck(config)
@@ -1257,7 +1329,7 @@ def measure_slide_click_steps(config, slide_numbers):
         )
 
     press_budget = len(slide_numbers) * (MAX_CLICK_STEPS_PER_SLIDE + 1)
-    observed_indexes = walk_slideshow_slide_indexes(press_budget)
+    observed_indexes = walk_slideshow_slide_indexes(press_budget, slide_numbers[0], settle_seconds)
     click_steps = click_steps_from_slide_index_walk(slide_numbers, observed_indexes)
     for slide_number, terminal_after_effect in terminal_after_effects.items():
         if terminal_after_effect > click_steps[slide_number]:
@@ -1266,7 +1338,7 @@ def measure_slide_click_steps(config, slide_numbers):
             )
         click_steps[slide_number] = click_steps[slide_number] - terminal_after_effect
     exit_slideshow_if_running()
-    return click_steps, terminal_after_effects
+    return click_steps, terminal_after_effects, settle_seconds
 
 
 def requested_slide_numbers(items):
@@ -1331,7 +1403,14 @@ def prepared_slide_numbers(prepared_items):
     return [item["identity"]["value"] for item in prepared_items]
 
 
-def prepare(config, click_steps, terminal_after_effect_steps):
+def prepare(config, click_steps, terminal_after_effect_steps, click_settle_seconds):
+    """Build the narration track and the press schedule that drives the slide show.
+
+    Cue presses sit where the narration puts them. The presses the drive adds itself
+    (a terminal after-effect, then the slide advance) never land inside a playing click
+    build: they wait at least the slide's settle window after the slide's previous press,
+    padding the narration with silence when the narration ends sooner.
+    """
     work_dir = Path(config["work_dir"])
     audio_dir = work_dir / "audio"
     plan_path = work_dir / "timing-plan.json"
@@ -1339,16 +1418,11 @@ def prepare(config, click_steps, terminal_after_effect_steps):
     concat_path = work_dir / "concat.txt"
     lead_silence = audio_dir / "silence-lead.wav"
     inter_slide_silence = audio_dir / "silence-slide.wav"
-    terminal_after_effect_silence = audio_dir / "silence-terminal-after-effect.wav"
 
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     generate_silence(lead_silence, config["recording_lead_seconds"])
     generate_silence(inter_slide_silence, config["slide_pause_seconds"])
-    generate_silence(
-        terminal_after_effect_silence,
-        TERMINAL_AFTER_EFFECT_SETTLE_SECONDS,
-    )
 
     timeline_seconds = config["recording_lead_seconds"]
     audio_files = [lead_silence]
@@ -1373,9 +1447,19 @@ def prepare(config, click_steps, terminal_after_effect_steps):
             })
 
         timeline_seconds = timeline_seconds + duration_seconds
+        slide_number = item["identity"]["value"]
+        settle_seconds = click_settle_seconds[slide_number]
 
         if item_index < len(config["items"]) - 1:
-            for _ in range(terminal_after_effect_steps[item["identity"]["value"]]):
+            if cue_offsets:
+                builds_done_at = item_started_at + cue_offsets[-1] + settle_seconds
+                build_wait_seconds = round(builds_done_at - timeline_seconds, 3)
+                if build_wait_seconds > 0:
+                    build_wait_silence = audio_dir / f"silence-build-wait-{item['index']:03d}.wav"
+                    generate_silence(build_wait_silence, build_wait_seconds)
+                    audio_files.append(build_wait_silence)
+                    timeline_seconds = timeline_seconds + build_wait_seconds
+            for _ in range(terminal_after_effect_steps[slide_number]):
                 actions.append({
                     "at_seconds": round(timeline_seconds, 3),
                     "key": "space",
@@ -1383,8 +1467,10 @@ def prepare(config, click_steps, terminal_after_effect_steps):
                     "slide": item["identity"]["value"],
                     "reason": TERMINAL_AFTER_EFFECT_REASON,
                 })
+                terminal_after_effect_silence = audio_dir / f"silence-terminal-after-effect-{item['index']:03d}.wav"
+                generate_silence(terminal_after_effect_silence, settle_seconds)
                 audio_files.append(terminal_after_effect_silence)
-                timeline_seconds = timeline_seconds + TERMINAL_AFTER_EFFECT_SETTLE_SECONDS
+                timeline_seconds = timeline_seconds + settle_seconds
             for inter_item_action in INTER_SLIDE_ACTIONS:
                 actions.append({
                     "at_seconds": round(timeline_seconds, 3),
@@ -1402,6 +1488,7 @@ def prepare(config, click_steps, terminal_after_effect_steps):
             "cue_count": item["cue_count"],
             "measured_click_steps": click_steps[item["identity"]["value"]],
             "terminal_after_effect_steps": terminal_after_effect_steps[item["identity"]["value"]],
+            "click_settle_seconds": settle_seconds,
             "audio": str(item["audio_path"]),
             "duration_seconds": duration_seconds,
             "cue_timing_method": cue_timing_method,
@@ -2309,13 +2396,13 @@ def record(config):
         # deck and plays the requested range once, so PowerPoint state is recorded first
         # and the same cleanup path closes whatever the probe left behind on failure.
         state = create_powerpoint_state(config)
-        click_steps, terminal_after_effect_steps = measure_slide_click_steps(
+        click_steps, terminal_after_effect_steps, click_settle_seconds = measure_slide_click_steps(
             config,
             prepared_slide_numbers(config["items"]),
         )
         assert_cue_counts_match_click_steps(config["items"], click_steps)
 
-        plan = prepare(config, click_steps, terminal_after_effect_steps)
+        plan = prepare(config, click_steps, terminal_after_effect_steps, click_settle_seconds)
         work_dir = Path(config["work_dir"])
         output_path = Path(config["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -206,7 +206,7 @@ class RecordTests(unittest.TestCase):
         # The live click-step probe drives PowerPoint; every record() test stubs it and
         # asserts on what the drive does with the measurement, not on the probe's IO.
         self.click_step_probe_patcher = mock.patch.object(
-            record, "measure_slide_click_steps", return_value=({1: 1, 2: 1}, {1: 0, 2: 0})
+            record, "measure_slide_click_steps", return_value=({1: 1, 2: 1}, {1: 0, 2: 0}, {1: 0.7, 2: 0.7})
         )
         self.click_step_probe = self.click_step_probe_patcher.start()
         self.cue_count_check_patcher = mock.patch.object(record, "assert_cue_counts_match_click_steps")
@@ -773,12 +773,11 @@ Input #0, avfoundation, from '3':
                     mock.patch.object(record, "audio_duration", side_effect=[2.0, 3.0]), \
                     mock.patch.object(record, "run", side_effect=fake_run):
                 with contextlib.redirect_stdout(io.StringIO()):
-                    plan = record.prepare(config, {1: 1}, {1: 0})
+                    plan = record.prepare(config, {1: 1}, {1: 0}, {1: 0.7})
 
             self.assertEqual(generated_silence, [
                 "silence-lead.wav",
                 "silence-slide.wav",
-                "silence-terminal-after-effect.wav",
             ])
             self.assertEqual(plan["actions"], [{
                 "at_seconds": 2.0,
@@ -793,9 +792,11 @@ Input #0, avfoundation, from '3':
             })
             self.assertNotIn("slide", plan["items"][0])
 
-    def prepare_plan(self, config, durations):
+    def prepare_plan(self, config, durations, settle_seconds=None, terminal_after_effects=None, generated_silence=None):
         # durations: one per item, in order; prepare() then measures the joined narration once.
         def fake_generate_silence(path, duration_seconds):
+            if generated_silence is not None:
+                generated_silence.append((Path(path).name, duration_seconds))
             Path(path).parent.mkdir(parents=True, exist_ok=True)
             Path(path).write_bytes(b"silence")
 
@@ -814,7 +815,8 @@ Input #0, avfoundation, from '3':
                 return record.prepare(
                     config,
                     {slide: 0 for slide in slides},
-                    {slide: 0 for slide in slides},
+                    terminal_after_effects or {slide: 0 for slide in slides},
+                    settle_seconds or {slide: 0.7 for slide in slides},
                 )
 
     def test_prepare_uses_explicit_cue_offsets_verbatim(self):
@@ -839,6 +841,56 @@ Input #0, avfoundation, from '3':
 
         self.assertEqual([action["at_seconds"] for action in plan["actions"]], [2.0])
         self.assertEqual(plan["items"][0]["cue_timing_method"], "word-ratio")
+
+    def two_slide_config(self, root):
+        config = slide_config(root)
+        second = dict(config["items"][0])
+        second.update({"index": 2, "label": "Slide 2", "identity": {"field": "slide", "value": 2}})
+        config["items"].append(second)
+        return config
+
+    def test_prepare_waits_out_the_last_cues_build_before_the_slide_advance(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.two_slide_config(Path(temp_dir))
+            config["items"][0]["cue_offsets_seconds"] = [1.5]
+            silence = []
+
+            plan = self.prepare_plan(config, [2.0, 3.0], settle_seconds={1: 2.8, 2: 0.7}, generated_silence=silence)
+
+        # Cue at 1.0 + 1.5 = 2.5s; its 2.8s build ends at 5.3s, after the narration's 3.0s end.
+        self.assertIn(("silence-build-wait-001.wav", 2.3), silence)
+        advance = next(action for action in plan["actions"] if action["reason"] == "next slide")
+        self.assertEqual(advance["at_seconds"], 5.3)
+        self.assertEqual(plan["items"][0]["click_settle_seconds"], 2.8)
+
+    def test_prepare_adds_no_wait_when_the_build_ends_inside_the_narration(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.two_slide_config(Path(temp_dir))
+            silence = []
+
+            plan = self.prepare_plan(config, [2.0, 3.0], generated_silence=silence)
+
+        self.assertFalse([name for name, _ in silence if name.startswith("silence-build-wait")])
+        advance = next(action for action in plan["actions"] if action["reason"] == "next slide")
+        self.assertEqual(advance["at_seconds"], 3.0)
+
+    def test_prepare_settles_a_terminal_after_effect_for_the_slides_build(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.two_slide_config(Path(temp_dir))
+            silence = []
+
+            plan = self.prepare_plan(
+                config,
+                [4.0, 3.0],
+                settle_seconds={1: 2.8, 2: 0.7},
+                terminal_after_effects={1: 1, 2: 0},
+                generated_silence=silence,
+            )
+
+        self.assertIn(("silence-terminal-after-effect-001.wav", 2.8), silence)
+        # Cue at 3.0s + 2.8s build = 5.8s, past the 5.0s narration end: wait, dim, settle, advance.
+        presses = [(action["reason"], action["at_seconds"]) for action in plan["actions"]]
+        self.assertEqual(presses[:3], [("action cue", 3.0), ("terminal after effect", 5.8), ("next slide", 8.6)])
 
     def test_prepare_mixes_explicit_and_word_ratio_items(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1102,7 +1154,7 @@ Input #0, avfoundation, from '3':
         audio_process = FakeProcess([None, 0], 0)
         events = []
 
-        def fake_prepare(config, click_steps, terminal_after_effect_steps):
+        def fake_prepare(config, click_steps, terminal_after_effect_steps, click_settle_seconds):
             events.append("prepare")
             return {
                 "narration_audio": "/tmp/narration.wav",
@@ -2127,8 +2179,9 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "exit_slideshow_if_running") as exit_slideshow, \
                 mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
                 mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
+                mock.patch.object(record, "click_settle_seconds_for_slide", return_value=0.7), \
                 mock.patch.object(record.time, "sleep"):
-            counts, terminal_after_effects = record.measure_slide_click_steps(config, [3, 4])
+            counts, terminal_after_effects, _settle = record.measure_slide_click_steps(config, [3, 4])
 
         self.assertEqual(counts, {3: 1, 4: 1})
         self.assertEqual(terminal_after_effects, {3: 0, 4: 0})
@@ -2146,8 +2199,9 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "exit_slideshow_if_running"), \
                 mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
                 mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=1), \
+                mock.patch.object(record, "click_settle_seconds_for_slide", return_value=0.7), \
                 mock.patch.object(record.time, "sleep"):
-            counts, terminal_after_effects = record.measure_slide_click_steps(config, [26])
+            counts, terminal_after_effects, _settle = record.measure_slide_click_steps(config, [26])
 
         self.assertEqual(counts, {26: 5})
         self.assertEqual(terminal_after_effects, {26: 1})
@@ -2210,9 +2264,140 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "press_space"), \
                 mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
+                mock.patch.object(record, "click_settle_seconds_for_slide", return_value=0.7), \
                 mock.patch.object(record.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "started on slide 1, expected slide 3"):
                 record.measure_slide_click_steps(config, [3, 4])
+
+    @staticmethod
+    def _effect(node_type, duration_ms, delay_ms=0, extra=""):
+        # One parallel group holding one effect: a visibility set plus an animation of duration_ms.
+        return (
+            f'<p:par><p:cTn fill="hold"><p:stCondLst><p:cond delay="{delay_ms}"/></p:stCondLst><p:childTnLst>'
+            f'<p:par><p:cTn nodeType="{node_type}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
+            '<p:set><p:cBhvr><p:cTn dur="1" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn></p:cBhvr></p:set>'
+            f'<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn dur="{duration_ms}"{extra}/></p:cBhvr></p:animEffect>'
+            '</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>'
+        )
+
+    @classmethod
+    def _click_step(cls, *groups):
+        return (
+            '<p:par><p:cTn fill="hold"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst>'
+            f'<p:childTnLst>{"".join(groups)}</p:childTnLst></p:cTn></p:par>'
+        )
+
+    # Shape of slide 8 in m2_raw.pptx (Getting Started with Cursor AI v2), the native-diagram
+    # slide whose chained After Previous builds made the 0.7s probe count 6 presses for 5 steps.
+    @classmethod
+    def slide_eight_steps(cls):
+        return (
+            cls._click_step(cls._effect("clickEffect", 400))
+            + cls._click_step(
+                cls._effect("clickEffect", 400),
+                cls._effect("afterEffect", 400, delay_ms=400),
+                cls._effect("afterEffect", 400, delay_ms=800),
+                cls._effect("afterEffect", 400, delay_ms=1200),
+                cls._effect("afterEffect", 500, delay_ms=1600),
+            )
+            + cls._click_step(
+                cls._effect("clickEffect", 500),
+                cls._effect("withEffect", 500),
+                cls._effect("afterEffect", 500, delay_ms=500),
+            )
+        )
+
+    def test_click_build_ms_in_xml_follows_after_previous_chains(self):
+        part = self._timing_part(self.slide_eight_steps(), build_templates=self.BUILD_TEMPLATES)
+
+        # Step 2 chains four After Previous effects: the last starts at 1600ms and runs 500ms.
+        self.assertEqual(record.click_build_ms_in_xml(part), [400, 2100, 1000])
+
+    def test_click_build_ms_in_xml_counts_repeats_and_auto_reverse(self):
+        part = self._timing_part(
+            self._click_step(self._effect("clickEffect", 500, extra=' repeatCount="3000"'))
+            + self._click_step(self._effect("clickEffect", 500, extra=' autoRev="1"'))
+        )
+
+        self.assertEqual(record.click_build_ms_in_xml(part), [1500, 1000])
+
+    def test_click_build_ms_in_xml_is_empty_without_timing(self):
+        part = f'<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}"/>'.encode()
+
+        self.assertEqual(record.click_build_ms_in_xml(part), [])
+
+    def _deck(self, root, slide_steps, layout_steps=""):
+        import zipfile
+
+        deck_path = root / "deck.pptx"
+        with zipfile.ZipFile(deck_path, "w") as deck:
+            deck.writestr("ppt/slides/slide8.xml", self._timing_part(slide_steps))
+            deck.writestr("ppt/slideLayouts/slideLayout2.xml", self._timing_part(layout_steps))
+            deck.writestr(
+                "ppt/slides/_rels/slide8.xml.rels",
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" '
+                'Target="../slideLayouts/slideLayout2.xml"/></Relationships>',
+            )
+        return deck_path
+
+    def test_click_settle_seconds_waits_out_the_slides_longest_chain(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._deck(Path(temp_dir), self.slide_eight_steps())
+
+            settle = record.click_settle_seconds_for_slide(deck_path, 8)
+
+        self.assertAlmostEqual(settle, 2.1 + record.CLICK_BUILD_SETTLE_MARGIN_SECONDS)
+
+    def test_click_settle_seconds_reads_layout_builds(self):
+        long_layout_step = self._click_step(self._effect("clickEffect", 1800))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._deck(Path(temp_dir), self._click_step(self._effect("clickEffect", 500)), long_layout_step)
+
+            settle = record.click_settle_seconds_for_slide(deck_path, 8)
+
+        self.assertAlmostEqual(settle, 1.8 + record.CLICK_BUILD_SETTLE_MARGIN_SECONDS)
+
+    def test_click_settle_seconds_keeps_the_floor_for_short_or_no_builds(self):
+        for steps in ("", self._click_step(self._effect("clickEffect", 500))):
+            with self.subTest(steps=steps[:20]), tempfile.TemporaryDirectory() as temp_dir:
+                deck_path = self._deck(Path(temp_dir), steps)
+
+                self.assertEqual(
+                    record.click_settle_seconds_for_slide(deck_path, 8),
+                    record.SLIDE_CLICK_PROBE_SETTLE_SECONDS,
+                )
+
+    def test_walk_settles_each_press_for_the_current_and_next_slide(self):
+        # Slide 7 (0.7s) has one build, then advances into slide 8 (2.8s), which has two.
+        settle = {7: 0.7, 8: 2.8, 9: 0.7}
+        indexes = [7, 8, 8, 8, 9, None]
+
+        with mock.patch.object(record, "press_space"), \
+                mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
+                mock.patch.object(record.time, "sleep") as sleep:
+            observed = record.walk_slideshow_slide_indexes(20, 7, settle)
+
+        self.assertEqual(observed, indexes)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [2.8, 2.8, 2.8, 2.8, 2.8, 0.7])
+
+    def test_measure_slide_click_steps_returns_each_slides_settle(self):
+        config = {"deck_path": "/tmp/deck.pptx", "slideshow_start_seconds": 0}
+
+        with mock.patch.object(record, "open_deck"), \
+                mock.patch.object(record, "clear_benign_dialogs_before_slideshow"), \
+                mock.patch.object(record, "run_osascript"), \
+                mock.patch.object(record, "press_space"), \
+                mock.patch.object(record, "exit_slideshow_if_running"), \
+                mock.patch.object(record, "live_slideshow_slide_index", side_effect=[8, 8, 8, None]), \
+                mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
+                mock.patch.object(record, "click_settle_seconds_for_slide", return_value=2.8), \
+                mock.patch.object(record.time, "sleep") as sleep:
+            counts, _terminal, settle = record.measure_slide_click_steps(config, [8])
+
+        self.assertEqual(counts, {8: 2})
+        self.assertEqual(settle, {8: 2.8})
+        self.assertIn(mock.call(2.8), sleep.call_args_list)
 
     def test_assert_cue_counts_match_click_steps_accepts_matching_counts(self):
         items = [{"label": "Slide 1", "identity": {"field": "slide", "value": 1}, "cue_count": 2}]
