@@ -123,6 +123,7 @@
 | `usps` | The `usps` CLI provides a command-line interface for Usps API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `venmo` | The `venmo` CLI provides a command-line interface for Venmo API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `vinted` | Search Vinted marketplace listings through the site's internal catalog API |
+| `vues` | Vues (evrgreen) clipping campaigns, linked accounts, submissions and earnings |
 | `vyro` | Read Vyro clipping campaigns and account eligibility |
 | `weather` | The `weather` CLI provides a command-line interface for Weather API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `whisper` | The `whisper` CLI wraps whisper.cpp (`whisper-cli`) for local, offline speech-to-text. Use it for JSON transcripts with timestamped segments; output mirrors `openai-whisper` so the two are swappable. |
