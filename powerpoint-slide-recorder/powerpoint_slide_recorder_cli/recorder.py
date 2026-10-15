@@ -1239,7 +1239,7 @@ def click_settle_seconds_for_slide(deck_path, slide_number):
     longest_build_ms = max(
         [0, *(ms for part in slide_animation_parts(deck_path, slide_number) for ms in click_build_ms_in_xml(part))]
     )
-    return max(SLIDE_CLICK_PROBE_SETTLE_SECONDS, longest_build_ms / 1000 + CLICK_BUILD_SETTLE_MARGIN_SECONDS)
+    return round(max(SLIDE_CLICK_PROBE_SETTLE_SECONDS, longest_build_ms / 1000 + CLICK_BUILD_SETTLE_MARGIN_SECONDS), 3)
 
 
 def render_live_slideshow_slide_index():
