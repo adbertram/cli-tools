@@ -1229,6 +1229,18 @@ def test_browser_session_has_live_auth_check_url(cli_name, cli_dir, help_cache, 
 
     import ast
 
+    if cli_name in test_config["exclusions"].get("http_session_browser_clis", []):
+        # The live check is an HTTP identity round-trip instead of a page visit.
+        config_source = (cli_pkg / "config.py").read_text()
+        assert re.search(r"^\s*BROWSER_SESSION_REQUIRES_API_TEST\s*=\s*True\b", config_source, re.M), (
+            f"'{cli_name}' is an http_session_browser_cli, so its Config must set "
+            "BROWSER_SESSION_REQUIRES_API_TEST = True for a live HTTP auth check."
+        )
+        assert re.search(r"^\s*def test_connection\(", config_source, re.M), (
+            f"'{cli_name}' is an http_session_browser_cli, so its Config must implement test_connection()."
+        )
+        return
+
     tree = ast.parse(browser_file.read_text())
     values = []
     for node in ast.walk(tree):

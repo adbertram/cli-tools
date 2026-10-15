@@ -1,11 +1,10 @@
 """Unit tests for the Vues CLI client.
 
-Vues gates all authenticated data behind a Google/Apple account that does not
-yet exist for this user, so these tests exercise the client against fixtures
-built from the verified API contract (base URL, error envelope, confirmed
-routes) and from the Supabase session formats the browser can hold. They cover
-transport, session parsing/refresh, OpenAPI endpoint resolution, submission
-dedupe and TikTok URL parsing.
+These tests exercise the client against fixtures built from the verified API
+contract (base URL, error envelope, routes) and from the Supabase session
+formats the browser can hold. They cover transport, session parsing/refresh,
+the standard browser login hooks (session capture, HTTP-only auth checks),
+OpenAPI endpoint resolution, submission dedupe and TikTok URL parsing.
 """
 
 import base64
@@ -16,8 +15,11 @@ import pytest
 
 from cli_tools_shared.exceptions import ClientError, CredentialError
 from vues_cli import client as client_module
-from vues_cli.client import VuesClient, tiktok_post, video_id, _as_list
-from vues_cli.config import SUPABASE_URL
+from vues_cli.client import VuesClient, tiktok_post, video_id
+from cli_tools_shared.auth import BrowserAutomationError
+from vues_cli.browser import VuesBrowser
+from vues_cli.client import SESSION_COOKIE
+from vues_cli.config import SUPABASE_URL, TOKEN_FIELDS, Config
 
 
 class FakeConfig:
@@ -30,6 +32,12 @@ class FakeConfig:
 
     def _set(self, name, value):
         self._store[name] = value
+
+    def _clear(self, name):
+        self._store.pop(name, None)
+
+    def has_saved_session(self):
+        return bool(self._store.get("SUPABASE_REFRESH_TOKEN"))
 
 
 class FakeResponse:
@@ -57,21 +65,31 @@ def fresh_client(tokens=None):
     return VuesClient(config=FakeConfig(store))
 
 
-OPENAPI_FIXTURE = {
-    "openapi": "3.1.0",
-    "paths": {
-        "/api/v1/users/me": {"get": {"tags": ["users"]}},
-        "/api/v1/organizations": {"get": {"tags": ["organizations"]}},
-        "/api/v1/campaigns": {"get": {"tags": ["campaigns"]}},
-        "/api/v1/campaigns/{campaign_id}": {"get": {"tags": ["campaigns"]}},
-        "/api/v1/campaigns/{campaign_id}/join": {"post": {"tags": ["campaigns"], "operationId": "join_campaign"}},
-        "/api/v1/social-accounts": {"get": {"tags": ["social-accounts"]}},
-        "/api/v1/social-accounts/{account_id}": {"get": {"tags": ["social-accounts"]}},
-        "/api/v1/submissions": {"get": {"tags": ["submissions"]}, "post": {"tags": ["submissions"]}},
-        "/api/v1/submissions/{submission_id}": {"get": {"tags": ["submissions"]}},
-        "/api/v1/earnings": {"get": {"tags": ["earnings"]}},
-    },
-}
+def ok(data):
+    """The Vues success envelope (verified live 2026-10-15)."""
+    return {"status": "success", "code": 200, "message": "OK", "data": data}
+
+
+CAMPAIGN = {"id": "7672e5ce-uuid", "short_id": "XeccWu", "name": "Camp", "submissions_enabled": True,
+            "supported_platforms": ["TIKTOK"]}
+POST = "https://www.tiktok.com/@ata_clipper/video/123"
+
+
+@pytest.fixture
+def api(monkeypatch):
+    """A client whose transport answers from ``api.routes`` and records calls."""
+    client = fresh_client()
+    client.routes = {}
+    client.calls = []
+
+    def fake_api(method, path, params=None, body=None):
+        client.calls.append((method, path, params, body))
+        handler = client.routes[(method, path)]
+        return handler(params, body) if callable(handler) else handler
+
+    monkeypatch.setattr(client, "_api", fake_api)
+    monkeypatch.setattr(client_module.time, "sleep", lambda *_: None)
+    return client
 
 
 # ==================== Supabase session parsing ====================
@@ -96,7 +114,7 @@ def test_parse_session_v1_current_session():
 def test_parse_session_base64_chunked():
     key = "sb-ref-auth-token"
     raw = json.dumps({"access_token": "a", "refresh_token": "r", "expires_at": 1800000000})
-    encoded = "base64-" + base64.b64encode(raw.encode()).decode().rstrip("=")
+    encoded = "base64-" + base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
     half = len(encoded) // 2
     items = [{"key": key + ".0", "value": encoded[:half]},
              {"key": key + ".1", "value": encoded[half:]}]
@@ -194,73 +212,108 @@ def test_get_retries_on_500(monkeypatch):
     assert client._api("GET", "/campaigns") == {"ok": True}
 
 
-# ==================== OpenAPI resolution ====================
-
-@pytest.fixture
-def resolving_client(monkeypatch):
-    client = fresh_client()
-    monkeypatch.setattr(client, "_openapi", lambda: OPENAPI_FIXTURE)
-    return client
-
-
-def test_resolve_submissions(resolving_client):
-    assert resolving_client.resolve("submissions", "list") == "/submissions"
-    assert resolving_client.resolve("submissions", "get") == "/submissions/{submission_id}"
-    assert resolving_client.resolve("submissions", "create") == "/submissions"
-
-
-def test_resolve_social_and_earnings(resolving_client):
-    assert resolving_client.resolve("social_accounts", "list") == "/social-accounts"
-    assert resolving_client.resolve("earnings", "list") == "/earnings"
-
-
-def test_resolve_join(resolving_client):
-    assert resolving_client.resolve("join", "create") == "/campaigns/{campaign_id}/join"
-
-
-def test_resolve_missing_raises(monkeypatch):
-    client = fresh_client()
-    monkeypatch.setattr(client, "_openapi", lambda: {"paths": {}})
-    with pytest.raises(ClientError):
-        client.resolve("submissions", "list")
-
-
 # ==================== Reads ====================
 
-def test_account_unwraps(monkeypatch):
-    client = fresh_client()
-    monkeypatch.setattr(client, "_api", lambda *a, **k: {"data": {"id": "u1", "email": "x@y.z"}})
-    assert client.account()["email"] == "x@y.z"
+def test_account_unwraps(api):
+    api.routes[("GET", "/users/me")] = ok({"id": "u1", "email": "x@y.z"})
+    assert api.account()["email"] == "x@y.z"
 
 
-def test_list_campaigns_limits(monkeypatch):
-    client = fresh_client()
-    monkeypatch.setattr(client, "_api", lambda *a, **k: {"data": [{"id": "1"}, {"id": "2"}, {"id": "3"}]})
-    assert [c["id"] for c in client.list_campaigns(2)] == ["1", "2"]
+def test_missing_data_envelope_raises(api):
+    api.routes[("GET", "/users/me")] = {"status": "success"}
+    with pytest.raises(ClientError, match="no data envelope"):
+        api.account()
 
 
-def test_as_list_variants():
-    assert _as_list([{"id": "1"}]) == [{"id": "1"}]
-    assert _as_list({"data": [{"id": "1"}]}) == [{"id": "1"}]
-    with pytest.raises(ClientError):
-        _as_list({"nope": 1})
+def test_list_campaigns_pages_until_total(api):
+    rows = [{"id": str(i)} for i in range(150)]
+    api.routes[("GET", "/clipper/campaigns")] = lambda params, body: ok(
+        {"items": rows[params["offset"]:params["offset"] + params["limit"]], "total": 150,
+         "offset": params["offset"], "limit": params["limit"]})
+    assert len(api.list_campaigns(None)) == 150
+    assert [c["id"] for c in api.list_campaigns(2)] == ["0", "1"]
+    assert api.calls[-1][2] == {"offset": 0, "limit": 2}
+
+
+def test_get_campaign_route(api):
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok(CAMPAIGN)
+    assert api.get_campaign("XeccWu")["id"] == "7672e5ce-uuid"
+
+
+def test_join_dry_run_uses_campaign_uuid(api):
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok(CAMPAIGN)
+    result = api.join_campaign("XeccWu", dry_run=True)
+    assert result["request"]["url"].endswith("/api/v1/clipper/campaigns/7672e5ce-uuid/apply")
+    assert ("POST", "/clipper/campaigns/7672e5ce-uuid/apply", None, {}) not in api.calls
+
+
+def test_social_accounts_are_connected_rows(api):
+    api.routes[("GET", "/clipper/bundle/accounts")] = ok({"connected": [{"id": "a1", "platform": "TIKTOK"}],
+                                                          "verified": []})
+    assert api.social_accounts() == [{"id": "a1", "platform": "TIKTOK"}]
+    assert api.calls[0][2] == {"grouped": "true"}
+
+
+def test_earnings_combines_balance_and_stats(api):
+    api.routes[("GET", "/clipper/balance")] = ok({"available_micro": 0})
+    api.routes[("GET", "/clipper/stats")] = ok({"total_earnings": 0.0})
+    assert api.earnings() == {"balance": {"available_micro": 0}, "stats": {"total_earnings": 0.0}}
+
+
+def test_submission_get_scans_list(api):
+    api.routes[("GET", "/clipper/submissions")] = ok({"items": [{"id": "s1"}, {"id": "s2"}], "total": 2})
+    assert api.submission("s2") == {"id": "s2"}
+    with pytest.raises(ClientError, match="not found"):
+        api.submission("s9")
 
 
 # ==================== Submissions ====================
 
-def test_create_submission_dedupes(monkeypatch, resolving_client):
-    existing = {"id": "s1", "campaignId": "c1", "post_url": "https://www.tiktok.com/@ata_clipper/video/123"}
-    monkeypatch.setattr(resolving_client, "submissions", lambda campaign_id=None, limit=None: [existing])
-    result = resolving_client.create_submission("c1", "https://www.tiktok.com/@ata_clipper/video/123", dry_run=False)
+def test_create_submission_dedupes(api):
+    existing = {"id": "s1", "campaign_id": CAMPAIGN["id"], "post_link": POST}
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok(CAMPAIGN)
+    api.routes[("GET", "/clipper/submissions")] = ok({"items": [existing], "total": 1})
+    result = api.create_submission("XeccWu", POST, dry_run=False)
     assert result["status"] == "existing" and result["submission"] == existing
+    assert api.calls[-1][2]["campaign_id"] == CAMPAIGN["id"]
 
 
-def test_create_submission_dry_run(monkeypatch, resolving_client):
-    monkeypatch.setattr(resolving_client, "submissions", lambda campaign_id=None, limit=None: [])
-    result = resolving_client.create_submission("c1", "https://www.tiktok.com/@ata_clipper/video/123", dry_run=True)
+def test_create_submission_dry_run(api):
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok(CAMPAIGN)
+    api.routes[("GET", "/clipper/submissions")] = ok({"items": [], "total": 0})
+    result = api.create_submission("XeccWu", POST, dry_run=True)
     assert result["status"] == "dry_run"
-    assert result["request"]["url"].endswith("/api/v1/submissions")
-    assert result["request"]["body"]["campaign_id"] == "c1"
+    assert result["request"]["url"].endswith("/api/v1/clipper/submissions")
+    assert result["request"]["body"] == {"campaign_id": CAMPAIGN["id"], "post_links": [POST]}
+    assert not any(call[0] == "POST" for call in api.calls)
+
+
+def test_create_submission_refuses_unsupported_platform(api):
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok({**CAMPAIGN, "supported_platforms": ["INSTAGRAM"]})
+    with pytest.raises(ClientError, match="accepts only INSTAGRAM"):
+        api.create_submission("XeccWu", POST, dry_run=True)
+
+
+def test_create_submission_polls_batch(api):
+    created = {"id": "s1", "post_link": POST}
+    listings = [ok({"items": [], "total": 0}), ok({"items": [created], "total": 1})]
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok(CAMPAIGN)
+    api.routes[("GET", "/clipper/submissions")] = lambda params, body: listings.pop(0)
+    api.routes[("POST", "/clipper/submissions")] = ok({"batch_id": "b1", "results": [{"post_link": POST,
+                                                                                       "status": "queued"}]})
+    api.routes[("GET", "/clipper/submissions/batches/b1")] = ok({"results": [{"post_link": POST,
+                                                                              "status": "created"}]})
+    result = api.create_submission("XeccWu", POST, dry_run=False)
+    assert result == {"status": "created", "submission": created, "url": POST, "batch_id": "b1"}
+
+
+def test_create_submission_reports_rejection(api):
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok(CAMPAIGN)
+    api.routes[("GET", "/clipper/submissions")] = ok({"items": [], "total": 0})
+    api.routes[("POST", "/clipper/submissions")] = ok({"batch_id": "b1", "results": [
+        {"post_link": POST, "status": "failed", "detail": "Account not linked"}]})
+    with pytest.raises(ClientError, match="Account not linked"):
+        api.create_submission("XeccWu", POST, dry_run=False)
 
 
 # ==================== TikTok URL helpers ====================
@@ -279,3 +332,80 @@ def test_tiktok_post_rejects_bad_url():
 def test_video_id():
     assert video_id("https://www.tiktok.com/@u/video/55") == "55"
     assert video_id(None) is None
+
+
+# ==================== Standard browser login hooks ====================
+
+class FakePage:
+    def __init__(self, url, cookies):
+        self.url = url
+        self._cookies = cookies
+        self.visited = []
+
+    def cookie_list(self):
+        return self._cookies
+
+    def goto(self, url):
+        self.visited.append(url)
+
+    def wait_for_timeout(self, ms):
+        pass
+
+
+def test_browser_uses_standard_automated_login():
+    assert VuesBrowser.MANUAL_LOGIN is False
+    assert VuesBrowser.AUTH_LOGIN_HANDLER is None
+    # No live page check: auth state is the saved session, proven over HTTP.
+    assert VuesBrowser.AUTH_CHECK_URL == ""
+    assert Config.BROWSER_SESSION_REQUIRES_API_TEST is True
+    # Session tokens are auth-profile state, never tool-root config.
+    assert set(Config.ADDITIONAL_AUTH_FIELDS) == set(TOKEN_FIELDS)
+
+
+def test_on_authenticated_saves_supabase_session(monkeypatch):
+    config = FakeConfig()
+    browser = VuesBrowser(config)
+    # @supabase/ssr cookie: "base64-" + base64url JSON, here split into two chunks
+    # and holding "?>"-style bytes that only base64url encodes as "-"/"_".
+    session = {"access_token": "a?>~", "refresh_token": "r", "expires_at": 1999999999}
+    encoded = "base64-" + base64.urlsafe_b64encode(json.dumps(session).encode()).decode().rstrip("=")
+    page = FakePage("https://vues.app/clipper/dashboard", [
+        {"name": SESSION_COOKIE + ".0", "value": encoded[:20], "domain": "vues.app", "expires": -1},
+        {"name": SESSION_COOKIE + ".1", "value": encoded[20:], "domain": "vues.app", "expires": -1},
+        {"name": "ph_posthog", "value": "x", "domain": ".vues.app", "expires": -1},
+    ])
+    monkeypatch.setattr(VuesClient, "account", lambda self: {"id": "u1"})
+    browser._on_authenticated(page)
+    assert page.visited == ["https://vues.app/clipper"]
+    assert config._store["SUPABASE_ACCESS_TOKEN"] == "a?>~"
+    assert config._store["SUPABASE_REFRESH_TOKEN"] == "r"
+    assert config._store["SUPABASE_EXPIRES_AT"] == "1999999999"
+    assert config.has_saved_session()
+
+
+def test_on_authenticated_without_vues_session_explains_signup():
+    browser = VuesBrowser(FakeConfig())
+    with pytest.raises(BrowserAutomationError, match="vues.app/login"):
+        browser._on_authenticated(FakePage("https://vues.app/login", []))
+
+
+def test_on_authenticated_without_creator_account(monkeypatch):
+    encoded = "base64-" + base64.urlsafe_b64encode(json.dumps(
+        {"access_token": "a", "refresh_token": "r"}).encode()).decode()
+    page = FakePage("https://vues.app/clipper", [{"name": SESSION_COOKIE, "value": encoded, "expires": -1}])
+
+    def no_user(self):
+        raise ClientError("Vues HTTP 404: user not found")
+
+    monkeypatch.setattr(VuesClient, "account", no_user)
+    with pytest.raises(BrowserAutomationError, match="no creator account"):
+        VuesBrowser(FakeConfig())._on_authenticated(page)
+
+
+def test_rejected_refresh_clears_saved_session(monkeypatch):
+    client = fresh_client({"SUPABASE_ACCESS_TOKEN": "old", "SUPABASE_REFRESH_TOKEN": "dead",
+                           "SUPABASE_EXPIRES_AT": "1"})
+    monkeypatch.setattr(client_module.requests, "post", lambda *a, **k: FakeResponse(400, {"error": "invalid_grant"}))
+    with pytest.raises(CredentialError):
+        client._access_token()
+    assert not client.config.has_saved_session()

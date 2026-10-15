@@ -17,16 +17,16 @@ from cli_tools_shared.filters import (
     apply_properties_filter,
     validate_filters,
 )
-from cli_tools_shared.output import command, print_error, print_info, print_json, print_success, print_table
+from cli_tools_shared.output import command, print_error, print_info, print_json, print_table
 
 from . import __version__
 from .client import VuesClient, get_client
 from .config import get_config
 
 # JSON is the full contract; these are only the default table columns.
-CAMPAIGN_COLUMNS = ["id", "name", "status"]
-SOCIAL_COLUMNS = ["id", "platform", "username", "status"]
-SUBMISSION_COLUMNS = ["id", "campaign_id", "status", "url"]
+CAMPAIGN_COLUMNS = ["short_id", "name", "organization_name", "cpm", "supported_platforms"]
+SOCIAL_COLUMNS = ["id", "platform", "username", "status", "is_verified"]
+SUBMISSION_COLUMNS = ["id", "campaign_name", "status", "views", "post_link"]
 
 app = create_app(name="vues",
                  help="Vues (evrgreen) clipping campaigns, linked accounts, submissions and earnings",
@@ -116,7 +116,7 @@ def list_campaigns(
     properties: Optional[str] = PROPERTIES,
     profile: Optional[str] = PROFILE,
 ):
-    """List campaigns the signed-in creator can see (requires auth; Vues gates all campaign data behind login)."""
+    """List the clipper campaigns the signed-in creator can see (all pages up to --limit)."""
     _list(lambda: _client(profile).list_campaigns(limit), filter, table, properties, "No campaigns found.",
           CAMPAIGN_COLUMNS)
 
@@ -124,25 +124,25 @@ def list_campaigns(
 @campaigns_app.command("get")
 @command
 def get_campaign(
-    campaign_id: str = typer.Argument(..., help="Campaign ID"),
+    campaign_id: str = typer.Argument(..., help="Campaign id or short_id"),
     table: bool = TABLE,
     properties: Optional[str] = PROPERTIES,
     profile: Optional[str] = PROFILE,
 ):
-    """Get one campaign in full (CPM/rate, minimum views, budget, brief and rules, exactly as the API returns it)."""
+    """Get one campaign in full (CPM, max payout, budget, platforms, brief and rules, exactly as the API returns it)."""
     _record(_client(profile).get_campaign(campaign_id), table, properties)
 
 
 @campaigns_app.command("join")
 @command
 def join_campaign(
-    campaign_id: str = typer.Argument(..., help="Campaign ID"),
+    campaign_id: str = typer.Argument(..., help="Campaign id or short_id"),
     yes: bool = YES,
     dry_run: bool = DRY_RUN,
     table: bool = TABLE,
     profile: Optional[str] = PROFILE,
 ):
-    """Apply to / join a campaign (the join endpoint is resolved from the API's own OpenAPI document)."""
+    """Apply to / join a campaign (POST /clipper/campaigns/{id}/apply)."""
     _guard(yes, dry_run, "join a campaign")
     _record(_client(profile).join_campaign(campaign_id, dry_run), table, None)
 
@@ -167,7 +167,7 @@ def list_social_accounts(
     properties: Optional[str] = PROPERTIES,
     profile: Optional[str] = PROFILE,
 ):
-    """List linked social accounts (handle, platform, verification/eligibility, as the API returns them)."""
+    """List linked social accounts (handle, platform, status, verification and per-account earnings)."""
     _list(lambda: _client(profile).social_accounts(limit), filter, table, properties, "No linked accounts.",
           SOCIAL_COLUMNS)
 
@@ -177,7 +177,7 @@ def list_social_accounts(
 @submissions_app.command("list")
 @command
 def list_submissions(
-    campaign_id: Optional[str] = typer.Option(None, "--campaign-id", help="Only this campaign's submissions"),
+    campaign_id: Optional[str] = typer.Option(None, "--campaign-id", help="Only this campaign's submissions (id or short_id)"),
     limit: int = typer.Option(100, "--limit", "-l", min=1, help="Maximum number of submissions"),
     filter: Optional[List[str]] = FILTER,
     table: bool = TABLE,
@@ -197,14 +197,14 @@ def get_submission(
     properties: Optional[str] = PROPERTIES,
     profile: Optional[str] = PROFILE,
 ):
-    """Get one submission by ID."""
+    """Get one submission by ID (Vues has no single-submission route, so this scans the list)."""
     _record(_client(profile).submission(submission_id), table, properties)
 
 
 @submissions_app.command("create")
 @command
 def create_submission(
-    campaign_id: str = typer.Argument(..., help="Campaign ID"),
+    campaign_id: str = typer.Argument(..., help="Campaign id or short_id"),
     url: str = typer.Option(..., "--url", help="Full TikTok post URL from a linked account"),
     yes: bool = typer.Option(False, "--yes", help="Affirm the post follows the campaign rules and submit it"),
     dry_run: bool = DRY_RUN,
@@ -221,25 +221,8 @@ def create_submission(
 @earnings_app.command("get")
 @command
 def get_earnings(table: bool = TABLE, properties: Optional[str] = PROPERTIES, profile: Optional[str] = PROFILE):
-    """Get balance, pending, paid and withdrawal minimum (whatever the earnings/balance endpoint exposes)."""
+    """Get the wallet balance (micro-dollars) and lifetime clipper stats as {balance, stats}."""
     _record(_client(profile).earnings(), table, properties)
-
-
-def _login(config, force: bool) -> None:
-    """Print the one-time setup, then run the browser (Google/Apple) sign-in."""
-    from cli_tools_shared.auth_commands import _handle_browser_login
-
-    instructions = getattr(config, "AUTH_SETUP_INSTRUCTIONS", "")
-    if instructions:
-        print_info(instructions)
-    _handle_browser_login(config, "vues", force)
-    try:
-        user = VuesClient(config=config).account()
-        print_success(f"Signed in to Vues as {user.get('email') or user.get('id')}")
-    except ClientError:
-        # The browser step may still be incomplete (e.g. no account yet); auth
-        # status reports the authoritative state.
-        pass
 
 
 app.add_typer(campaigns_app, name="campaigns")
@@ -247,7 +230,7 @@ app.add_typer(account_app, name="account")
 app.add_typer(social_app, name="social-accounts")
 app.add_typer(submissions_app, name="submissions")
 app.add_typer(earnings_app, name="earnings")
-app.add_typer(create_auth_app(get_config, tool_name="vues", login_handler=_login), name="auth")
+app.add_typer(create_auth_app(get_config, tool_name="vues"), name="auth")
 
 
 def main():

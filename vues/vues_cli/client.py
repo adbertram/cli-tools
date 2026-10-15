@@ -2,20 +2,24 @@
 Supabase session captured once at browser login.
 
 Everything below the login step is plain HTTP. The Supabase session (access and
-refresh tokens) is read out of the browser's localStorage after Google/Apple
+refresh tokens) is read out of the vues.app session cookie after Google/Apple
 sign-in, saved as runtime auth state, and refreshed over HTTP against Supabase
 GoTrue when it expires -- no browser is opened again.
 
-Routes and the error envelope come from the Vues web app bundle and live calls
-(verified 2026-10-14):
+Routes and envelopes come from the signed-in Vues clipper web app's own API
+module and live calls (verified 2026-10-15):
   * base https://api.evrgreen.ai, version prefix /api/v1
-  * errors: {"status":"error","code":N,"message":"..."}
-  * confirmed routes: GET /users/me, /organizations, /organizations/{id},
-    /campaigns, /campaigns/{id} -- all require the Supabase bearer token.
-The linked-account, submission and earnings routes are not exposed to the public
-site or its downloadable bundle (they load only inside the signed-in app), so
-those commands resolve their exact path from the backend's own authenticated
-OpenAPI document at runtime rather than hard-coding a guessed path.
+  * success: {"status":"success","code":200,"message":...,"data":...}
+  * errors:  {"status":"error","code":N,"message":"..."}
+  * clipper routes: GET /users/me, /clipper/campaigns (offset/limit paging),
+    /clipper/campaigns/{id or short_id}, POST /clipper/campaigns/{id}/apply,
+    GET /clipper/bundle/accounts?grouped=true, GET /clipper/submissions
+    (offset/limit/campaign_id), POST /clipper/submissions
+    {campaign_id, post_links} then GET /clipper/submissions/batches/{batch_id},
+    GET /clipper/balance and /clipper/stats.
+There is no single-submission GET route (405), so `submission()` pages the list.
+The brand-side /campaigns route answers 403 "Enterprise access required" for a
+clipper, and /api/openapi.json answers 401 even with a valid session.
 """
 
 import base64
@@ -27,9 +31,10 @@ from typing import List, Optional
 from urllib.parse import urlsplit
 
 import requests
+from cli_tools_shared.auth import BrowserAutomation, BrowserAutomationError
 from cli_tools_shared.exceptions import ClientError, CredentialError
 
-from .config import SUPABASE_ANON_KEY, SUPABASE_URL, TOKEN_FIELDS, get_config
+from .config import SUPABASE_ANON_KEY, SUPABASE_REF, SUPABASE_URL, TOKEN_FIELDS, get_config
 
 API_PREFIX = "/api/v1"
 REQUEST_TIMEOUT = 30
@@ -39,19 +44,19 @@ DEFAULT_MAX_DELAY = 30.0
 DEFAULT_JITTER = 0.1
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 REFRESH_MARGIN = 60  # seconds before expiry to renew
-SPEC_PATH = f"{API_PREFIX}/openapi.json"
-OPENAPI_PATHS = ("/openapi.json", "/api/openapi.json", SPEC_PATH)
-
-VUES_ORIGIN = "https://vues.app"
-TIKTOK = "tiktok"
-# Candidate words that identify each resource's operation in the OpenAPI spec.
-RESOURCE_KEYWORDS = {
-    "social_accounts": ("social-account", "social_account", "socialaccount", "account",
-                        "connection", "channel"),
-    "submissions": ("submission", "clip", "post", "content", "video"),
-    "earnings": ("earning", "balance", "payout", "wallet", "withdraw"),
-    "join": ("join", "enroll", "member", "apply", "participate"),
-}
+PAGE_SIZE = 100  # the web app's own largest page
+BATCH_POLL_ATTEMPTS = 90
+BATCH_POLL_START = 0.8
+BATCH_POLL_MAX = 5.0
+PENDING_BATCH_STATUSES = {"queued", "processing"}
+TIKTOK_PLATFORM = "TIKTOK"
+APP_URL = "https://vues.app/clipper"
+SESSION_COOKIE = f"sb-{SUPABASE_REF}-auth-token"
+NO_ACCOUNT_HELP = (
+    "If you have no Vues account yet, sign up free at https://vues.app/login with "
+    "Google or Apple, link your TikTok account in the Vues app, then run "
+    "`vues auth login` again."
+)
 
 
 def tiktok_post(url: str) -> tuple:
@@ -66,19 +71,6 @@ def tiktok_post(url: str) -> tuple:
 def video_id(url) -> Optional[str]:
     match = re.search(r"/video/([0-9]+)", url) if isinstance(url, str) else None
     return match[1] if match else None
-
-
-def _as_list(document, keys=("data", "items", "results", "campaigns", "submissions", "accounts")):
-    """Extract a list from a bare list or a common list-envelope, without
-    inventing field names beyond the envelope keys the API might use."""
-    if isinstance(document, list):
-        return document
-    if isinstance(document, dict):
-        for key in keys:
-            value = document.get(key)
-            if isinstance(value, list):
-                return value
-    raise ClientError("Vues response did not contain a list")
 
 
 class VuesClient:
@@ -98,17 +90,17 @@ class VuesClient:
         self.base_delay = base_delay
         self.max_delay = max_delay
         self.jitter = jitter
-        self._spec = None
 
-    # ==================== Session capture (login only) ====================
+    # ==================== Session parsing (login only) ====================
 
     @staticmethod
     def parse_supabase_session(items: List[dict], storage_key: str) -> dict:
-        """Assemble the Supabase session from one or more localStorage entries.
+        """Assemble the Supabase session from ``{"key", "value"}`` storage entries
+        (the vues.app session cookies).
 
-        Handles supabase-js v2 (the session object stored directly), gotrue-js v1
-        (wrapped under ``currentSession``) and supabase-ssr (``base64-`` prefixed,
-        possibly chunked across ``<key>.0``, ``<key>.1`` ...)."""
+        Handles @supabase/ssr (``base64-`` prefixed base64url, possibly chunked
+        across ``<key>.0``, ``<key>.1`` ...), supabase-js v2 (the session object
+        stored directly) and gotrue-js v1 (wrapped under ``currentSession``)."""
         parts = {}
         for item in items or []:
             name = item.get("key", "")
@@ -123,7 +115,8 @@ class VuesClient:
         raw = "".join(parts[index] for index in sorted(parts))
         if raw.startswith("base64-"):
             try:
-                raw = base64.b64decode(raw[len("base64-"):] + "==").decode("utf-8")
+                encoded = raw[len("base64-"):]
+                raw = base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)).decode("utf-8")
             except (ValueError, UnicodeDecodeError) as exc:
                 raise CredentialError(f"Vues session is not decodable: {exc}") from None
         try:
@@ -141,16 +134,9 @@ class VuesClient:
         return {"access_token": access, "refresh_token": refresh,
                 "expires_at": str(int(expires_at)) if expires_at else ""}
 
-    def capture_session(self, browser) -> None:
-        """Read the Supabase session out of the logged-in browser and save it."""
-        page = browser.get_page(VUES_ORIGIN)
-        items = page.localstorage_get(VUES_ORIGIN)
-        storage_key = browser.AUTH_STORAGE_KEY
-        self._save_session(self.parse_supabase_session(items, storage_key))
-
     # ==================== Session (HTTP) ====================
 
-    def _save_session(self, session: dict) -> None:
+    def save_session(self, session: dict) -> None:
         self.config._set("SUPABASE_ACCESS_TOKEN", session["access_token"])
         self.config._set("SUPABASE_REFRESH_TOKEN", session["refresh_token"])
         self.config._set("SUPABASE_EXPIRES_AT", session.get("expires_at") or "")
@@ -176,6 +162,10 @@ class VuesClient:
             timeout=REQUEST_TIMEOUT,
         )
         if not response.ok:
+            # A rejected refresh token is dead for good; drop the saved session so
+            # `auth status` reports it and `auth login` signs in again.
+            for field in TOKEN_FIELDS:
+                self.config._clear(field)
             raise CredentialError("Vues session expired and could not be refreshed: run `vues auth login`")
         data = response.json()
         access = data.get("access_token")
@@ -183,7 +173,7 @@ class VuesClient:
         if not isinstance(access, str) or not access:
             raise CredentialError("Vues session refresh returned no access token")
         expires_at = data.get("expires_at") or (int(time.time()) + int(data.get("expires_in") or 3600))
-        self._save_session({"access_token": access, "refresh_token": new_refresh,
+        self.save_session({"access_token": access, "refresh_token": new_refresh,
                             "expires_at": str(int(expires_at))})
         return access
 
@@ -258,65 +248,33 @@ class VuesClient:
             response = self._send(method, url, params=params, body=body, token=token)
         return self._document(response)
 
-    # ==================== OpenAPI self-discovery ====================
+    def _data(self, method: str, path: str, params=None, body=None):
+        """Call the API and return the ``data`` of its success envelope."""
+        document = self._api(method, path, params=params, body=body)
+        if not isinstance(document, dict) or "data" not in document:
+            raise ClientError(f"Vues {method} {path} returned no data envelope")
+        return document["data"]
 
-    def _openapi(self) -> dict:
-        if self._spec is not None:
-            return self._spec
-        token = self._access_token()
-        last = None
-        for candidate in OPENAPI_PATHS:
-            response = self._send("GET", f"{self.base_url}{candidate}", token=token)
-            if response.ok:
-                try:
-                    document = response.json()
-                except ValueError:
-                    continue
-                if isinstance(document, dict) and isinstance(document.get("paths"), dict):
-                    self._spec = document
-                    return document
-            last = response.status_code
-        raise ClientError(f"Vues OpenAPI document was not reachable (last status {last})")
-
-    def resolve(self, resource: str, verb: str) -> str:
-        """Return the concrete API path (relative to /api/v1) for a resource
-        operation, discovered from the backend's own OpenAPI document."""
-        keywords = RESOURCE_KEYWORDS[resource]
-        spec_paths = self._openapi()["paths"]
-        matches = []
-        for raw_path, methods in spec_paths.items():
-            if not raw_path.startswith(API_PREFIX) or not isinstance(methods, dict):
-                continue
-            rel = raw_path[len(API_PREFIX):]
-            templated = "{" in rel
-            for http_method, operation in methods.items():
-                hay = f"{rel} {json.dumps(operation.get('tags') or [])} {operation.get('operationId') or ''}".lower()
-                if not any(word in hay for word in keywords):
-                    continue
-                if verb == "create" and http_method.upper() != "POST":
-                    continue
-                if verb in ("list", "get") and http_method.upper() != "GET":
-                    continue
-                if verb == "list" and templated:
-                    continue
-                if verb == "get" and not templated:
-                    continue
-                score = sum(rel.lower().count(word) for word in keywords) + len(rel)
-                matches.append((score, rel))
-        if not matches:
-            raise ClientError(
-                f"Could not resolve the Vues '{resource}' {verb} endpoint from the API's OpenAPI "
-                f"document; run `vues auth status` and report the available operations."
-            )
-        matches.sort(key=lambda row: (-row[0], row[1]))
-        return matches[0][1]
+    def _paged(self, path: str, limit: Optional[int], params: Optional[dict] = None) -> List[dict]:
+        """Collect ``items`` across offset/limit pages until ``total`` or ``limit``."""
+        if limit is not None and limit < 1:
+            raise ClientError("--limit must be at least 1")
+        rows: List[dict] = []
+        while limit is None or len(rows) < limit:
+            size = PAGE_SIZE if limit is None else min(PAGE_SIZE, limit - len(rows))
+            page = self._data("GET", path, params={**(params or {}), "offset": len(rows), "limit": size})
+            items = page.get("items") if isinstance(page, dict) else None
+            if not isinstance(items, list):
+                raise ClientError(f"Vues {path} returned no items list")
+            rows.extend(items)
+            if not items or len(rows) >= int(page.get("total") or 0):
+                break
+        return rows if limit is None else rows[:limit]
 
     # ==================== Account ====================
 
     def account(self) -> dict:
-        user = self._api("GET", "/users/me")
-        if isinstance(user, dict) and isinstance(user.get("data"), dict):
-            user = user["data"]
+        user = self._data("GET", "/users/me")
         if not isinstance(user, dict) or not user.get("id"):
             raise ClientError("Vues /users/me returned no user")
         return user
@@ -324,77 +282,115 @@ class VuesClient:
     # ==================== Campaigns ====================
 
     def list_campaigns(self, limit: Optional[int] = 100) -> List[dict]:
-        if limit is not None and limit < 1:
-            raise ClientError("--limit must be at least 1")
-        rows = _as_list(self._api("GET", "/campaigns"))
-        return rows if limit is None else rows[:limit]
+        return self._paged("/clipper/campaigns", limit)
 
     def get_campaign(self, campaign_id: str) -> dict:
-        document = self._api("GET", f"/campaigns/{campaign_id}")
-        return document["data"] if isinstance(document, dict) and isinstance(document.get("data"), dict) else document
+        """One campaign by its id or short_id."""
+        return self._data("GET", f"/clipper/campaigns/{campaign_id}")
 
     def join_campaign(self, campaign_id: str, dry_run: bool) -> dict:
-        path = self.resolve("join", "create").replace("{id}", campaign_id).replace("{campaign_id}", campaign_id)
-        request = {"method": "POST", "url": f"{self.base_url}{API_PREFIX}{path}"}
+        campaign = self.get_campaign(campaign_id)
+        path = f"/clipper/campaigns/{campaign['id']}/apply"
+        request = {"method": "POST", "url": f"{self.base_url}{API_PREFIX}{path}", "body": {}}
         if dry_run:
-            return {"status": "dry_run", "campaign_id": campaign_id, "request": request}
-        data = self._api("POST", path)
-        return {"status": "applied", "campaign_id": campaign_id, "application": data}
+            return {"status": "dry_run", "campaign_id": campaign["id"], "request": request}
+        data = self._data("POST", path, body={})
+        return {"status": "applied", "campaign_id": campaign["id"], "application": data}
 
     # ==================== Linked accounts ====================
 
     def social_accounts(self, limit: Optional[int] = 100) -> List[dict]:
-        rows = _as_list(self._api("GET", self.resolve("social_accounts", "list")))
+        data = self._data("GET", "/clipper/bundle/accounts", params={"grouped": "true"})
+        rows = data if isinstance(data, list) else data.get("connected") if isinstance(data, dict) else None
+        if not isinstance(rows, list):
+            raise ClientError("Vues /clipper/bundle/accounts returned no connected accounts list")
         return rows if limit is None else rows[:limit]
 
     # ==================== Earnings ====================
 
     def earnings(self) -> dict:
-        document = self._api("GET", self.resolve("earnings", "list"))
-        return document["data"] if isinstance(document, dict) and isinstance(document.get("data"), dict) else document
+        """Wallet balance (micro-dollars) and lifetime clipper stats, verbatim."""
+        return {"balance": self._data("GET", "/clipper/balance"), "stats": self._data("GET", "/clipper/stats")}
 
     # ==================== Submissions ====================
 
     def submissions(self, campaign_id: Optional[str] = None, limit: Optional[int] = 100) -> List[dict]:
-        params = {"campaign_id": campaign_id} if campaign_id else None
-        rows = _as_list(self._api("GET", self.resolve("submissions", "list"), params=params))
-        if campaign_id:
-            rows = [row for row in rows if str(row.get("campaign_id") or row.get("campaignId") or "") == campaign_id]
-        return rows if limit is None else rows[:limit]
+        params = {"campaign_id": self.get_campaign(campaign_id)["id"]} if campaign_id else None
+        return self._paged("/clipper/submissions", limit, params)
 
     def submission(self, submission_id: str) -> dict:
-        path = self.resolve("submissions", "get").replace("{id}", submission_id).replace(
-            "{submission_id}", submission_id)
-        document = self._api("GET", path)
-        return document["data"] if isinstance(document, dict) and isinstance(document.get("data"), dict) else document
-
-    def _existing_submission(self, campaign_id: str, post_video_id: str) -> Optional[dict]:
-        for row in self.submissions(campaign_id, limit=None):
-            url = row.get("post_url") or row.get("postUrl") or row.get("video_url") or row.get("url")
-            if video_id(url) == post_video_id:
+        for row in self.submissions(limit=None):
+            if str(row.get("id")) == submission_id:
                 return row
-        return None
+        raise ClientError(f"Vues submission {submission_id} not found")
+
+    def _existing_submission(self, campaign_uuid: str, post_video_id: str) -> Optional[dict]:
+        rows = self._paged("/clipper/submissions", None, {"campaign_id": campaign_uuid})
+        return next((row for row in rows if video_id(row.get("post_link")) == post_video_id), None)
+
+    def _batch_result(self, batch: dict, post_link: str) -> Optional[dict]:
+        results = batch.get("results") if isinstance(batch, dict) else None
+        if not isinstance(results, list):
+            raise ClientError("Vues submission batch returned no results")
+        result = next((row for row in results if row.get("post_link") == post_link),
+                      results[0] if len(results) == 1 else None)
+        if result is None or result.get("status") in PENDING_BATCH_STATUSES:
+            return None
+        return result
 
     def create_submission(self, campaign_id: str, url: str, dry_run: bool) -> dict:
         canonical, _username, post_video_id = tiktok_post(url)
-        existing = self._existing_submission(campaign_id, post_video_id)
+        campaign = self.get_campaign(campaign_id)
+        if not campaign.get("submissions_enabled", True):
+            raise ClientError(f"Vues campaign {campaign_id} is not accepting submissions")
+        platforms = [str(p).upper() for p in campaign.get("supported_platforms") or []]
+        if platforms and TIKTOK_PLATFORM not in platforms:
+            raise ClientError(f"Vues campaign {campaign_id} accepts only {', '.join(platforms)}, not TikTok")
+        existing = self._existing_submission(campaign["id"], post_video_id)
         if existing:
             return {"status": "existing", "submission": existing, "url": canonical}
-        path = self.resolve("submissions", "create")
-        body = {"campaign_id": campaign_id, "url": canonical}
+        path = "/clipper/submissions"
+        body = {"campaign_id": campaign["id"], "post_links": [canonical]}
         request = {"method": "POST", "url": f"{self.base_url}{API_PREFIX}{path}", "body": body}
         if dry_run:
             return {"status": "dry_run", "submission": None, "url": canonical, "request": request}
-        try:
-            data = self._api("POST", path, body=body)
-        except ClientError as exc:
-            # A write can commit yet fail in transit; look before reporting failure.
-            found = self._existing_submission(campaign_id, post_video_id)
-            if found:
-                return {"status": "created", "submission": found, "url": canonical}
-            raise ClientError(f"Vues submission failed: {exc}") from None
-        return {"status": "created", "submission": self._existing_submission(campaign_id, post_video_id) or data,
-                "url": canonical, "response": data}
+        batch = self._data("POST", path, body=body)
+        result = self._batch_result(batch, canonical)
+        delay = BATCH_POLL_START
+        for _ in range(BATCH_POLL_ATTEMPTS):
+            if result is not None:
+                break
+            time.sleep(delay)
+            delay = min(delay * 1.3, BATCH_POLL_MAX)
+            result = self._batch_result(self._data("GET", f"/clipper/submissions/batches/{batch['batch_id']}"),
+                                        canonical)
+        if result is None:
+            raise ClientError(f"Vues submission batch {batch.get('batch_id')} is still processing; "
+                              f"check `vues submissions list --campaign-id {campaign['id']}`")
+        if result.get("status") != "created":
+            raise ClientError(f"Vues rejected the submission: {result.get('detail') or result.get('status')}")
+        return {"status": "created", "submission": self._existing_submission(campaign["id"], post_video_id) or result,
+                "url": canonical, "batch_id": batch.get("batch_id")}
+
+
+def save_browser_session(browser: BrowserAutomation, page) -> None:
+    """Post-login hook for ``VuesBrowser``: save the signed-in Supabase session.
+
+    Runs on the headed login page right after the person presses Enter. Opens
+    the clipper app, requires the session cookie, saves its tokens for HTTP use
+    and proves them with a live /users/me call."""
+    page.goto(APP_URL)
+    page.wait_for_timeout(2000)
+    cookies = browser._get_auth_cookies(page.cookie_list())
+    if not cookies:
+        raise BrowserAutomationError(f"Vues is not signed in at {APP_URL}. {NO_ACCOUNT_HELP}")
+    client = VuesClient(config=browser.config)
+    client.save_session(VuesClient.parse_supabase_session(
+        [{"key": cookie["name"], "value": cookie["value"]} for cookie in cookies], SESSION_COOKIE))
+    try:
+        client.account()
+    except ClientError as exc:
+        raise BrowserAutomationError(f"Signed in, but Vues has no creator account: {exc}. {NO_ACCOUNT_HELP}") from None
 
 
 _client: Optional[VuesClient] = None

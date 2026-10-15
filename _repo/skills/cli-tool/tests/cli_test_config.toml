@@ -44,6 +44,18 @@ read_only_status_auth_clis = [
     "ntfy-cli",
 ]
 
+# Browser-session CLIs whose login hands a rotating-refresh-token session
+# (Supabase) to the CLI for HTTP use. Reopening the site in the saved browser
+# replays a refresh token the CLI has already rotated, and the provider then
+# revokes the whole session ("reuse outside the exceptions ... all refresh
+# tokens belonging to it are marked as revoked", supabase.com/docs/guides/auth/
+# sessions). These CLIs leave AUTH_CHECK_URL empty and must prove the session
+# with a live HTTP identity call instead: Config.BROWSER_SESSION_REQUIRES_API_TEST
+# = True plus a test_connection().
+http_session_browser_clis = [
+    "vues",
+]
+
 # Orchestration/framework CLIs that don't follow standard resource patterns
 # These are phase-based orchestrators, not service wrappers with list/get/filter patterns
 orchestration_clis = []

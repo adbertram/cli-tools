@@ -1,6 +1,6 @@
 """Vues configuration: browser-session login, HTTP session afterwards.
 
-Login happens once in a real browser (Google/Apple via Supabase). The resulting
+Login happens once in the shared headed browser (Google/Apple via Supabase). The resulting
 Supabase session is read out of the browser and saved as runtime auth state, so
 every later command runs over plain HTTP against the Vues API and refreshes the
 session itself. The Supabase project ref and its public ``anon`` key are the
@@ -28,14 +28,12 @@ TOKEN_FIELDS = ["SUPABASE_ACCESS_TOKEN", "SUPABASE_REFRESH_TOKEN", "SUPABASE_EXP
 class Config(BaseConfig):
     DIST_NAME = "vues-cli"
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
-    PORTABLE_BROWSER_SESSION = True
     DEFAULT_BASE_URL = "https://api.evrgreen.ai"
-    AUTH_SETUP_INSTRUCTIONS = (
-        "Vues has no email/password or API key: you sign in once with Google or Apple.\n"
-        "  1. Open https://vues.app/login and sign up (free) with Google or Apple.\n"
-        "  2. Link your TikTok account (@ata_clipper) in the Vues app.\n"
-        "  3. Run `vues auth login` and complete the provider sign-in in the browser."
-    )
+    # The saved Supabase session is the auth state; `auth status`/`auth test`
+    # prove it with a live HTTP identity call instead of opening the browser.
+    BROWSER_SESSION_REQUIRES_API_TEST = True
+    # Runtime session tokens belong to the auth profile, not the tool-root .env.
+    ADDITIONAL_AUTH_FIELDS = tuple(TOKEN_FIELDS)
 
     def __init__(self, profile=None):
         super().__init__(tool_dir=resolve_tool_dir(self.DIST_NAME), profile=profile)
@@ -45,17 +43,14 @@ class Config(BaseConfig):
 
         return VuesBrowser(self)
 
-    def browser_session_origins(self):
-        return ("https://vues.app",)
+    def has_saved_session(self) -> bool:
+        """A saved Supabase refresh token is the Vues session (HTTP after login)."""
+        return bool(self._get("SUPABASE_REFRESH_TOKEN"))
 
-    def browser_session_identity(self, browser):
-        """Runs right after a successful browser login: capture the Supabase
-        session for HTTP use and confirm the signed-in creator."""
-        from .client import VuesClient
-
-        VuesClient(config=self).capture_session(browser)
-        user = VuesClient(config=self).account()
-        return {"account_id": user.get("id"), "email": user.get("email")}
+    def clear_session(self):
+        for field in TOKEN_FIELDS:
+            self._clear(field)
+        super().clear_session()
 
     def test_connection(self) -> dict:
         """Live identity check over HTTP; refreshes an expired session but never

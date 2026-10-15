@@ -1,8 +1,8 @@
 {
   "tool": "vues",
   "description": "CLI interface for vues",
-  "discovered_at": "2026-10-15T00:33:26Z",
-  "total_commands": 24,
+  "discovered_at": "2026-10-15T15:39:12Z",
+  "total_commands": 21,
   "global_options": [],
   "commands": {
     "account": {
@@ -254,98 +254,6 @@
             }
           ]
         },
-        "session-export": {
-          "help": "Export scoped cookies/localStorage after live exact-account checks.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": true,
-              "help": "Explicit named browser-session profile"
-            },
-            {
-              "name": "--expected-account-id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Exact expected service account ID"
-            },
-            {
-              "name": "--expected-username",
-              "type": "TEXT",
-              "required": false,
-              "help": "Expected service username"
-            },
-            {
-              "name": "--output",
-              "type": "PATH",
-              "required": true,
-              "help": "New private CLI runtime bundle file"
-            }
-          ]
-        },
-        "session-import": {
-          "help": "Restore, verify, close, and exclusively publish an absent profile.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": true,
-              "help": "New inactive named browser-session profile"
-            },
-            {
-              "name": "--expected-account-id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Exact expected service account ID"
-            },
-            {
-              "name": "--expected-username",
-              "type": "TEXT",
-              "required": false,
-              "help": "Expected service username"
-            },
-            {
-              "name": "--stdin",
-              "type": "bool",
-              "required": false,
-              "help": "Read a private bounded session bundle from stdin",
-              "takes_value": false
-            }
-          ]
-        },
-        "session-import-recover": {
-          "help": "Recover owned closed transfer state or finalize it after exact actor proof.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": true,
-              "help": "Explicit named profile with an unfinished transfer journal"
-            },
-            {
-              "name": "--finalize",
-              "type": "bool",
-              "required": false,
-              "help": "Verify and publish already restored inactive owned state",
-              "takes_value": false
-            },
-            {
-              "name": "--expected-account-id",
-              "type": "TEXT",
-              "required": false,
-              "help": "Required exact actor for finalization"
-            },
-            {
-              "name": "--expected-username",
-              "type": "TEXT",
-              "required": false,
-              "help": "Expected service username for finalization"
-            }
-          ]
-        },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
@@ -404,13 +312,13 @@
       "options": [],
       "commands": {
         "get": {
-          "help": "Get one campaign in full (CPM/rate, minimum views, budget, brief and rules, exactly as the API returns it).",
+          "help": "Get one campaign in full (CPM, max payout, budget, platforms, brief and rules, exactly as the API returns it).",
           "arguments": [
             {
               "name": "campaign_id",
               "type": "TEXT",
               "required": true,
-              "help": "Campaign ID"
+              "help": "Campaign id or short_id"
             }
           ],
           "options": [
@@ -438,13 +346,13 @@
           ]
         },
         "join": {
-          "help": "Apply to / join a campaign (the join endpoint is resolved from the API's own OpenAPI document).",
+          "help": "Apply to / join a campaign (POST /clipper/campaigns/{id}/apply).",
           "arguments": [
             {
               "name": "campaign_id",
               "type": "TEXT",
               "required": true,
-              "help": "Campaign ID"
+              "help": "Campaign id or short_id"
             }
           ],
           "options": [
@@ -479,7 +387,7 @@
           ]
         },
         "list": {
-          "help": "List campaigns the signed-in creator can see (requires auth; Vues gates all campaign data behind login).",
+          "help": "List the clipper campaigns the signed-in creator can see (all pages up to --limit).",
           "arguments": [],
           "options": [
             {
@@ -528,7 +436,7 @@
       "options": [],
       "commands": {
         "get": {
-          "help": "Get balance, pending, paid and withdrawal minimum (whatever the earnings/balance endpoint exposes).",
+          "help": "Get the wallet balance (micro-dollars) and lifetime clipper stats as {balance, stats}.",
           "arguments": [],
           "options": [
             {
@@ -562,7 +470,7 @@
       "options": [],
       "commands": {
         "list": {
-          "help": "List linked social accounts (handle, platform, verification/eligibility, as the API returns them).",
+          "help": "List linked social accounts (handle, platform, status, verification and per-account earnings).",
           "arguments": [],
           "options": [
             {
@@ -617,7 +525,7 @@
               "name": "campaign_id",
               "type": "TEXT",
               "required": true,
-              "help": "Campaign ID"
+              "help": "Campaign id or short_id"
             }
           ],
           "options": [
@@ -658,7 +566,7 @@
           ]
         },
         "get": {
-          "help": "Get one submission by ID.",
+          "help": "Get one submission by ID (Vues has no single-submission route, so this scans the list).",
           "arguments": [
             {
               "name": "submission_id",
@@ -699,7 +607,7 @@
               "name": "--campaign-id",
               "type": "TEXT",
               "required": false,
-              "help": "Only this campaign's submissions"
+              "help": "Only this campaign's submissions (id or short_id)"
             },
             {
               "name": "--limit",
