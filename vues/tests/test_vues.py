@@ -247,6 +247,70 @@ def test_join_dry_run_uses_campaign_uuid(api):
     assert ("POST", "/clipper/campaigns/7672e5ce-uuid/apply", None, {}) not in api.calls
 
 
+ORG = {"id": "org-uuid", "short_id": "3gItXm", "name": "Vues", "auto_approve_applications": True, "is_member": False}
+APPLY_ROUTE = ("POST", "/organizations/org-uuid/apply")
+
+
+def org_routes(api, org=ORG, members=(), applications=()):
+    api.routes[("GET", "/organizations/discoverable")] = ok({"items": [org], "total": 1, "offset": 0, "limit": 100})
+    api.routes[("GET", "/clipper/orgs")] = ok(list(members))
+    api.routes[("GET", "/clipper/applications")] = ok(list(applications))
+
+
+def test_organization_lists(api):
+    org_routes(api, members=[{"id": "org-uuid"}], applications=[{"id": "a1"}, {"id": "a2"}])
+    assert api.discoverable_organizations(None) == [ORG]
+    assert api.member_organizations(5) == [{"id": "org-uuid"}]
+    assert api.organization_applications(1) == [{"id": "a1"}]
+
+
+def test_get_organization_by_id_or_short_id(api):
+    org_routes(api)
+    assert api.get_organization("3gItXm") == ORG == api.get_organization("org-uuid")
+
+
+def test_join_organization_dry_run_sends_nothing(api):
+    org_routes(api)
+    result = api.join_organization("3gItXm", None, dry_run=True)
+    assert result["status"] == "dry_run"
+    assert result["request"] == {"method": "POST", "body": {"message": None},
+                                 "url": "https://api.evrgreen.ai/api/v1/organizations/org-uuid/apply"}
+    assert not any(call[:2] == APPLY_ROUTE for call in api.calls)
+
+
+def test_join_organization_auto_approve_is_joined(api):
+    org_routes(api)
+    api.routes[APPLY_ROUTE] = ok({"id": "app-1", "status": "approved"})
+    result = api.join_organization("org-uuid", "  ", dry_run=False)
+    assert result["status"] == "joined" and result["application"]["status"] == "approved"
+    assert ("POST", "/organizations/org-uuid/apply", None, {"message": None}) in api.calls
+
+
+def test_join_organization_manual_approval_is_applied_with_message(api):
+    org_routes(api, org={**ORG, "auto_approve_applications": False})
+    api.routes[APPLY_ROUTE] = ok({"id": "app-1", "status": "pending"})
+    assert api.join_organization("org-uuid", " hi ", dry_run=False)["status"] == "applied"
+    assert ("POST", "/organizations/org-uuid/apply", None, {"message": "hi"}) in api.calls
+
+
+@pytest.mark.parametrize("kwargs,reason", [
+    ({"org": {**ORG, "is_member": True}}, "member"),
+    ({"members": [{"id": "org-uuid"}]}, "member"),
+    ({"applications": [{"id": "a1", "status": "pending", "organization": {"id": "org-uuid"}}]}, "application"),
+])
+def test_join_organization_never_applies_twice(api, kwargs, reason):
+    org_routes(api, **kwargs)
+    result = api.join_organization("org-uuid", None, dry_run=False)
+    assert result["status"] == "existing" and result["reason"] == reason
+    assert not any(call[:2] == APPLY_ROUTE for call in api.calls)
+
+
+def test_join_organization_unknown_org_raises(api):
+    org_routes(api)
+    with pytest.raises(ClientError, match="not in"):
+        api.join_organization("nope", None, dry_run=False)
+
+
 def test_social_accounts_are_connected_rows(api):
     api.routes[("GET", "/clipper/bundle/accounts")] = ok({"connected": [{"id": "a1", "platform": "TIKTOK"}],
                                                           "verified": []})

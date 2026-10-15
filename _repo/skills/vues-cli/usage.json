@@ -1,8 +1,8 @@
 {
   "tool": "vues",
   "description": "CLI interface for vues",
-  "discovered_at": "2026-10-15T15:39:12Z",
-  "total_commands": 21,
+  "discovered_at": "2026-10-15T16:36:11Z",
+  "total_commands": 25,
   "global_options": [],
   "commands": {
     "account": {
@@ -439,6 +439,185 @@
           "help": "Get the wallet balance (micro-dollars) and lifetime clipper stats as {balance, stats}.",
           "arguments": [],
           "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        }
+      }
+    },
+    "organizations": {
+      "help": "Vues organizations (a clipper only sees campaigns of orgs they belong to)",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "applications": {
+          "help": "List organization applications and their status (pending/approved/denied, as /clipper/applications returns them).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum number of applications",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one discoverable organization (description, auto_approve_applications, is_member).",
+          "arguments": [
+            {
+              "name": "org_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Organization id or short_id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "join": {
+          "help": "Join an auto-approve org (status joined) or apply to a manual one (status applied); never applies twice (status existing).",
+          "arguments": [
+            {
+              "name": "org_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Organization id or short_id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--message",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional intro sent with the application"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Authorize joining; for a manual-approval org it also affirms the Terms of Service and the org's rules, as the web form's checkbox does",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Run every check and show the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List discoverable organizations with is_member (--member: only joined ones, from /clipper/orgs).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--member",
+              "type": "bool",
+              "required": false,
+              "help": "Only organizations the creator has joined",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum number of organizations",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
             {
               "name": "--table",
               "type": "bool",

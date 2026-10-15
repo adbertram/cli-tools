@@ -65,6 +65,37 @@ vues account get --table                 # field/value table
 vues account get --properties id,email   # only these fields
 ```
 
+### organizations
+
+A clipper only sees campaigns from organizations they belong to (plus public
+campaigns). `list` shows discoverable orgs with `is_member`; `--member` lists
+only joined ones (`/clipper/orgs`); `applications` shows applications and their
+`status` (`pending`, `approved`, `denied`). `join` takes the org `id` or
+`short_id` and sends the web app's own request,
+`POST /api/v1/organizations/{id}/apply` with body `{"message": null}` (or the
+`--message` text). Membership and existing applications are checked first, so
+it never applies twice. Result `status`:
+
+- `joined`: auto-approve org, now a member (the response carries the approved application)
+- `applied`: manual-approval org, application is pending
+- `existing`: already a member (`reason: member`) or already applied (`reason: application`, including denied); nothing is sent
+- `dry_run`: only with `--dry-run`, shows the request
+
+`--yes` is required to send. For a manual-approval org it also affirms the
+Terms of Service and the org's rules, as the web form's required checkbox does.
+
+```bash
+vues organizations list                  # discoverable orgs: id, short_id, name, description, auto_approve_applications, is_member
+vues organizations list --member         # only joined orgs
+vues organizations get SHORT_ID          # one org (id or short_id)
+vues organizations list --filter auto_approve_applications:eq:true --table
+vues organizations list --limit 5 --properties short_id,name
+vues organizations applications          # applications and status
+vues organizations join SHORT_ID --dry-run
+vues organizations join SHORT_ID --yes
+vues organizations join SHORT_ID --yes --message "Short intro"   # manual-approval orgs
+```
+
 ### campaigns
 
 These are the clipper campaigns the signed-in creator can see
@@ -149,6 +180,8 @@ live responses on 2026-10-15):
 Routes used (all under `https://api.evrgreen.ai/api/v1`, the same ones the
 signed-in vues.app clipper pages call): `/users/me`, `/clipper/campaigns`,
 `/clipper/campaigns/{id}`, `/clipper/campaigns/{id}/apply`,
+`/organizations/discoverable`, `/clipper/orgs`, `/clipper/applications`,
+`/organizations/{id}/apply`,
 `/clipper/bundle/accounts?grouped=true`, `/clipper/submissions`,
 `/clipper/submissions/batches/{batch_id}`, `/clipper/balance`, `/clipper/stats`.
 

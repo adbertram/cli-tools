@@ -17,6 +17,10 @@ module and live calls (verified 2026-10-15):
     (offset/limit/campaign_id), POST /clipper/submissions
     {campaign_id, post_links} then GET /clipper/submissions/batches/{batch_id},
     GET /clipper/balance and /clipper/stats.
+  * organizations (a clipper only sees campaigns of orgs they belong to):
+    GET /organizations/discoverable (offset/limit paging), GET /clipper/orgs,
+    GET /clipper/applications, POST /organizations/{id}/apply {"message": str|null}
+    (the web app's own "Join now" / "Send application" call, from its JS bundle).
 There is no single-submission GET route (405), so `submission()` pages the list.
 The brand-side /campaigns route answers 403 "Enterprise access required" for a
 clipper, and /api/openapi.json answers 401 even with a valid session.
@@ -296,6 +300,51 @@ class VuesClient:
             return {"status": "dry_run", "campaign_id": campaign["id"], "request": request}
         data = self._data("POST", path, body={})
         return {"status": "applied", "campaign_id": campaign["id"], "application": data}
+
+    # ==================== Organizations ====================
+
+    def _rows(self, path: str, limit: Optional[int]) -> List[dict]:
+        rows = self._data("GET", path)
+        if not isinstance(rows, list):
+            raise ClientError(f"Vues {path} returned no list")
+        return rows if limit is None else rows[:limit]
+
+    def discoverable_organizations(self, limit: Optional[int] = 100) -> List[dict]:
+        return self._paged("/organizations/discoverable", limit)
+
+    def get_organization(self, org_id: str) -> dict:
+        """One discoverable organization by its id or short_id."""
+        org = next((row for row in self.discoverable_organizations(None) if org_id in (row.get("id"), row.get("short_id"))), None)
+        if org is None:
+            raise ClientError(f"Vues organization {org_id} is not in `vues organizations list`")
+        return org
+
+    def member_organizations(self, limit: Optional[int] = 100) -> List[dict]:
+        return self._rows("/clipper/orgs", limit)
+
+    def organization_applications(self, limit: Optional[int] = 100) -> List[dict]:
+        return self._rows("/clipper/applications", limit)
+
+    def join_organization(self, org_id: str, message: Optional[str], dry_run: bool) -> dict:
+        """Join an auto-approve org or apply to a manual-approval one, once.
+
+        Membership and existing applications are checked first; either returns
+        ``status: existing`` and nothing is sent."""
+        org = self.get_organization(org_id)
+        if org.get("is_member") or any(org["id"] in (row.get("id"), row.get("organization_id")) for row in self.member_organizations(None)):
+            return {"status": "existing", "reason": "member", "organization": org}
+        application = next((row for row in self.organization_applications(None)
+                            if (row.get("organization") or {}).get("id") == org["id"]), None)
+        if application:
+            return {"status": "existing", "reason": "application", "organization": org, "application": application}
+        path = f"/organizations/{org['id']}/apply"
+        body = {"message": (message or "").strip() or None}
+        if dry_run:
+            return {"status": "dry_run", "organization": org,
+                    "request": {"method": "POST", "url": f"{self.base_url}{API_PREFIX}{path}", "body": body}}
+        data = self._data("POST", path, body=body)
+        return {"status": "joined" if org.get("auto_approve_applications") else "applied",
+                "organization": org, "application": data}
 
     # ==================== Linked accounts ====================
 

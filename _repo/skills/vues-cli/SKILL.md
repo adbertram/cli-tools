@@ -36,6 +36,10 @@ vues <command-group> <action> [arguments] [options]
 | Apply to / join a campaign (POST /clipper/campaigns/{id}/apply) | `vues campaigns join <CAMPAIGN_ID>` |
 | List the clipper campaigns the signed-in creator can see (all pages up to --limit) | `vues campaigns list` |
 | Get the wallet balance (micro-dollars) and lifetime clipper stats as {balance, stats} | `vues earnings get` |
+| Get one discoverable organization (description, auto_approve_applications, is_member) | `vues organizations get <ORG_ID>` |
+| List organization applications and their status (pending/approved/denied, as /clipper/applications returns them) | `vues organizations applications` |
+| Join an auto-approve org (status joined) or apply to a manual one (status applied); never applies twice (status existing) | `vues organizations join <ORG_ID>` |
+| List discoverable organizations with is_member (--member: only joined ones, from /clipper/orgs) | `vues organizations list` |
 | List linked social accounts (handle, platform, status, verification and per-account earnings) | `vues social-accounts list` |
 | Submit a TikTok post once; an already-submitted URL returns status existing (never double-submits) | `vues submissions create <CAMPAIGN_ID>` |
 | Get one submission by ID (Vues has no single-submission route, so this scans the list) | `vues submissions get <SUBMISSION_ID>` |
@@ -67,11 +71,23 @@ existing submissions for the same video id first and returns `status: existing`.
 Use `--dry-run` to preview the request and `--yes` to actually submit.
 </principle>
 
+<principle name="Organizations Gate Campaigns">
+A clipper sees only public campaigns plus campaigns of organizations they belong
+to. `vues organizations list` shows discoverable orgs with `is_member`;
+`vues organizations join ORG_ID --dry-run` previews and `--yes` sends
+`POST /api/v1/organizations/{id}/apply`. It returns `joined` (auto-approve org),
+`applied` (manual approval, pending) or `existing` (already a member or already
+applied, nothing sent), so it never applies twice. Join only the organizations
+the task names; `--yes` on a manual-approval org also affirms the Terms of
+Service and that org's rules.
+</principle>
+
 <principle name="Command Groups">
 - **account** -- Current Vues creator account (subcommands: get)
 - **auth** -- Manage vues authentication (subcommands: login, logout, profiles, seed-shared-chromium-profile, status, test)
 - **campaigns** -- Vues campaigns (subcommands: get, join, list)
 - **earnings** -- Balance and earnings (subcommands: get)
+- **organizations** -- Vues organizations (a clipper only sees campaigns of orgs they belong to) (subcommands: applications, get, join, list)
 - **social-accounts** -- Linked social accounts (subcommands: list)
 - **submissions** -- Campaign submissions (subcommands: create, get, list)
 </principle>

@@ -25,6 +25,9 @@ from .config import get_config
 
 # JSON is the full contract; these are only the default table columns.
 CAMPAIGN_COLUMNS = ["short_id", "name", "organization_name", "cpm", "supported_platforms"]
+ORG_COLUMNS = ["short_id", "name", "auto_approve_applications", "is_member", "workspace_name"]
+MEMBER_ORG_COLUMNS = ["short_id", "name", "joined_at", "workspace_name"]
+APPLICATION_COLUMNS = ["id", "status", "created_at", "reviewed_at"]
 SOCIAL_COLUMNS = ["id", "platform", "username", "status", "is_verified"]
 SUBMISSION_COLUMNS = ["id", "campaign_name", "status", "views", "post_link"]
 
@@ -32,6 +35,8 @@ app = create_app(name="vues",
                  help="Vues (evrgreen) clipping campaigns, linked accounts, submissions and earnings",
                  version=__version__, cache_support=False)
 campaigns_app = typer.Typer(help="Vues campaigns", no_args_is_help=True)
+organizations_app = typer.Typer(help="Vues organizations (a clipper only sees campaigns of orgs they belong to)",
+                                no_args_is_help=True)
 account_app = typer.Typer(help="Current Vues creator account", no_args_is_help=True)
 social_app = typer.Typer(help="Linked social accounts", no_args_is_help=True)
 submissions_app = typer.Typer(help="Campaign submissions", no_args_is_help=True)
@@ -147,6 +152,68 @@ def join_campaign(
     _record(_client(profile).join_campaign(campaign_id, dry_run), table, None)
 
 
+# ==================== organizations ====================
+
+@organizations_app.command("list")
+@command
+def list_organizations(
+    member: bool = typer.Option(False, "--member", help="Only organizations the creator has joined"),
+    limit: int = typer.Option(100, "--limit", "-l", min=1, help="Maximum number of organizations"),
+    filter: Optional[List[str]] = FILTER,
+    table: bool = TABLE,
+    properties: Optional[str] = PROPERTIES,
+    profile: Optional[str] = PROFILE,
+):
+    """List discoverable organizations with is_member (--member: only joined ones, from /clipper/orgs)."""
+    def fetch():
+        client = _client(profile)
+        return client.member_organizations(limit) if member else client.discoverable_organizations(limit)
+    _list(fetch, filter, table, properties, "No organizations found.",
+          MEMBER_ORG_COLUMNS if member else ORG_COLUMNS)
+
+
+@organizations_app.command("get")
+@command
+def get_organization(
+    org_id: str = typer.Argument(..., help="Organization id or short_id"),
+    table: bool = TABLE,
+    properties: Optional[str] = PROPERTIES,
+    profile: Optional[str] = PROFILE,
+):
+    """Get one discoverable organization (description, auto_approve_applications, is_member)."""
+    _record(_client(profile).get_organization(org_id), table, properties)
+
+
+@organizations_app.command("applications")
+@command
+def list_applications(
+    limit: int = typer.Option(100, "--limit", "-l", min=1, help="Maximum number of applications"),
+    filter: Optional[List[str]] = FILTER,
+    table: bool = TABLE,
+    properties: Optional[str] = PROPERTIES,
+    profile: Optional[str] = PROFILE,
+):
+    """List organization applications and their status (pending/approved/denied, as /clipper/applications returns them)."""
+    _list(lambda: _client(profile).organization_applications(limit), filter, table, properties,
+          "No applications found.", APPLICATION_COLUMNS)
+
+
+@organizations_app.command("join")
+@command
+def join_organization(
+    org_id: str = typer.Argument(..., help="Organization id or short_id"),
+    message: Optional[str] = typer.Option(None, "--message", help="Optional intro sent with the application"),
+    yes: bool = typer.Option(False, "--yes", help="Authorize joining; for a manual-approval org it also affirms the "
+                                                 "Terms of Service and the org's rules, as the web form's checkbox does"),
+    dry_run: bool = DRY_RUN,
+    table: bool = TABLE,
+    profile: Optional[str] = PROFILE,
+):
+    """Join an auto-approve org (status joined) or apply to a manual one (status applied); never applies twice (status existing)."""
+    _guard(yes, dry_run, "join an organization")
+    _record(_client(profile).join_organization(org_id, message, dry_run), table, None)
+
+
 # ==================== account ====================
 
 @account_app.command("get")
@@ -226,6 +293,7 @@ def get_earnings(table: bool = TABLE, properties: Optional[str] = PROPERTIES, pr
 
 
 app.add_typer(campaigns_app, name="campaigns")
+app.add_typer(organizations_app, name="organizations")
 app.add_typer(account_app, name="account")
 app.add_typer(social_app, name="social-accounts")
 app.add_typer(submissions_app, name="submissions")
