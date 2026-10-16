@@ -79,6 +79,7 @@
 | `monarch` | The `monarch` CLI provides a command-line interface for Monarch API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `moz` | The `moz` CLI provides a command-line interface for Moz API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `msword` | The `msword` CLI lets you read Word docs, convert to markdown, and extract comments with context. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
+| `muse-chat` | Chat with Muse personal agents through the web app |
 | `mychart` | The `mychart` CLI provides command-line access to Epic MyChart SMART on FHIR patient record. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `n8n` | The `n8n` CLI lets you convert standardized CLI tools into n8n community node packages. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `nextdoor` | The `nextdoor` CLI provides browser-session-authenticated access to Nextdoor's GraphQL API (feed, For Sale & Free classifieds with direct listing URLs, me, notifications, content search). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
