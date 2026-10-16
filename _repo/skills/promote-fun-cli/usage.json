@@ -1,10 +1,38 @@
 {
   "tool": "promote-fun",
   "description": "CLI interface for promote-fun",
-  "discovered_at": "2026-10-16T04:10:11Z",
-  "total_commands": 15,
+  "discovered_at": "2026-10-16T11:51:06Z",
+  "total_commands": 16,
   "global_options": [],
   "commands": {
+    "account": {
+      "help": "Read saved-session identity",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Read authenticated identity; authentication does not prove creator onboarding.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage promote-fun authentication",
       "arguments": [],

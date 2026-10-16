@@ -36,7 +36,9 @@ def public_campaign(value: dict) -> dict:
 
 
 class ReachCatClient:
-    def __init__(self, session=None, max_retries: int = 2, base_delay: float = 1, max_delay: float = 10):
+    def __init__(self, session=None, config=None, max_retries: int = 2, base_delay: float = 1, max_delay: float = 10):
+        from .config import get_config
+        self.config = config or get_config()
         self.session = session or requests.Session()
         self.max_retries = max_retries
         self.base_delay = base_delay
@@ -44,6 +46,18 @@ class ReachCatClient:
 
     def close(self):
         self.session.close()
+
+    def account(self):
+        from .browser import ACCOUNT_JS
+        browser = self.config.get_browser()
+        try:
+            account = browser.get_page('https://reach.cat/').evaluate(ACCOUNT_JS)
+        finally:
+            browser.close()
+        if not isinstance(account, dict) or not account.get('uid'):
+            from cli_tools_shared.exceptions import ClientError
+            raise ClientError('Reach.cat account unavailable: run reach-cat auth login')
+        return account
 
     def _read(self, path: str, params=None):
         for attempt in range(self.max_retries + 1):

@@ -3,6 +3,7 @@ from typing import List, Optional
 
 import typer
 from cli_tools_shared import create_app, run_app
+from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, validate_filters
 from cli_tools_shared.output import command, print_json, print_table
@@ -60,7 +61,28 @@ def campaigns_get(campaign_id: str = typer.Argument(..., help='Native campaign I
         print_json(row)
 
 
+account_app = typer.Typer(no_args_is_help=True, help='Read saved-session identity')
+
+
+@account_app.command('get')
+@command
+def account_get(profile: Optional[str] = typer.Option(None, '--profile'),
+                table: bool = typer.Option(False, '--table', '-t')):
+    """Read authenticated identity; authentication does not prove creator onboarding."""
+    client = ReachCatClient(config=get_config(profile))
+    try:
+        row = client.account()
+    finally:
+        client.close()
+    if table:
+        print_table([{'field': key, 'value': value} for key, value in row.items()], ['field', 'value'], ['Field', 'Value'])
+    else:
+        print_json(row)
+
+
+app.add_typer(account_app, name='account')
 app.add_typer(campaigns_app, name='campaigns')
+app.add_typer(create_auth_app(get_config, tool_name='reach-cat'), name='auth')
 app.add_typer(create_cache_app(get_config), name='cache')
 
 

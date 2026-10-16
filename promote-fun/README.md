@@ -40,9 +40,9 @@ promote-fun auth profiles remove creator
 promote-fun auth seed-shared-chromium-profile
 ```
 
-`auth login --force/-F` opens the official campaign page, https://www.promote.fun/campaigns. Sign in or register using its Clerk sign-in control, then link TikTok @ata_clipper in the app. Account creation, passwords and CAPTCHAs require a person. The CLI saves the browser profile; `auth status` performs a live read against `users:current` using Clerk's Convex session token. It prints the standard `profiles[].authenticated` JSON. Signed-in operation has not yet been verified on an account. Public list/get do not use that saved authentication; authenticated campaign/membership/submission support is a future measured extension.
+`auth login --force/-F` opens the official campaign page, https://www.promote.fun/campaigns. Sign in or register using its Clerk sign-in control, then link TikTok @ata_clipper in the app. Authorized signup and sign-in use the provider’s normal browser flow; human-only verification gates must be handed off. The CLI saves the browser profile; `auth status` performs a live read against `users:current` using Clerk's Convex session token. It prints the standard `profiles[].authenticated` JSON. Live saved-session authentication and current-account readback were verified on 2026-10-16. Public list/get do not use that saved authentication; authenticated campaign/membership/submission support is a future measured extension.
 
-Reusable credentials belong in the CLI-tools secret manager, never `.env`. Browser session state is CLI-managed. No private bearer tokens are printed.
+Website login passwords belong in LastPass. Reusable CLI tokens belong in the CLI-tools secret manager, never `.env`. Browser session state is CLI-managed. No private bearer tokens are printed.
 
 ## Cache commands
 
@@ -55,3 +55,13 @@ Public reads are live and are not cached; the shared cache command manages any e
 ## Contract provenance
 
 Verified 2026-10-15 from official app assets `index-7nSc8Q1i.js`, `campaigns-LeAe9k8B.js`, `_id-14NKefzw.js` and the Convex client asset. Deployment: `https://dapper-duck-781.convex.cloud`; read-only transport is `POST /api/query`, with `{path, format:"convex_encoded_json", args:[object]}`. Campaign queries are `campaigns:listCampaigns` and `campaigns:getCampaignBySlugOrId`. HTTP POST here invokes a query, never a mutation. Failures are sanitized, retries bounded, pagination/schema failures explicit.
+
+## Saved account identity
+
+```bash
+promote-fun auth login
+promote-fun auth status
+promote-fun account get
+```
+
+Sign in through the provider website in the CLI-owned Chrome window, then press Enter to save. Website passwords belong in LastPass; this CLI persists its browser session. Account output excludes tokens.

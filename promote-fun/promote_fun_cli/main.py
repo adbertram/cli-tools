@@ -65,6 +65,27 @@ def campaigns_get(campaign_id: str = typer.Argument(..., help='Native ID or camp
         print_json(row)
 
 
+account_app = typer.Typer(no_args_is_help=True, help='Read saved-session identity')
+
+
+@account_app.command('get')
+@command
+def account_get(profile: Optional[str] = typer.Option(None, '--profile'),
+                table: bool = typer.Option(False, '--table', '-t')):
+    """Read authenticated identity; authentication does not prove creator onboarding."""
+    client = PromoteFunClient(config=get_config(profile))
+    try:
+        raw = client.account()
+    finally:
+        client.close()
+    row = {key: raw[key] for key in ('_id', 'username', 'email', 'role') if key in raw}
+    if table:
+        print_table([{'field': key, 'value': value} for key, value in row.items()], ['field', 'value'], ['Field', 'Value'])
+    else:
+        print_json(row)
+
+
+app.add_typer(account_app, name='account')
 app.add_typer(campaigns_app, name='campaigns')
 app.add_typer(create_auth_app(get_config, tool_name='promote-fun'), name='auth')
 app.add_typer(create_cache_app(get_config), name='cache')

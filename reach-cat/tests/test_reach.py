@@ -87,3 +87,16 @@ def test_inactive_sparse_legacy_record_does_not_break_active_discovery():
     assert client({'campaign-1': ROW, 'legacy': sparse}).campaigns() == [ROW]
     with pytest.raises(ClientError, match='schema changed'):
         client({'legacy': sparse}).campaigns(status='')
+
+
+def test_account_identity_keeps_incomplete_onboarding(monkeypatch):
+    from reach_cat_cli.main import app
+    from typer.testing import CliRunner
+    client = Mock()
+    client.account.return_value = {'uid': 'person1', 'email': 'user@example.test', 'onboarding_complete': False}
+    monkeypatch.setattr('reach_cat_cli.main.ReachCatClient', lambda **kwargs: client)
+    result = CliRunner().invoke(app, ['account', 'get'])
+    assert result.exit_code == 0, result.output
+    assert '"onboarding_complete": false' in result.output
+    client.account.assert_called_once()
+    client.close.assert_called_once()

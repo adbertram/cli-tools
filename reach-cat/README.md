@@ -30,14 +30,22 @@ The public join page displays `cpm` as dollars per 1,000 views, reading root `cp
 
 ## Account checkpoint
 
-No authenticated routes, joins, account linking, submissions or earnings have been measured. This public CLI has no `auth` group and never claims authentication. Complete the human account step before a later authenticated integration:
-
-```bash
-open https://reach.cat/signup
-```
-
-Create the account personally, then link TikTok @ata_clipper. Existing users can open https://reach.cat/signin. Agents must not create accounts, enter passwords or solve CAPTCHAs. No reusable credentials are stored by this CLI; future credentials belong in the CLI-tools secret manager.
+Browser login and current Firebase identity are measured. Joins, account linking, submissions and earnings remain unsupported. On 2026-10-16 Google sign-in succeeded, but the provider displayed “Registration temporarily unavailable” and paused new creator registrations. A saved Firebase identity does not prove a usable creator profile.
 
 ## Source contract
 
 Verified 2026-10-15 from official app assets `index-fzSh_eRr.js`, `public-BgNBWwh4.js`, `CampaignJoin-BMgRvH79.js`, and the campaign editor. The official Firebase deployment is `https://reachcat-api-default-rtdb.europe-west1.firebasedatabase.app`; public app reads `static/campaigns/{id}`. REST equivalents are GET `/static/campaigns.json` with key-order pagination and GET `/static/campaigns/{id}.json`. Campaign URL: `https://reach.cat/campaign/{id}/join`. Only query reads are implemented.
+
+## Saved account identity
+
+```bash
+reach-cat auth login
+reach-cat auth status
+reach-cat account get
+```
+
+Sign in through the provider website in the CLI-owned Chrome window, then press Enter to save. Website passwords belong in LastPass; this CLI persists its browser session. Account output excludes tokens.
+
+Firebase identity alone does not prove creator onboarding. On 2026-10-16 the site paused new creator registrations; `account get` reports `onboarding_complete: false` on the signup route. No bypass or business-account substitution is supported.
+
+The identity probe uses the measured Firebase module `/assets/firebase-Df3M1fEi.js` from the current official app. A provider asset change fails closed until that contract is rechecked; it never guesses a new export. `onboarding_complete` is false when the observed route is signup and null elsewhere. Firebase authentication alone does not mark the creator account usable.

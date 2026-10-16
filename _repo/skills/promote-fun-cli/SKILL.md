@@ -30,6 +30,7 @@ promote-fun <command-group> <action> [arguments] [options]
 | Activate a profile within its auth type | `promote-fun auth profiles select <NAME>` |
 | Seed an empty shared Chromium profile from this CLI's default profile | `promote-fun auth seed-shared-chromium-profile` |
 | Check authentication status across profiles | `promote-fun auth status` |
+| Read saved-session identity | `promote-fun account get` |
 | Remove all cached responses | `promote-fun cache clear` |
 | Read native public detail, including explicit rulesAccess gates | `promote-fun campaigns get <CAMPAIGN_ID>` |
 | List public campaigns with server pagination; missing view floors stay missing | `promote-fun campaigns list` |
@@ -43,6 +44,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 
 <principle name="Command Groups">
 - **auth** -- Manage promote-fun authentication (subcommands: login, logout, profiles, seed-shared-chromium-profile, status)
+- **account** -- Read identity without tokens (subcommand: get)
 - **cache** -- Manage response cache (subcommands: clear)
 - **campaigns** -- Read public campaigns without signing in (subcommands: get, list)
 </principle>

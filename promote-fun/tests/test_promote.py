@@ -101,3 +101,14 @@ def test_cli_native_json_and_standard_options(monkeypatch):
     result = CliRunner().invoke(app, ['campaigns', 'list', '--limit', '10', '--filter', 'title:eq:Example', '--properties', '_id,title'])
     assert result.exit_code == 0 and 'campaign123' in result.stdout and 'costPer1kViews' not in result.stdout
     fake.close.assert_called_once()
+
+
+def test_account_excludes_session_material(monkeypatch):
+    instance = Mock()
+    instance.account.return_value = {'_id': 'person1', 'email': 'user@example.test', 'username': 'clipper', 'token': 'must-not-print'}
+    monkeypatch.setattr('promote_fun_cli.main.PromoteFunClient', lambda **kwargs: instance)
+    result = CliRunner().invoke(app, ['account', 'get'])
+    assert result.exit_code == 0, result.output
+    assert 'clipper' in result.output
+    assert 'must-not-print' not in result.output
+    instance.close.assert_called_once()

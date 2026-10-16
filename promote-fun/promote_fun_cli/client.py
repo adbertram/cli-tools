@@ -27,19 +27,8 @@ class PromoteFunClient:
         browser = (self.config or get_config()).get_browser()
         try:
             page = browser.get_page('https://www.promote.fun/campaigns')
-            value = page.evaluate("""async () => {
-                const until=Date.now()+10000;
-                while(!window.Clerk && Date.now()<until)await new Promise(resolve=>setTimeout(resolve,100));
-                if(!window.Clerk?.session)return null;
-                const token=await window.Clerk.session.getToken({template:'convex'});
-                if(!token)return null;
-                const response=await fetch('https://dapper-duck-781.convex.cloud/api/query',{
-                    method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
-                    body:JSON.stringify({path:'users:current',format:'convex_encoded_json',args:[{}]})});
-                if(!response.ok)return null;
-                const result=await response.json();
-                return result.status==='success'?result.value:null;
-            }""")
+            from .browser import ACCOUNT_JS
+            value = page.evaluate(ACCOUNT_JS)
         finally:
             browser.close()
         if not isinstance(value, dict) or not isinstance(value.get('_id'), str):
