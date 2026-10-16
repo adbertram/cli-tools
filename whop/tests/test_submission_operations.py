@@ -604,6 +604,7 @@ def test_join_campaign_requires_explicit_confirmation(client):
     ({'joined':False,'already':True,'join_controls':0,'submit_controls':1},True)])
 def test_join_campaign_returns_observed_membership(client,observation,already):
     document=client._action_document.return_value;document.evaluate.return_value=observation
+    client._rest.return_value={'data':{'id':CAMPAIGN,'joined':True}}
     result=client.join_campaign(CAMPAIGN,expected_account_id=ACTOR,confirm=True)
     assert result=={'campaign_id':CAMPAIGN,'actor':{'account_id':ACTOR,'username':'whopuser'},'joined':True,'already_joined':already,'submit_controls':1}
     assert document.evaluate.call_args.kwargs['request_timeout']==60
