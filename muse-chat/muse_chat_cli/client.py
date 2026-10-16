@@ -131,6 +131,10 @@ SIDE_THREAD_CLICK_JS = r"""
 """
 
 
+def _message_key(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
 class MuseChatClient:
     """Drive Muse through the shared persistent browser engine."""
 
@@ -230,7 +234,7 @@ class MuseChatClient:
 
     @staticmethod
     def _wait_for_user_echo(page, baseline_ids: set[str], baseline_dom_index: int, message: str) -> dict:
-        message_key = re.sub(r"\s+", " ", message).strip()
+        message_key = _message_key(message)
         deadline = time.monotonic() + SEND_ACK_TIMEOUT_SECONDS
         while time.monotonic() < deadline:
             snapshot = MuseChatClient._snapshot(page)
@@ -239,7 +243,7 @@ class MuseChatClient:
                 if row["role"] == "user"
                 and row["dom_index"] > baseline_dom_index
                 and row["message_id"] not in baseline_ids
-                and re.sub(r"\s+", " ", row["text"]).strip() == message_key
+                and _message_key(row["text"]) == message_key
             ]
             if len(matches) == 1:
                 return matches[0]
@@ -274,7 +278,16 @@ class MuseChatClient:
         turn_dom_index: int,
         timeout: int,
         turn_message_id: str,
+        new_side_message: Optional[str] = None,
     ) -> dict:
+        """Wait for the response to one user turn.
+
+        ``new_side_message`` is set only for a side chat this process just
+        created. Muse gives the draft's user echo a temporary message ID and
+        replaces it with the server ID once the thread is saved, so the
+        submitted turn is re-anchored to the chat's only user turn when its
+        text matches. Any other history still refuses to match.
+        """
         deadline = time.monotonic() + timeout
         while True:
             snapshot = MuseChatClient._snapshot(page)
@@ -282,6 +295,18 @@ class MuseChatClient:
                 (row for row in snapshot["messages"] if row["message_id"] == turn_message_id),
                 None,
             )
+            if current_turn is None and new_side_message is not None:
+                user_turns = [row for row in snapshot["messages"] if row["role"] == "user"]
+                if (
+                    len(user_turns) == 1
+                    and _message_key(user_turns[0]["text"]) == _message_key(new_side_message)
+                ):
+                    current_turn = user_turns[0]
+                    activity.info(
+                        "side chat turn re-anchored chat_id=%s from=%s to=%s",
+                        chat_id, turn_message_id, current_turn["message_id"],
+                    )
+                    turn_message_id = current_turn["message_id"]
             if current_turn is None:
                 raise ClientError(
                     f"Muse chat {chat_id!r} no longer exposed submitted turn "
@@ -324,6 +349,7 @@ class MuseChatClient:
                 return {
                     "status": "approval_required",
                     "chat_id": chat_id,
+                    "turn_message_id": turn_message_id,
                     "url": page.url,
                     "response": latest_response or None,
                     "approval": approvals[-1].get("name"),
@@ -341,6 +367,7 @@ class MuseChatClient:
                 return {
                     "status": "completed",
                     "chat_id": chat_id,
+                    "turn_message_id": turn_message_id,
                     "url": page.url,
                     "response": latest_response,
                 }
@@ -350,6 +377,7 @@ class MuseChatClient:
                 return {
                     "status": "timeout",
                     "chat_id": chat_id,
+                    "turn_message_id": turn_message_id,
                     "url": page.url,
                     "response": latest_response or None,
                     "timeout_seconds": timeout,
@@ -415,7 +443,6 @@ class MuseChatClient:
         monitored.update({
             "message": message,
             "turn_dom_index": turn_dom_index,
-            "turn_message_id": turn_message_id,
             "monitored": True,
         })
         return monitored
@@ -461,11 +488,11 @@ class MuseChatClient:
             result["turn_dom_index"],
             timeout,
             result["turn_message_id"],
+            new_side_message=message,
         )
         monitored.update({
             "message": message,
             "turn_dom_index": result["turn_dom_index"],
-            "turn_message_id": result["turn_message_id"],
             "monitored": True,
         })
         return monitored

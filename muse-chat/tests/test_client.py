@@ -112,6 +112,7 @@ def test_monitor_timeout_is_structured_and_never_cancels(monkeypatch):
     assert result == {
         "status": "timeout",
         "chat_id": "main",
+        "turn_message_id": "user-0",
         "url": "https://muse.ai/",
         "response": None,
         "timeout_seconds": 1,
@@ -198,3 +199,113 @@ def test_press_failure_reports_ambiguous_send_without_retry():
 
 def test_compacted_user_fallback_strips_accessibility_prefix():
     assert ".replace(/^User message:\\s*/i, '')" in CHAT_SNAPSHOT_JS
+
+
+SIDE_ID = "282cc7b4-3813-4ed2-84df-bca90531113b"
+DRAFT_TURN_ID = "8c575612-9951-42f8-baea-9d557e0a80f3"
+SAVED_TURN_ID = "1f76ec71-ea1c-4501-8418-23b70f9d358c"
+SIDE_MESSAGE = "Set up a daily monitor.\n\nWhat to watch: the app review."
+
+
+class SideDraftPage(SequencePage):
+    """Recorded 2026-10-16 shape: the draft echo carries a temporary message ID
+    that Muse replaces with the server ID once the thread URL is assigned."""
+
+    def __init__(self, saved_messages):
+        super().__init__(
+            [
+                snapshot(),
+                snapshot([
+                    {
+                        "role": "user",
+                        "text": SIDE_MESSAGE,
+                        "dom_index": 1,
+                        "message_id": DRAFT_TURN_ID,
+                        "turn_id": DRAFT_TURN_ID,
+                    }
+                ]),
+                snapshot(saved_messages),
+            ],
+            url="https://muse.ai/thread/new",
+        )
+
+    def evaluate(self, script):
+        result = super().evaluate(script)
+        if len(self.snapshots) == 1:
+            self.url = f"https://muse.ai/thread/{SIDE_ID}"
+        return result
+
+    def wait_for_selector(self, _selector, timeout=None):
+        return None
+
+
+def side_client(page):
+    client = MuseChatClient.__new__(MuseChatClient)
+    client._browser = type("Browser", (), {"get_page": lambda _self, _url: page})()
+    return client
+
+
+def saved_user(text=SIDE_MESSAGE, *, dom_index=1, message_id=SAVED_TURN_ID):
+    return {
+        "role": "user",
+        "text": text,
+        "dom_index": dom_index,
+        "message_id": message_id,
+        "turn_id": message_id,
+    }
+
+
+def test_side_create_monitor_follows_draft_turn_to_saved_server_id():
+    page = SideDraftPage([
+        saved_user(),
+        {
+            "role": "assistant",
+            "text": "Confirmed, monitor is running.",
+            "dom_index": 2,
+            "message_id": "assistant-msg-87430a82-ce7f-4953-bcc6-d9ff28043091",
+            "turn_id": "assistant-msg-87430a82-ce7f-4953-bcc6-d9ff28043091",
+        },
+    ])
+    result = side_client(page).create_side(SIDE_MESSAGE, monitor=True, timeout=10)
+    assert result["status"] == "completed"
+    assert result["chat_id"] == SIDE_ID
+    assert result["response"] == "Confirmed, monitor is running."
+    assert result["turn_message_id"] == SAVED_TURN_ID
+    assert page.composer.pressed == ["Enter"]
+
+
+@pytest.mark.parametrize(
+    "saved_messages",
+    [
+        [saved_user("A different prompt")],
+        [saved_user(), saved_user(dom_index=3, message_id="other-user-turn")],
+    ],
+    ids=["text-mismatch", "second-user-turn"],
+)
+def test_side_create_monitor_refuses_unprovable_saved_turn(saved_messages):
+    saved_messages = [
+        *saved_messages,
+        {"role": "assistant", "text": "reply", "dom_index": 4, "message_id": "a-reply"},
+    ]
+    page = SideDraftPage(saved_messages)
+    with pytest.raises(ClientError, match="refused to match another response"):
+        side_client(page).create_side(SIDE_MESSAGE, monitor=True, timeout=10)
+
+
+def test_existing_chat_send_never_reanchors_replaced_turn_id():
+    page = SequencePage([
+        snapshot(),
+        snapshot([saved_user(message_id=DRAFT_TURN_ID)]),
+        snapshot([
+            saved_user(),
+            {"role": "assistant", "text": "reply", "dom_index": 2, "message_id": "a-reply"},
+        ]),
+    ], url=f"https://muse.ai/thread/{SIDE_ID}")
+    with pytest.raises(ClientError, match="refused to match another response"):
+        MuseChatClient._send_on_page(
+            MuseChatClient.__new__(MuseChatClient),
+            page,
+            SIDE_MESSAGE,
+            monitor=True,
+            timeout=10,
+        )
