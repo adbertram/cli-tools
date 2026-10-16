@@ -35,6 +35,56 @@ class PromoteFunClient:
             raise ClientError('Promote.fun account unavailable: run promote-fun auth login')
         return value
 
+    def _authenticated_call(self, kind, path, arguments):
+        browser = (self.config or get_config()).get_browser()
+        try:
+            page = browser.get_page('https://www.promote.fun/campaigns')
+            result = page.evaluate("""async (request) => {
+                const until=Date.now()+10000;
+                while(!window.Clerk?.loaded && Date.now()<until)await new Promise(r=>setTimeout(r,100));
+                if(!window.Clerk?.session)return null;
+                const token=await window.Clerk.session.getToken({template:'convex'});
+                const response=await fetch('https://dapper-duck-781.convex.cloud/api/'+request.kind,{
+                    method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+                    body:JSON.stringify({path:request.path,format:'convex_encoded_json',args:[request.arguments]})});
+                const value=await response.json();
+                return response.ok?value:null;
+            }""", {'kind':kind,'path':path,'arguments':arguments})
+        finally:
+            browser.close()
+        if not isinstance(result, dict) or result.get('status') != 'success':
+            raise ClientError('Promote.fun authenticated operation rejected; read account state before retrying')
+        return result.get('value')
+
+    def social_accounts(self):
+        rows = self._authenticated_call('query', 'connectedAccounts:getConnectedAccounts', {})
+        if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get('_id'), str) for row in rows):
+            raise ClientError('Promote.fun connected accounts schema changed')
+        fields = {'_id', 'platform', 'username', 'accountUsername', 'status', 'verifiedAt'}
+        return [{key: value for key, value in row.items() if key in fields} for row in rows]
+
+    def verification_code(self, account_id):
+        self._owned_social_account(account_id)
+        value = self._authenticated_call('mutation', 'connectedAccounts:generateVerificationCode', {'accountId':account_id})
+        if not isinstance(value, dict) or not isinstance(value.get('code'), str) or not isinstance(value.get('expiresAt'), (int, float)):
+            raise ClientError('Promote.fun verification code schema changed')
+        return value
+
+    def _owned_social_account(self, account_id):
+        matches = [row for row in self.social_accounts() if row['_id'] == account_id]
+        if len(matches) != 1:
+            raise ClientError('Connected account is not owned by the current Promote.fun session')
+        return matches[0]
+
+    def verify_social_account(self, account_id):
+        before = self._owned_social_account(account_id)
+        if before.get('status') != 'verified':
+            self._authenticated_call('action', 'connectedAccounts:validateBioVerification', {'accountId':account_id})
+        after = self._owned_social_account(account_id)
+        if after.get('status') != 'verified' or not isinstance(after.get('verifiedAt'), (int, float)):
+            raise ClientError('Promote.fun ownership verification not observed; do not infer success')
+        return after
+
     def query(self, path: str, arguments: dict):
         body = {'path': path, 'format': 'convex_encoded_json', 'args': [arguments]}
         for attempt in range(self.max_retries + 1):

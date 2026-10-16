@@ -112,3 +112,24 @@ def test_account_excludes_session_material(monkeypatch):
     assert 'clipper' in result.output
     assert 'must-not-print' not in result.output
     instance.close.assert_called_once()
+
+
+def test_verification_requires_authoritative_readback(monkeypatch):
+    instance = PromoteFunClient()
+    before = {'_id': 'owned', 'status': 'pending'}
+    monkeypatch.setattr(instance, '_owned_social_account', Mock(side_effect=[before, before]))
+    dispatch = Mock(return_value={'success': True})
+    monkeypatch.setattr(instance, '_authenticated_call', dispatch)
+    with pytest.raises(ClientError, match='not observed'):
+        instance.verify_social_account('owned')
+    dispatch.assert_called_once_with('action', 'connectedAccounts:validateBioVerification', {'accountId': 'owned'})
+
+
+def test_already_verified_does_not_dispatch(monkeypatch):
+    instance = PromoteFunClient()
+    row = {'_id': 'owned', 'status': 'verified', 'verifiedAt': 123}
+    monkeypatch.setattr(instance, '_owned_social_account', Mock(return_value=row))
+    dispatch = Mock()
+    monkeypatch.setattr(instance, '_authenticated_call', dispatch)
+    assert instance.verify_social_account('owned') == row
+    dispatch.assert_not_called()

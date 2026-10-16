@@ -65,3 +65,14 @@ promote-fun account get
 ```
 
 Sign in through the provider website in the CLI-owned Chrome window, then press Enter to save. Website passwords belong in LastPass; this CLI persists its browser session. Account output excludes tokens.
+
+## Social account ownership verification
+
+```bash
+promote-fun social-accounts list
+promote-fun social-accounts get ACCOUNT_ID
+promote-fun social-accounts verification-code ACCOUNT_ID --yes
+promote-fun social-accounts verify ACCOUNT_ID --yes
+```
+
+Code generation uses the app's `connectedAccounts:generateVerificationCode` mutation. Add that temporary code to the owned social profile bio before calling `verify`, which invokes `connectedAccounts:validateBioVerification` once and requires a fresh `status: verified` plus `verifiedAt` readback. It never retries an action or uses administrator verification. List/get exclude verification hashes and other private account fields. Preserve the original bio and restore it after verification, then read both profile and connected-account state again.

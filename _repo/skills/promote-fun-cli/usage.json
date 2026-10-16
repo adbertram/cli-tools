@@ -1,8 +1,8 @@
 {
   "tool": "promote-fun",
   "description": "CLI interface for promote-fun",
-  "discovered_at": "2026-10-16T11:51:06Z",
-  "total_commands": 16,
+  "discovered_at": "2026-10-16T12:11:19Z",
+  "total_commands": 20,
   "global_options": [],
   "commands": {
     "account": {
@@ -416,6 +416,125 @@
               "type": "TEXT",
               "required": false,
               "help": "Accepted for workflow compatibility; public reads do not use authentication"
+            }
+          ]
+        }
+      }
+    },
+    "social-accounts": {
+      "help": "Read and verify owned social accounts",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1000]",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., status:eq:verified)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "verification-code": {
+          "help": "Generate the temporary code for an owned social account; requires --yes.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "verify": {
+          "help": "Check the bio code once, then require authoritative verified readback.",
+          "arguments": [
+            {
+              "name": "account_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
             }
           ]
         }

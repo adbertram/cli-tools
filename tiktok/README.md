@@ -805,3 +805,12 @@ and table output. TikTok's own public Videos tab currently returns HTTP 200 with
 an empty response for both `ata_clipper` and `joecoxtech`, in authenticated,
 anonymous, headed, and headless comparisons. The CLI preserves this as
 `tiktok_empty_response`, never an empty profile or a Studio substitute.
+
+## Owned profile bio
+
+```bash
+tiktok account bio --profile clipper --username ata_clipper --expected-account-id 7692213003349443597
+tiktok account set-bio --profile clipper --username ata_clipper --expected-account-id 7692213003349443597 --expected-bio 'previous exact bio' --value 'new exact bio' --yes
+```
+
+These commands use the measured Edit profile/Bio/Save controls. The setter verifies the exact session actor and previous bio, enforces the observed 80-character limit, dispatches Save once and reads back persisted state. If save is uncertain, read `account bio` before any further write. Preserve original whitespace when temporarily adding ownership codes.

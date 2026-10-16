@@ -85,6 +85,79 @@ def account_get(profile: Optional[str] = typer.Option(None, '--profile'),
         print_json(row)
 
 
+social_app = typer.Typer(no_args_is_help=True, help='Read and verify owned social accounts')
+
+
+@social_app.command('list')
+@command
+def social_list(limit: int = typer.Option(100, '--limit', '-l', min=1, max=1000),
+                filter: Optional[List[str]] = typer.Option(None, '--filter', '-f', help='Filter: field:op:value (e.g., status:eq:verified)'),
+                properties: Optional[str] = typer.Option(None, '--properties', '-p'),
+                table: bool = typer.Option(False, '--table', '-t'),
+                profile: Optional[str] = typer.Option(None, '--profile')):
+    if filter:
+        validate_filters(filter)
+    client = PromoteFunClient(config=get_config(profile))
+    try:
+        rows = client.social_accounts()[:limit]
+    finally:
+        client.close()
+    if filter:
+        rows = apply_filters(rows, filter)
+    if properties:
+        rows = apply_properties_filter(rows, properties)
+    if table:
+        columns = properties.split(',') if properties else ['_id', 'platform', 'username', 'status', 'verifiedAt']
+        print_table(rows, columns, columns)
+    else:
+        print_json(rows)
+
+
+@social_app.command('get')
+@command
+def social_get(account_id: str, table: bool = typer.Option(False, '--table', '-t'),
+               profile: Optional[str] = typer.Option(None, '--profile')):
+    client = PromoteFunClient(config=get_config(profile))
+    try:
+        row = client._owned_social_account(account_id)
+    finally:
+        client.close()
+    if table:
+        columns = ['_id', 'platform', 'username', 'status', 'verifiedAt']
+        print_table([row], columns, columns)
+    else:
+        print_json(row)
+
+
+@social_app.command('verification-code')
+@command
+def verification_code(account_id: str, yes: bool = typer.Option(False, '--yes'),
+                      profile: Optional[str] = typer.Option(None, '--profile')):
+    """Generate the temporary code for an owned social account; requires --yes."""
+    if not yes:
+        raise typer.BadParameter('--yes is required to generate a verification code')
+    client = PromoteFunClient(config=get_config(profile))
+    try:
+        print_json(client.verification_code(account_id))
+    finally:
+        client.close()
+
+
+@social_app.command('verify')
+@command
+def verify_account(account_id: str, yes: bool = typer.Option(False, '--yes'),
+                   profile: Optional[str] = typer.Option(None, '--profile')):
+    """Check the bio code once, then require authoritative verified readback."""
+    if not yes:
+        raise typer.BadParameter('--yes is required for ownership verification')
+    client = PromoteFunClient(config=get_config(profile))
+    try:
+        print_json(client.verify_social_account(account_id))
+    finally:
+        client.close()
+
+
+app.add_typer(social_app, name='social-accounts')
 app.add_typer(account_app, name='account')
 app.add_typer(campaigns_app, name='campaigns')
 app.add_typer(create_auth_app(get_config, tool_name='promote-fun'), name='auth')

@@ -7,7 +7,7 @@ from cli_tools_shared.output import command, print_json, print_table
 from ..client import TikTokWebClient
 
 app = typer.Typer(help="Read verified current account identity")
-COMMAND_CREDENTIALS = {"get": ["browser_session"], "check": ["browser_session"]}
+COMMAND_CREDENTIALS = {"get": ["browser_session"], "check": ["browser_session"], "bio": ["browser_session"], "set-bio": ["browser_session"]}
 
 
 @app.command("get")
@@ -60,3 +60,34 @@ def account_check(
         print_table(rows, columns, columns)
     else:
         print_json(result)
+
+
+@app.command('bio')
+@command
+def account_bio(username: str = typer.Option(..., '--username'),
+                expected_account_id: str = typer.Option(..., '--expected-account-id')):
+    """Read the exact owned profile bio from its editor."""
+    from ..profile_operations import bio
+    client = TikTokWebClient()
+    try:
+        print_json(bio(client, username, expected_account_id))
+    finally:
+        client.close()
+
+
+@app.command('set-bio')
+@command
+def account_set_bio(value: str = typer.Option(..., '--value'),
+                    expected_bio: str = typer.Option(..., '--expected-bio'),
+                    username: str = typer.Option(..., '--username'),
+                    expected_account_id: str = typer.Option(..., '--expected-account-id'),
+                    yes: bool = typer.Option(False, '--yes')):
+    """Save one exact bio only when its previous value matches; require --yes."""
+    if not yes:
+        raise typer.BadParameter('--yes is required to save a profile bio')
+    from ..profile_operations import bio
+    client = TikTokWebClient()
+    try:
+        print_json(bio(client, username, expected_account_id, value=value, expected=expected_bio))
+    finally:
+        client.close()

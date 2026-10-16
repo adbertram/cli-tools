@@ -58,6 +58,8 @@ tiktok <command-group> <action> [arguments] [options]
 </quick_start>
 
 <essential_principles>
+Owned profile bio: `account bio --username HANDLE --expected-account-id ID`; `account set-bio` additionally requires `--expected-bio`, `--value`, and `--yes`. Preserve exact prior bio and read back uncertain saves before further writes.
+
 <principle name="Usage Reference">
 **MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `tiktok` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.

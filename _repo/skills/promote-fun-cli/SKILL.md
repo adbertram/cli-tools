@@ -37,6 +37,8 @@ promote-fun <command-group> <action> [arguments] [options]
 </quick_start>
 
 <essential_principles>
+Owned social verification: `social-accounts list/get`, `verification-code ACCOUNT_ID --yes`, then `verify ACCOUNT_ID --yes`. Preserve and restore the social bio; require verified status readback.
+
 <principle name="Usage Reference">
 **MANDATORY: Verify the live command shape before executing ANY `promote-fun` command.**
 Consult `usage.json` when the repo or installed package ships it. If `usage.json` is absent, use `promote-fun --help`, the relevant subcommand `--help`, and `README.md` instead. Never guess at command syntax.
