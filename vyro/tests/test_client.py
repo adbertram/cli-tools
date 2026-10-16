@@ -159,7 +159,11 @@ def test_readiness_distinguishes_join_from_restrictions(tmp_path):
     c,campaign,_=submission_client(tmp_path)
     assert c.readiness('slug','actor','social','ata_clipper')['ready']
     campaign['enrolled']=False
-    assert c.readiness('slug','actor','social','ata_clipper')['reason']=='campaign_not_joined'
+    c._get=lambda path:pytest.fail('member-only limits must not be read before enrollment')
+    state=c.readiness('slug','actor','social','ata_clipper')
+    assert state['reason']=='campaign_not_joined'
+    assert state['rate_limit'] is None
+    assert state['throttle'] is None
     campaign['budget']['remaining']=0
     assert c.readiness('slug','actor','social','ata_clipper')['reason']=='campaign_budget_unavailable'
 

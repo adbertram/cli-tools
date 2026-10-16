@@ -285,14 +285,17 @@ class VyroClient:
             if not any(r.get('platform') == 'tiktok' and r.get('platformUsername','').lower() == social['platformUsername'].lower() for r in eligible):
                 reason = reason or 'social_account_not_eligible'
         elif mode != 'open': reason = reason or 'unsupported_invite_mode'
+        enrolled = campaign.get('enrolled') is True
+        if not enrolled:
+            return {'campaign':campaign,'social_account':social,'eligibility':eligibility,'enrolled':False,
+                    'ready':False,'reason':reason or 'campaign_not_joined','requirements_digest':requirements_digest(campaign),
+                    'rate_limit':None,'throttle':None}
         rate = self._get('/clips/rate-limit-status?' + urlencode({'campaignId':identity,'socialAccountId':social['id']}))
         throttle = self._get('/clips/throttle-status?' + urlencode({'campaignId':identity}))
         if type(rate.get('currentCount')) is not int or type(rate.get('limit')) is not int or type(throttle.get('isBlocked')) is not bool:
             raise ClientError('invalid_submission_limit_response')
         if rate['limit'] > 0 and rate['currentCount'] >= rate['limit']: reason = reason or 'submission_rate_limit'
         if throttle['isBlocked']: reason = reason or 'submission_throttled'
-        enrolled = campaign.get('enrolled') is True
-        if not enrolled: reason = reason or 'campaign_not_joined'
         return {'campaign':campaign,'social_account':social,'eligibility':eligibility,'enrolled':enrolled,
                 'ready':reason is None,'reason':reason,'requirements_digest':requirements_digest(campaign),
                 'rate_limit':rate,'throttle':throttle}
