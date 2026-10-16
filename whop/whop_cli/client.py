@@ -339,6 +339,12 @@ class WhopClient:
         return self._rest('/api/campaign/campaigns/discover/'+identifier(campaign_id))['data']
     def applications(self):
         return self._rest('/api/campaign/campaigns/applications/me')['data']
+    def application_form(self, campaign_id):
+        from .application_operations import application_form
+        return application_form(self, campaign_id)
+    def apply_campaign(self, campaign_id, *, answers, social_account_ids, expected_account_id, confirm):
+        from .application_operations import apply_campaign
+        return apply_campaign(self, campaign_id, answers=answers, social_account_ids=social_account_ids, expected_account_id=expected_account_id, confirm=confirm)
     def submissions(self,limit=100,status='approved',retainer=False):
         if status not in ('approved','pending','history'): raise ClientError("invalid_submission_status")
         def fetch(n,c):

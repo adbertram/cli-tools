@@ -1,8 +1,8 @@
 {
   "tool": "whop",
   "description": "CLI interface for whop",
-  "discovered_at": "2026-10-14T17:17:01Z",
-  "total_commands": 36,
+  "discovered_at": "2026-10-16T02:52:34Z",
+  "total_commands": 38,
   "global_options": [],
   "commands": {
     "account": {
@@ -533,10 +533,89 @@
         }
       ],
       "commands": {
+        "application-form": {
+          "help": "Read the current campaign application form and native screening fields.",
+          "arguments": [
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "applications": {
           "help": "Read existing applications; fail explicitly on partial upstream results.",
           "arguments": [],
           "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "apply": {
+          "help": "Apply once with explicit screening answers; read back before reporting success.",
+          "arguments": [
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--answers",
+              "type": "file",
+              "required": true,
+              "help": "JSON object keyed by native screening field names"
+            },
+            {
+              "name": "--social-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Owned linked social account ID; repeat for each account"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--confirm",
+              "type": "bool",
+              "required": false,
+              "help": "Explicitly authorize this application",
+              "takes_value": false
+            },
             {
               "name": "--table",
               "type": "bool",

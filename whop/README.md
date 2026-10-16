@@ -2,11 +2,11 @@
 
 ## DESCRIPTION
 
-Read Whop participant accounts and Content Rewards linked accounts, campaigns, submissions, and earnings, and explicitly submit verified published clips. Use it to inspect campaign rules and actual creator performance through an isolated saved browser profile.
+Read Whop participant accounts and Content Rewards linked accounts, campaigns, submissions, and earnings, and explicitly apply to campaigns or submit verified published clips. Use it to inspect campaign rules and actual creator performance through an isolated saved browser profile.
 
 ## Scope
 
-The CLI uses observed participant endpoints through the shared browser engine. Reads remain separate from the explicit journaled submission operation and the explicitly confirmed campaign join. The CLI cannot connect accounts, apply to campaigns, withdraw funds, or change settings except by clicking the campaign page's own `Join Campaign` control.
+The CLI uses observed participant endpoints through the shared browser engine. Reads remain separate from explicitly confirmed, journaled campaign applications and clip submissions, and the explicitly confirmed campaign join. The CLI cannot connect accounts, withdraw funds, or change settings. Campaign applications use measured screening form fields; open campaigns use their own `Join Campaign` control.
 
 ## Authentication
 
@@ -175,3 +175,32 @@ whop analytics get SUBMISSION_ID --profile rewards
 Every call queries the authenticated provider directly, without a response cache or Trawler data. `observed_at` records when the response was read; it does not promise that the provider refreshed social metrics at that instant. Missing metrics remain `null`; reported zero values and numeric strings are preserved. `native` retains every provider field, including additional metrics, payout terms and review status. Lists are bounded by `--limit`; filters run locally over the fetched rows.
 
 `analytics list --status all` (default) queries pending, approved, then history clip submissions, up to one total limit. Use `--status pending`, `--status approved`, or `--status history` to inspect a specific collection. Lists default to regular clips; pass `--retainer` to query retainer submissions instead. `analytics get` searches the existing bounded owned-submission lists. Views, likes, comments and shares come from `socialMediaPost`; `provider_updated_at` is that post record's update time. Whop does not expose a distinct metrics refresh timestamp in these records, so `metrics_updated_at` is null. CPM terms are payout rules, not realized earnings; use `whop earnings submission SUBMISSION_ID CAMPAIGN_ID --profile rewards` for allocation-backed earnings.
+
+### Campaign applications
+
+Read the current native form before preparing answers:
+
+```bash
+whop campaigns application-form CAMPAIGN_ID --profile rewards
+whop campaigns applications --profile rewards
+whop campaigns apply CAMPAIGN_ID --answers answers.json --social-account-id SOCIAL_ACCOUNT_ID --expected-account-id user_ACCOUNT --confirm --profile rewards
+```
+
+`application-form` returns `{campaign_id, application_id, form}`. The native
+`form.fields` define screening question names, types, options and required flags.
+`answers.json` is a JSON object keyed by those names. Input, textarea, checkbox
+and select fields are supported. File upload fields fail explicitly; no uploads
+or URLs are fabricated. The measured web action sends screening responses and
+selected social account IDs; its separate motivation control is not included
+in that action's payload, so this CLI does not invent a motivation field.
+
+`apply` verifies the Whop actor and owned linked accounts, reads existing
+applications, and never resends an existing application (including rejected or
+withdrawn applications). A durable actor/campaign dispatch marker under the shared profile lock prevents
+concurrent and later invocations from sending again. It then reads
+applications back. Output is `{status: "existing" | "applied", campaign_id,
+application}` with the native application row. Native statuses observed in the
+web contract are `pending`, `approved`, `rejected`, and `withdrawn`.
+`campaign_application_outcome_unknown` means dispatch could not be confirmed;
+read applications again and do not automatically retry. The invoking workflow
+must retain that uncertain dispatch until it can reconcile it.
