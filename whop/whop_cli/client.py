@@ -67,35 +67,40 @@ APP_SCRIPT_JS = "(src=>{const u=new URL(src);return u.protocol==='https:'&&u.pat
 DISCOVER_ACTION_JS = r"""async (name) => {
     const appScript=APP_SCRIPT_JS;
     const sourcesOf=()=>[...new Set([...document.scripts].map(s=>s.src).filter(s=>s&&appScript(s)))];""".replace("APP_SCRIPT_JS",APP_SCRIPT_JS)+r"""
-    const signal=AbortSignal.timeout(10000);let total=0;
-    for(let attempt=1;attempt<=3;attempt++){
-    const sources=sourcesOf();
-    if(sources.length>120)return {action:null,reason:'script_limit',sources:sources.length,matches:0,failures:0};
-    const matches=new Set();let failures=0;
-    for(let i=0;i<sources.length;i+=8){
-        const texts=await Promise.all(sources.slice(i,i+8).map(async url=>{
-            let reader;try{
-                const r=await fetch(url,{signal,redirect:'error'});
-                if(!r.ok||!r.body)throw Error();
-                reader=r.body.getReader();const chunks=[];let size=0;
-                while(true){const {value,done}=await reader.read();if(done)break;
-                    size+=value.byteLength;total+=value.byteLength;
-                    if(size>8000000||total>32000000)throw Error();chunks.push(value);
-                }
-                const decoder=new TextDecoder();return chunks.map(c=>decoder.decode(c,{stream:true})).join('')+decoder.decode();
-            }catch(_){failures++;return '';}finally{if(reader){try{await reader.cancel();}catch(_){}}}
-        }));
+    const signal=AbortSignal.timeout(10000),results=new Map();let total=0,sources=sourcesOf();
+    for(let attempt=1;attempt<=16;attempt++){
+        if(sources.length>120)return {action:null,reason:'script_limit',sources:sources.length,matches:0,failures:0};
+        const pending=sources.filter(url=>!results.has(url));
+        for(let i=0;i<pending.length;i+=8){
+            const rows=await Promise.all(pending.slice(i,i+8).map(async url=>{
+                let reader;try{
+                    const r=await fetch(url,{signal,redirect:'error'});
+                    if(!r.ok||!r.body)throw Error();
+                    reader=r.body.getReader();const chunks=[];let size=0;
+                    while(true){const {value,done}=await reader.read();if(done)break;
+                        size+=value.byteLength;total+=value.byteLength;
+                        if(size>MAX_ACTION_BODY||total>MAX_TOTAL_BODY)throw Error();chunks.push(value);
+                    }
+                    const decoder=new TextDecoder();return [url,chunks.map(c=>decoder.decode(c,{stream:true})).join('')+decoder.decode(),false];
+                }catch(_){return [url,'',true];}finally{if(reader){try{await reader.cancel();}catch(_){}}}
+            }));
+            for(const [url,text,failed] of rows)results.set(url,{text,failed});
+            if(signal.aborted||total>MAX_TOTAL_BODY)break;
+        }
+        const after=sourcesOf(),current=new Set(after);
+        for(const url of results.keys())if(!current.has(url))results.delete(url);
+        const changed=sources.length!==after.length||after.some(s=>!sources.includes(s));
+        sources=after;
+        if(changed&&attempt<16&&!signal.aborted)continue;
+        const matches=new Set(),rows=[...results.values()];let failures=rows.filter(row=>row.failed).length;
+        const texts=rows.filter(row=>!row.failed).map(row=>row.text);
         for(const text of texts){const re=/createServerReference\)\("([a-f0-9]{40,64})"[^;]{0,160}?"([A-Za-z]+)"/g;
             for(const m of text.matchAll(re))if(m[2]===name)matches.add(m[1]);}
-        if(signal.aborted||total>32000000)break;
-    }
-    const after=sourcesOf(),changed=sources.length!==after.length||after.some(s=>!sources.includes(s));
-    const reason=matches.size>1?'ambiguous':failures||signal.aborted?'script_fetch_failed':changed?'scripts_changed':matches.size===1?'ready':'missing';
-    if(reason==='scripts_changed'&&attempt<3&&!signal.aborted)continue;
-    return {action:reason==='ready'?[...matches][0]:null,reason,sources:sources.length,matches:matches.size,failures,attempts:attempt,afterSources:after.length};
+        const reason=matches.size>1?'ambiguous':failures||signal.aborted?'script_fetch_failed':changed?'scripts_changed':matches.size===1?'ready':'missing';
+        return {action:reason==='ready'?[...matches][0]:null,reason,sources:sources.length,matches:matches.size,failures,attempts:attempt,afterSources:after.length};
     }
 
-}"""
+}""".replace("MAX_ACTION_BODY",str(MAX_BODY)).replace("MAX_TOTAL_BODY",str(MAX_BODY*4))
 
 def strict_json(text):
     if not isinstance(text,str) or len(text)>MAX_BODY:

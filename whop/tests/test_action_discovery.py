@@ -24,7 +24,7 @@ global.fetch=async(url,opts)=>{
  if(scenario==='growth_missing'&&name==='one'){text='';if(!sources.includes('two'))sources.push('two');}
  if(scenario==='growth_ambiguous'&&name==='one'&&!sources.includes('two'))sources.push('two');
  if(scenario==='growth_ambiguous'&&name==='two')text=ref('b');
- if(scenario==='unstable'&&name==='one')sources.push('added'+(++attempt));
+    if(scenario==='unstable')sources.push('added'+(++attempt));
  if(scenario==='asset_prefix'&&!new URL(url).pathname.includes('/_next/static/'))text=ref('b');
  if(scenario==='rest_contract')text='baseUrl:(0,A.apiBase)("submission") createSubmission:(e,r)=>{var a;return a=j(r),m(t.submissions.$post({json:e},a))} function(e){return`/api/${e}`}';
  if(scenario==='rest_renamed')text='baseUrl:(0,Z.apiBase)("submission") createSubmission:(body,options)=>{var request;return request=k(options),decode(client.submissions.$post({json:body},request))} function(name){return`/api/${name}`}';
@@ -49,7 +49,7 @@ def scan(scenario):
 
 @pytest.mark.parametrize('scenario,reason,attempts',[
     ('stable','ready',1),('telemetry_growth','ready',1),('growth_missing','ready',2),('growth_ambiguous','ambiguous',2),
-    ('unstable','scripts_changed',3),('failed','script_fetch_failed',1),
+    ('unstable','scripts_changed',16),('failed','script_fetch_failed',1),
     ('timeout','script_fetch_failed',1),('oversize','script_fetch_failed',1),
     ('total','script_fetch_failed',2),('limit','script_limit',None),('asset_prefix','ready',1),
 ])
@@ -64,8 +64,8 @@ def test_actual_scanner(scenario,reason,attempts):
     if scenario in ('oversize','total'): assert value['cancels']==len(value['calls'])
     if scenario=='telemetry_growth':
         assert len(value['calls'])==1 and result['sources']==result['afterSources']==1
-    if scenario=='growth_missing': assert len(value['calls'])==3
-    if scenario=='unstable': assert result['sources']==3 and result['afterSources']==4
+    if scenario=='growth_missing': assert len(value['calls'])==2
+    if scenario=='unstable': assert result['attempts']==16 and result['afterSources']==17
     if scenario=='asset_prefix': assert [c['url'] for c in value['calls']]==['https://assets.example.com/c/_next/static/chunks/app.js']
 
 def test_scanner_shared_with_submission_discovery():
