@@ -405,3 +405,11 @@ excluded_from_get_required = ["social-accounts"]
 # A share is addressed only by its public URL; Frame.io exposes no way to
 # enumerate shares, so `shares get <share-url>` has no collection command.
 excluded_from_list_required = ["shares"]
+
+[cli_specific.promote-fun]
+# Current session identity has no resource ID or enumerable collection.
+excluded_from_list_required = ["account"]
+
+[cli_specific.reach-cat]
+# Firebase currentUser is a singleton, including incomplete onboarding.
+excluded_from_list_required = ["account"]
