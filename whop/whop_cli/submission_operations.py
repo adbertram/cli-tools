@@ -208,7 +208,10 @@ def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_i
     if campaign.get('status')!='active' or campaign.get('private') is not False: raise ClientError('submission_campaign_not_active_public')
     if campaign.get('requiresApplication') is not False: raise ClientError('submission_application_required_or_unknown')
     if not isinstance(campaign.get('platforms'),list) or 'tiktok' not in campaign['platforms']: raise ClientError('submission_campaign_not_tiktok')
-    if not isinstance(campaign.get('description'),str) or not isinstance(campaign.get('name'),str) or not isinstance(campaign.get('referenceMaterials'),list):
+    if (not isinstance(campaign.get('description'),str) or not isinstance(campaign.get('name'),str)
+        or not isinstance(campaign.get('creatorRequirements'),list)
+        or any(not isinstance(value,str) for value in campaign['creatorRequirements'])
+        or not isinstance(campaign.get('referenceMaterials'),list)):
         raise ClientError('submission_campaign_requirements_schema_changed')
     payouts=campaign.get('payouts')
     if not isinstance(payouts,list): raise ClientError('submission_campaign_payout_schema_changed')
@@ -231,7 +234,7 @@ def readiness(client,campaign_id,*,expected_account_id,expected_tiktok_account_i
     if gate.get('creatorMaxReached') is not False or gate.get('intake')!='open' or (platform_intake or {}).get('tiktok')=='closed':
         raise ClientError('submission_intake_not_open')
     origin,path=client._location()
-    requirements={'campaign_id':campaign_id,'experience':origin+path,**{k:campaign[k] for k in ('name','description','referenceMaterials','platforms','requiresApplication','private')},
+    requirements={'campaign_id':campaign_id,'experience':origin+path,**{k:campaign[k] for k in ('name','description','creatorRequirements','referenceMaterials','platforms','requiresApplication','private')},
                   'tiktok_payout':{k:payout[k] for k in ('platform','payoutType','rateCents','minPayoutCents','maxPayoutCents')}}
     requirements_digest=digest(requirements)
     if expected_requirements_digest is not None and expected_requirements_digest!=requirements_digest: raise ClientError('submission_requirements_changed')

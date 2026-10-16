@@ -17,7 +17,7 @@ def client(tmp_path):
     c=WhopClient(config)
     c.account=Mock(return_value={'id':ACTOR,'username':'whopuser','profile':'rewards'})
     c.linked_accounts=Mock(return_value=[{'accountId':TIKTOK,'platform':'tiktok','status':'active','username':'ata_clipper','id':'linked_TEST'}])
-    c.campaign=Mock(return_value={'id':CAMPAIGN,'name':'Test','description':'Actual requirements','referenceMaterials':[],'platforms':['tiktok'],'status':'active','private':False,'requiresApplication':False,
+    c.campaign=Mock(return_value={'id':CAMPAIGN,'name':'Test','description':'Actual requirements','creatorRequirements':['Fast edits'],'referenceMaterials':[],'platforms':['tiktok'],'status':'active','private':False,'requiresApplication':False,
        'budgetCents':100000,'metrics':{'budgetSpentCents':5423},
        'payouts':[{'platform':'tiktok','payoutType':'cpm','rateCents':100,'minPayoutCents':100,'maxPayoutCents':35000,'budgetCents':15000,'spentCents':0}]})
     c._rest=Mock(return_value={'data':[{'campaignId':CAMPAIGN,'creatorMaxReached':False,'intake':'open','platformIntake':{'tiktok':'open'}}]})
@@ -51,13 +51,17 @@ def evaluations(document):
 
 def test_ready_binds_actual_brief_and_excludes_mutable_spend(client):
     first=ready(client)
+    assert first['requirements']['creatorRequirements']==['Fast edits']
     client.campaign.return_value['payouts'][0]['spentCents']=100
     assert ready(client)['requirements_digest']==first['requirements_digest']
+    client.campaign.return_value['creatorRequirements']=['Fast edits','Bold text overlays']
+    with pytest.raises(ClientError,match='requirements_changed'):ready(client,expected_requirements_digest=first['requirements_digest'])
+    client.campaign.return_value['creatorRequirements']=['Fast edits']
     client.campaign.return_value['description']='Changed brief'
     with pytest.raises(ClientError,match='requirements_changed'):ready(client,expected_requirements_digest=first['requirements_digest'])
     assert READ_ACTIONS=={'listSocialMediaAccounts','listMySubmissionsAction','countMySubmissionsAction'}
 
-@pytest.mark.parametrize('field,value,match',[('status','closed','not_active'),('requiresApplication',True,'application_required'),('private',True,'not_active'),('platforms',['youtube'],'not_tiktok'),('description',None,'schema_changed')])
+@pytest.mark.parametrize('field,value,match',[('status','closed','not_active'),('requiresApplication',True,'application_required'),('private',True,'not_active'),('platforms',['youtube'],'not_tiktok'),('description',None,'schema_changed'),('creatorRequirements',None,'schema_changed'),('creatorRequirements',[None],'schema_changed')])
 def test_campaign_readiness_closed_or_unknown(client,field,value,match):
     client.campaign.return_value[field]=value
     with pytest.raises(ClientError,match=match):ready(client)
