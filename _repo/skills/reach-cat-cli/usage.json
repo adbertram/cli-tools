@@ -1,0 +1,106 @@
+{
+  "tool": "reach-cat",
+  "description": "CLI interface for reach-cat",
+  "discovered_at": "2026-10-16T04:13:36Z",
+  "total_commands": 3,
+  "global_options": [],
+  "commands": {
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "campaigns": {
+      "help": "Read sanitized public campaign records",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Read native campaign fields and public rules; management/payment identities are excluded.",
+          "arguments": [
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Native campaign ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "List campaign records with server cursor pagination and local status/platform filters.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1000]",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Native status filter; empty string includes all statuses",
+              "default": "ACTIVE"
+            },
+            {
+              "name": "--platform",
+              "type": "TEXT",
+              "required": false,
+              "help": "Require networks.<platform> to be true"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Local field:op:value filter over fetched matching rows",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated native output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `reach-cat` CLI. Run `reach-cat --help` to discover command groups and `--help` on any subcommand for its options."
+}
