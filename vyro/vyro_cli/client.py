@@ -7,6 +7,7 @@ import json
 import time
 from urllib.parse import urlencode, urlsplit
 from cli_tools_shared.exceptions import ClientError
+from .browser import AUTH_CONTEXT_URL
 from .config import get_config
 
 # Refresh is Vyro's normal session renewal, not a campaign mutation. Tokens
@@ -29,8 +30,17 @@ READ_JS = r"""async ({path, method = 'GET', body, expectedAccountId}) => {
         const renewed = await read(await fetch(base+'/auth/refresh', {
             method:'POST', credentials:'include', headers:{'x-realm':'vyro-app'}, signal
         }));
-        if (renewed.status!==200 || typeof renewed.data?.accessToken!=='string')
+        if (renewed.status === 401)
             return {error:'session_expired: run vyro auth login'};
+        if (renewed.status === 403)
+            return {error:'vyro_refresh_forbidden'+(renewed.code?':'+renewed.code:'')};
+        if (renewed.status === 429)
+            return {error:'vyro_refresh_rate_limited'};
+        if ([500,502,503,504].includes(renewed.status))
+            return {error:'vyro_refresh_unavailable'};
+        if (renewed.status!==200 || typeof renewed.data?.accessToken!=='string'
+                || !renewed.data.accessToken)
+            return {error:'invalid_refresh_response'};
         const headers = {'authorization':'Bearer '+renewed.data.accessToken,
                          'x-realm':'vyro-app','accept':'application/json'};
         const account = await read(await fetch(base+'/auth/me',{headers,credentials:'include',signal}));
@@ -132,7 +142,7 @@ class VyroClient:
         return self._request(path)
 
     def _request(self, path, method='GET', body=None, expected_account_id=None):
-        page = self.browser.get_page("https://app.vyro.com/campaigns")
+        page = self.browser.get_page(AUTH_CONTEXT_URL)
         for attempt in range(3):
             try:
                 result = page.evaluate(READ_JS, {"path": path, "method": method, "body": body, "expectedAccountId": expected_account_id})

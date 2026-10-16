@@ -1264,6 +1264,25 @@ def test_check_auth_failure_page_js_rejects_error_page_at_authenticated_url(tmp_
     assert browser._check_auth(_EvaluatePage("https://example.com/dashboard", True)) is False
 
 
+def test_check_auth_failure_page_js_logs_only_safe_diagnostic(tmp_path, caplog):
+    browser = _FailureContentBrowser(_TestConfig(tmp_path))
+
+    with caplog.at_level("DEBUG"):
+        assert browser._is_auth_failure_content(
+            _EvaluatePage("https://example.com/dashboard", "http_status_401")
+        ) is True
+        assert browser._is_auth_failure_content(
+            _EvaluatePage("https://example.com/dashboard", "secret token value")
+        ) is True
+        assert browser._is_auth_failure_content(
+            _EvaluatePage("https://example.com/dashboard", "a3f5c7d9e1b2")
+        ) is True
+
+    assert "diagnostic=http_status_401" in caplog.text
+    assert "secret token value" not in caplog.text
+    assert "a3f5c7d9e1b2" not in caplog.text
+
+
 def test_check_auth_failure_page_js_accepts_a_rendered_page(tmp_path):
     browser = _FailureContentBrowser(_TestConfig(tmp_path))
 

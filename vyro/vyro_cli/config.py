@@ -1,12 +1,30 @@
 """Vyro browser profiles, scoped to the observed app and API hosts."""
+import re
+
 from cli_tools_shared.config import BaseConfig, config_getter, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
+from cli_tools_shared.browser.user_agent import derive_real_chrome_user_agent
 
 
 class Config(BaseConfig):
     DIST_NAME = "vyro-cli"
     CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
     PORTABLE_BROWSER_SESSION = True
+    # Vyro rejects Chrome's default ``HeadlessChrome`` user agent with 403
+    # even when the same saved cookies refresh under normal Chrome. Chrome's
+    # normal browser UA reduces the installed version to ``major.0.0.0``.
+    @property
+    def browser_user_agent(self) -> str:
+        user_agent = derive_real_chrome_user_agent()
+        reduced, count = re.subn(
+            r"Chrome/([0-9]+)\.[0-9]+\.[0-9]+\.[0-9]+",
+            r"Chrome/\1.0.0.0",
+            user_agent,
+            count=1,
+        )
+        if count != 1:
+            raise RuntimeError("Could not reduce installed Chrome user agent")
+        return reduced
     LOGIN_INSTRUCTIONS = (
         "Sign in to your existing Vyro account with its emailed code, then confirm login. "
         "CLI-managed browser state stays in the private runtime profile."

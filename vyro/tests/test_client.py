@@ -123,13 +123,15 @@ def test_actor_requires_exact_vyro_id_social_id_and_username():
 @pytest.mark.parametrize('reply', [{'status':503}, {'error':'vyro_request_failed'}])
 def test_write_never_retries_ambiguous_failure(reply):
     calls=[]
+    urls=[]
     def evaluate(*args):
         calls.append(args)
         return reply
-    browser=SimpleNamespace(get_page=lambda _: SimpleNamespace(evaluate=evaluate))
+    browser=SimpleNamespace(get_page=lambda url: urls.append(url) or SimpleNamespace(evaluate=evaluate))
     c=VyroClient(config=SimpleNamespace(), browser=browser)
     with pytest.raises(ClientError): c._request('/clips/v2', 'POST', {}, 'actor')
     assert len(calls)==1
+    assert urls == ['https://app.vyro.com/favicon.ico']
     assert calls[0][1]['expectedAccountId']=='actor'
 
 
@@ -304,3 +306,34 @@ def test_transport_preserves_safe_native_machine_error():
     c=VyroClient(config=SimpleNamespace(),browser=browser)
     with pytest.raises(ClientError,match='vyro_http_403:CLIP_SOCIAL_ACCOUNT_NOT_ELIGIBLE'):
         c._request('/clips/pre-check','POST',{},'actor')
+
+
+@pytest.mark.parametrize(
+    ('status', 'code', 'expected'),
+    [
+        (401, None, 'session_expired: run vyro auth login'),
+        (403, 'AUTOMATION_REJECTED', 'vyro_refresh_forbidden:AUTOMATION_REJECTED'),
+        (403, None, 'vyro_refresh_forbidden'),
+        (429, None, 'vyro_refresh_rate_limited'),
+        (503, None, 'vyro_refresh_unavailable'),
+    ],
+)
+def test_refresh_failures_are_not_all_reported_as_expired(status, code, expected):
+    import json
+    import shutil
+    import subprocess
+
+    from vyro_cli.client import READ_JS
+
+    node = shutil.which('node')
+    assert node, 'Node is required to validate refresh failure classification'
+    payload = {'errorCode': code} if code else {}
+    script = f'''global.fetch=async()=>({{
+      ok:false,status:{status},json:async()=>({json.dumps(payload)}),text:async()=>''
+    }});
+    const run=({READ_JS});
+    run({{path:'/auth/me'}}).then(result=>console.log(JSON.stringify(result)));'''
+    result = json.loads(subprocess.run(
+        [node], input=script, text=True, capture_output=True, check=True
+    ).stdout)
+    assert result == {'error': expected}

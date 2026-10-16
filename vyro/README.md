@@ -12,7 +12,7 @@ vyro auth status
 vyro auth profiles list
 ```
 
-Login uses the shared browser engine and Vyro's emailed verification code. Runtime browser state is stored in the private CLI profile. Reusable CLI credentials, if introduced, belong in the CLI-tools secret manager; never put secrets in source files or `.env.example`.
+Login uses the shared browser engine and Vyro's emailed verification code. Runtime browser state is stored in the private CLI profile. Authentication status, login completion, and API transport use a static app document to verify Vyro's live `/auth/refresh` exchange without starting the campaigns app's competing refresh/redirect flow; saved cookie presence alone is not accepted. Reusable CLI credentials, if introduced, belong in the CLI-tools secret manager; never put secrets in source files or `.env.example`.
 
 Named profiles use `--profile NAME` on every data command. `vyro auth profiles select NAME` makes a profile active. The shared `auth session-export`, `auth session-import`, and `auth session-import-recover` commands provide identity-checked portable session transfer; consult their `--help` for private-file and expected-identity requirements. An expired session fails explicitly and requires `vyro auth login`.
 

@@ -349,6 +349,8 @@ class BrowserAutomation:
     AUTH_URL_PATTERN = ""        # Regex — URL matches → user is on login page
     AUTH_FAILURE_URL_PATTERN = ""  # Regex — URL matches → service requires re-auth/confirmation
     # JS evaluated on the auth-check page; truthy result → NOT authenticated.
+    # A short lowercase diagnostic string is logged at DEBUG after strict
+    # character validation; use it for status/category only, never secrets.
     # For services that serve a URL-preserving error/interstitial at the
     # authenticated URL, so URL patterns alone report a false healthy session.
     AUTH_FAILURE_PAGE_JS = ""
@@ -1978,11 +1980,24 @@ class BrowserAutomation:
         if not callable(evaluate):
             return False
         try:
-            failed = bool(evaluate(self.AUTH_FAILURE_PAGE_JS))
+            verdict = evaluate(self.AUTH_FAILURE_PAGE_JS)
+            failed = bool(verdict)
         except Exception as e:
             logger.debug("_is_auth_failure_content: page inspection failed: %s", e)
             return False
-        logger.debug("_is_auth_failure_content: failed=%s", failed)
+        diagnostic = None
+        safe_diagnostic = re.fullmatch(
+            r"(?:http_status_[0-9]{3}(?:_code_[a-z][a-z0-9_]{0,80})?"
+            r"|invalid_json|missing_access_token|request_failed)",
+            verdict,
+        ) if isinstance(verdict, str) else None
+        if safe_diagnostic:
+            diagnostic = verdict
+        logger.debug(
+            "_is_auth_failure_content: failed=%s diagnostic=%s",
+            failed,
+            diagnostic,
+        )
         return failed
 
     def _raise_if_auth_failure_page(self, page) -> None:
