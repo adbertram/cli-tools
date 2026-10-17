@@ -418,7 +418,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=250]  Maximum form templates to return",
+              "help": "[1<=x<=250]  Maximum form templates to return",
               "short": "-l",
               "default": "10"
             },
@@ -521,7 +521,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=250]  Maximum programs to return",
+              "help": "[1<=x<=250]  Maximum programs to return",
               "short": "-l",
               "default": "10"
             },
@@ -624,7 +624,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=250]  Maximum partnerships to return",
+              "help": "[1<=x<=250]  Maximum partnerships to return",
               "short": "-l",
               "default": "10"
             },
@@ -727,7 +727,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [1<=x<=250]  Maximum rewards to return",
+              "help": "[1<=x<=250]  Maximum rewards to return",
               "short": "-l",
               "default": "100"
             },

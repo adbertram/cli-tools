@@ -11,7 +11,7 @@ from typing import Optional
 from pydantic import Field, field_validator, model_validator
 
 from .base import EbayBaseModel
-from .image import Image
+from .image import Image, MAX_IMAGES_PER_LISTING
 
 
 class ListingStatus(str, Enum):
@@ -84,7 +84,6 @@ CONDITION_ENUM_TO_ID["MANUFACTURER_REFURBISHED"] = "2000"
 # SKU validation pattern: alphanumeric, hyphens, underscores, max 50 chars (eBay API requirement)
 SKU_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,50}$")
 
-
 class Listing(EbayBaseModel):
     """
     Unified listing model combining data from eBay's multiple APIs.
@@ -103,8 +102,12 @@ class Listing(EbayBaseModel):
     # Core details
     title: str = Field("", max_length=80, description="Listing title")
     description: Optional[str] = Field(None, description="Listing description")
-    price: str = Field("0.00", description="Listing price")
+    price: str = Field("0.00", description="Listing price (starting bid for auctions, Buy It Now price for fixed-price listings)")
     currency: str = Field("USD", pattern="^[A-Z]{3}$", description="Currency code")
+    bin_price: Optional[str] = Field(
+        None,
+        description="Buy It Now price on an auction listing; null for fixed-price offers, where 'price' already is the Buy It Now price",
+    )
     quantity: int = Field(0, ge=0, description="Available quantity")
     quantity_sold: int = Field(0, ge=0, description="Quantity sold")
 
@@ -117,7 +120,11 @@ class Listing(EbayBaseModel):
     condition: Optional[str] = Field(None, description="Item condition")
 
     # Media
-    images: list[Image] = Field(default_factory=list, max_length=12, description="Listing images")
+    images: list[Image] = Field(
+        default_factory=list,
+        max_length=MAX_IMAGES_PER_LISTING,
+        description="Listing images",
+    )
 
     # Policies
     fulfillment_policy_id: Optional[str] = Field(None, description="Fulfillment policy ID")
@@ -216,10 +223,6 @@ def listing_from_offer(offer: dict, inventory_item: Optional[dict] = None) -> Op
     if not is_valid_sku(sku):
         return None
 
-    # Extract pricing
-    pricing = offer.get("pricingSummary", {})
-    price_info = pricing.get("price", {}) or pricing.get("auctionStartPrice", {})
-
     # Extract policies
     policies = offer.get("listingPolicies", {})
 
@@ -230,6 +233,22 @@ def listing_from_offer(offer: dict, inventory_item: Optional[dict] = None) -> Op
     # Determine format
     offer_format = offer.get("format", "FIXED_PRICE")
     format_val = ListingFormat.AUCTION if offer_format == "AUCTION" else ListingFormat.FIXED_PRICE
+
+    # Extract pricing. An AUCTION offer can also carry a Buy It Now price, in
+    # which case pricingSummary has both `price` (the Buy It Now price) and
+    # `auctionStartPrice` (the starting bid). For auctions the headline price is
+    # the starting bid; the Buy It Now price is exposed separately as bin_price
+    # so it is not lost. For fixed-price offers `price` is the (Buy It Now)
+    # price.
+    pricing = offer.get("pricingSummary", {})
+    bin_pricing = pricing.get("price", {}) or {}
+    auction_pricing = pricing.get("auctionStartPrice", {}) or {}
+    if format_val == ListingFormat.AUCTION:
+        price_info = auction_pricing or bin_pricing
+        bin_price = bin_pricing.get("value") if bin_pricing else None
+    else:
+        price_info = bin_pricing or auction_pricing
+        bin_price = None
 
     # Get listing URL if published
     listing_info = offer.get("listing", {})
@@ -261,6 +280,7 @@ def listing_from_offer(offer: dict, inventory_item: Optional[dict] = None) -> Op
         description=description,
         price=price_info.get("value", "0.00"),
         currency=price_info.get("currency", "USD"),
+        bin_price=bin_price,
         quantity=offer.get("availableQuantity", 0) or 0,
         quantity_sold=0,  # Not available from Offer API
         status=status,

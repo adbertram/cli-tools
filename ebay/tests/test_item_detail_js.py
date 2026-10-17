@@ -5,10 +5,12 @@ banner regexes are covered rather than only the Python parser that consumes
 their output.
 """
 
+from pathlib import Path
+
 import pytest
 from playwright.sync_api import sync_playwright
 
-from ebay_cli.browser_client import ITEM_DETAIL_JS
+from ebay_cli.browser_client import ITEM_DETAIL_JS, parse_item_status
 
 
 def _item_page_state(body_html: str) -> dict:
@@ -48,3 +50,24 @@ def test_live_listing_is_not_flagged_as_ended():
         """
     )
     assert state["ended_banner"] is False
+
+
+def test_captured_item_jsonld_reaches_the_status_parser():
+    """Item 137582327361 explicitly reports InStock without a quantity row."""
+    fixture = Path(__file__).parent / "fixtures" / "item_137582327361_jsonld.html"
+    url = "https://www.ebay.com/itm/137582327361?orig_cvip=true"
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page()
+            page.route("**/*", lambda route: route.fulfill(body=fixture.read_text(), content_type="text/html"))
+            page.goto(url)
+            state = page.evaluate(ITEM_DETAIL_JS)
+        finally:
+            browser.close()
+    assert state["quantity"] is None
+    assert state["ended_banner"] is False
+    assert len(state["jsonld"]) == 2
+    status = parse_item_status("137582327361", state)
+    assert status["availability"] == "InStock"
+    assert status["ended"] is False

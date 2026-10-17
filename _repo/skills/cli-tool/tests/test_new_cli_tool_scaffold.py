@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
 import textwrap
 import tomllib
+import uuid
 from pathlib import Path
 
 import pytest
@@ -95,6 +97,85 @@ def _read_env_file(path: Path) -> dict[str, str]:
         key, value = stripped.split("=", 1)
         values[key] = value
     return values
+
+
+@pytest.mark.skipif(os.name == "nt", reason="new-cli-tool's direct entrypoint is POSIX-only")
+def test_new_cli_tool_scaffolds_without_site_packages(tmp_path: Path, monkeypatch) -> None:
+    tool_name = f"scaffold-no-dotenv-{uuid.uuid4().hex}"
+    tool_dir = REPO_ROOT / tool_name
+    assert not tool_dir.exists()
+    data_home = tmp_path / "data"
+    home = tmp_path / "home"
+    isolated_bin = tmp_path / "bin"
+    isolated_bin.mkdir()
+    isolated_python = isolated_bin / "python3"
+    isolated_python.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} -S \"$@\"\n")
+    isolated_python.chmod(0o755)
+    original_cli_tools_doc = CLI_TOOLS_DOC.read_text()
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    env.update(
+        {
+            "HOME": str(home),
+            "PATH": f"{isolated_bin}{os.pathsep}{env.get('PATH', os.defpath)}",
+            "PYTHONNOUSERSITE": "1",
+            "XDG_DATA_HOME": str(data_home),
+        }
+    )
+
+    try:
+        help_result = subprocess.run(
+            [str(SKILL_ROOT / "scripts/new-cli-tool"), "--help"],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert help_result.returncode == 0, help_result.stderr
+        assert "Create a new CLI tool from templates" in help_result.stdout
+
+        result = subprocess.run(
+            [
+                str(SKILL_ROOT / "scripts/new-cli-tool"),
+                "--name",
+                tool_name,
+                "--type",
+                "api",
+                "--base-url",
+                "https://api.example.test",
+                "--no-install",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert tool_dir.is_dir()
+
+        profile_env = (
+            data_home
+            / "cli-tools"
+            / tool_name
+            / "authentication_profiles"
+            / "default"
+            / ".env"
+        )
+        assert profile_env == get_profiles_base_dir(tool_name) / "default" / ".env"
+        assert _read_env_file(profile_env)["ACTIVE"] == "true"
+        root_env = data_home / "cli-tools" / tool_name / ".env"
+        assert root_env == config_env_path_for_tool(tool_name)
+        assert _read_env_file(root_env)["BASE_URL"] == "https://api.example.test"
+    finally:
+        CLI_TOOLS_DOC.write_text(original_cli_tools_doc)
+        shutil.rmtree(tool_dir, ignore_errors=True)
 
 
 def test_new_cli_tool_wrapper_fails_when_upstream_cli_cannot_be_provisioned(
@@ -192,11 +273,63 @@ def test_new_cli_tool_creates_runtime_default_profile_without_source_env(
         config_env = config_env_path_for_tool(tool_name)
         assert config_env.exists()
         assert _read_env_file(config_env)["BASE_URL"] == "https://api.example.test"
+
+        pyproject = tomllib.loads((tool_dir / "pyproject.toml").read_text())
+        assert pyproject["tool"]["uv"]["sources"]["cli-tools-shared"]["path"] == "../_repo/cli-tools-shared"
     finally:
         CLI_TOOLS_DOC.write_text(original_cli_tools_doc)
         shutil.rmtree(tool_dir, ignore_errors=True)
         shutil.rmtree(data_home / "cli-tools" / tool_name, ignore_errors=True)
 
+
+def test_new_cli_tool_personal_creates_under_personal_with_correct_shared_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    tool_name = "scaffold-personal-regression"
+    root_tool_dir = REPO_ROOT / tool_name
+    tool_dir = REPO_ROOT / "_personal" / tool_name
+    data_home = tmp_path / "data"
+    home = tmp_path / "home"
+    original_cli_tools_doc = CLI_TOOLS_DOC.read_text()
+    monkeypatch.setenv("XDG_DATA_HOME", str(data_home))
+    monkeypatch.setenv("HOME", str(home))
+    env = os.environ.copy()
+
+    try:
+        result = subprocess.run(
+            [
+                str(SKILL_ROOT / "scripts/new-cli-tool"),
+                "--name",
+                tool_name,
+                "--type",
+                "api",
+                "--base-url",
+                "https://api.example.test",
+                "--personal",
+                "--no-install",
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert tool_dir.is_dir()
+        assert not root_tool_dir.exists()
+
+        pyproject = tomllib.loads((tool_dir / "pyproject.toml").read_text())
+        assert (
+            pyproject["tool"]["uv"]["sources"]["cli-tools-shared"]["path"]
+            == "../../_repo/cli-tools-shared"
+        )
+    finally:
+        CLI_TOOLS_DOC.write_text(original_cli_tools_doc)
+        shutil.rmtree(tool_dir, ignore_errors=True)
+        shutil.rmtree(root_tool_dir, ignore_errors=True)
+        shutil.rmtree(data_home / "cli-tools" / tool_name, ignore_errors=True)
 
 def test_new_cli_tool_bounds_readme_description_and_moves_docs_to_docs_section(
     tmp_path: Path,
@@ -212,11 +345,11 @@ def test_new_cli_tool_bounds_readme_description_and_moves_docs_to_docs_section(
     env = os.environ.copy()
     description = textwrap.dedent(
         """\
-        Command-line access to the WP Engine Hosting Platform API.
+        Command-line access to the Example Hosting Platform API.
 
         Docs:
-        - API overview: https://developers.wpengine.com/docs/managed-hosting-platform/api/
-        - API reference: https://api.wpengineapi.com/
+        - API overview: https://developers.example.com/docs/hosting-platform/api/
+        - API reference: https://api.example.com/
         """
     )
 
@@ -229,9 +362,9 @@ def test_new_cli_tool_bounds_readme_description_and_moves_docs_to_docs_section(
                 "--type",
                 "api",
                 "--base-url",
-                "https://api.wpengineapi.com",
+                "https://api.example.com",
                 "--docs-url",
-                "https://developers.wpengine.com/docs/managed-hosting-platform/api/",
+                "https://developers.example.com/docs/hosting-platform/api/",
                 "--description",
                 description,
                 "--no-install",
@@ -253,8 +386,8 @@ def test_new_cli_tool_bounds_readme_description_and_moves_docs_to_docs_section(
         assert "https://" not in description_block
         assert readme_text.index("## DESCRIPTION") < readme_text.index("## Docs")
         assert readme_text.index("## Docs") < readme_text.index("## Installation")
-        assert "- API documentation: https://developers.wpengine.com/docs/managed-hosting-platform/api/" in docs_block
-        assert "- Base URL: https://api.wpengineapi.com" in docs_block
+        assert "- API documentation: https://developers.example.com/docs/hosting-platform/api/" in docs_block
+        assert "- Base URL: https://api.example.com" in docs_block
     finally:
         CLI_TOOLS_DOC.write_text(original_cli_tools_doc)
         shutil.rmtree(tool_dir, ignore_errors=True)

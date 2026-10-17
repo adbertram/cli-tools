@@ -2,6 +2,7 @@
 
 import json
 import os
+from cli_test_utils import get_pkg_dir
 import pytest
 import re
 import subprocess
@@ -71,10 +72,10 @@ def _primary_checkout_root(repo_root: Path) -> Path | None:
 
 
 def _package_module_names(pkg_dir: Path, cli_dir: Path) -> list[str]:
-    """Return importable package modules, excluding Dropbox conflict copies."""
+    """Return importable package modules."""
     modules = []
     for py_file in sorted(pkg_dir.rglob("*.py")):
-        if "__pycache__" in py_file.parts or "conflicted copy" in py_file.name:
+        if "__pycache__" in py_file.parts:
             continue
         rel = py_file.relative_to(cli_dir)
         mod_path = str(rel).replace("/", ".").removesuffix(".py")
@@ -82,17 +83,6 @@ def _package_module_names(pkg_dir: Path, cli_dir: Path) -> list[str]:
             mod_path = mod_path.removesuffix(".__init__")
         modules.append(mod_path)
     return modules
-
-
-def test_package_module_names_ignore_dropbox_conflict_copies(tmp_path):
-    cli_dir = tmp_path / "demo"
-    pkg_dir = cli_dir / "demo_cli"
-    pkg_dir.mkdir(parents=True)
-    (pkg_dir / "__init__.py").write_text("")
-    (pkg_dir / "recorder.py").write_text("")
-    (pkg_dir / "recorder (Adam's MacBook Pro's conflicted copy 2026-06-27).py").write_text("")
-
-    assert _package_module_names(pkg_dir, cli_dir) == ["demo_cli", "demo_cli.recorder"]
 
 
 def test_canonical_uv_tool_env_overrides_isolated_xdg(monkeypatch, tmp_path):
@@ -108,7 +98,7 @@ def test_canonical_uv_tool_env_overrides_isolated_xdg(monkeypatch, tmp_path):
     assert env["UV_TOOL_BIN_DIR"] == str(home / ".local" / "bin")
 
 
-def test_uv_tool_registered(cli_name, cli_dir, command_filter):
+def test_uv_tool_registered(cli_name, cli_dir, command_filter, cli_executable_override):
     """CLI must be registered as a uv tool.
 
     uv tool install creates an isolated venv and symlink automatically.
@@ -116,6 +106,8 @@ def test_uv_tool_registered(cli_name, cli_dir, command_filter):
     """
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
+    if cli_executable_override:
+        pytest.skip("Skipping shared uv tool registration check (--cli-executable active)")
 
     result = subprocess.run(
         ["uv", "tool", "list"],
@@ -128,7 +120,7 @@ def test_uv_tool_registered(cli_name, cli_dir, command_filter):
     # uv tool list output format: "package-name v0.1.0" per line
     assert cli_name in result.stdout or f"{cli_name}-cli" in result.stdout, (
         f"CLI '{cli_name}' not registered as a uv tool. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
@@ -166,11 +158,11 @@ def test_cli_installed_in_editable_mode(cli_name, cli_dir, command_filter):
 
     assert result is not None and result.returncode == 0, (
         f"CLI '{cli_name}' not found in uv tool venv. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
     assert "Editable project location:" in result.stdout, (
         f"CLI '{cli_name}' is installed but NOT as an editable install (-e). "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
@@ -191,7 +183,7 @@ def test_cli_tools_shared_installed(cli_name, cli_dir, help_cache, test_config, 
     )
     assert result.returncode == 0, (
         f"cli-tools-shared not installed in {cli_name}'s uv tool venv. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
@@ -235,7 +227,7 @@ def test_cli_tools_shared_uses_local_editable_repo_when_available(cli_name, cli_
     )
     assert result.returncode == 0, (
         f"cli-tools-shared not installed in {cli_name}'s uv tool venv. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
     # uv tool install is not worktree-scoped (see _primary_checkout_root), so
@@ -299,7 +291,9 @@ def test_cli_tools_shared_uses_repo_local_source(cli_name, cli_dir, command_filt
         cli_dir,
     )
     source = data.get("tool", {}).get("uv", {}).get("sources", {}).get("cli-tools-shared")
-    assert source == {"path": expected_relative_path, "editable": True}, (
+    assert (isinstance(source, dict) and source.get("editable") is True
+            and isinstance(source.get("path"), str)
+            and (cli_dir / source["path"]).resolve() == (cli_tools_root / "_repo" / "cli-tools-shared").resolve()), (
         f"{cli_name}/pyproject.toml must map cli-tools-shared to the local sibling package. "
         f"Fix: add [tool.uv.sources] cli-tools-shared = {{ path = {expected_relative_path!r}, editable = true }}."
     )
@@ -360,11 +354,13 @@ def test_dependencies_installed(cli_name, cli_dir, command_filter):
         f"{cli_name} has {len(missing)} dependencies declared in pyproject.toml "
         f"but not installed in uv tool venv:\n"
         + "\n".join(f"  - {m}" for m in missing)
-        + f"\nFix: uv tool install -e {cli_dir} --force --refresh"
+        + f'\nFix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
-def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_filter):
+def test_launcher_shebang_points_to_uv_tool_python(
+    cli_name, cli_dir, command_filter, cli_executable_override
+):
     """The ~/.local/bin/<cli_name> launcher must have a shebang pointing
     to the CLI's uv tool venv python (e.g.
     ``#!~/.local/share/uv/tools/<pkg>/bin/python3``).
@@ -384,6 +380,8 @@ def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_fi
     """
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
+    if cli_executable_override:
+        pytest.skip("Skipping shared launcher shebang check (--cli-executable active)")
 
     launcher = Path.home() / ".local" / "bin" / cli_name
     if not launcher.exists():
@@ -402,7 +400,7 @@ def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_fi
     assert first_line.startswith("#!"), (
         f"{cli_name} launcher at {launcher} has no shebang. "
         f"First line: {first_line!r}. "
-        f"Fix: uv tool install -e {cli_dir} --force --refresh"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
     actual_interpreter = first_line[2:].split()[0] if len(first_line) > 2 else ""
@@ -417,11 +415,11 @@ def test_launcher_shebang_points_to_uv_tool_python(cli_name, cli_dir, command_fi
         f"This means the CLI will start with an interpreter that does NOT have "
         f"its declared dependencies installed, and will fail at import time.\n"
         f"\n"
-        f"Fix: uv tool install -e {cli_dir} --force --refresh\n"
+        f'Fix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"\n'
         f"\n"
         f"Reminder: when running manual import tests of this CLI, you MUST use "
         f"its own interpreter:\n"
-        f"    {expected_python3} -c 'import {cli_name.replace('-', '_')}_cli.main'"
+        f"    {expected_python3} -c 'import {get_pkg_dir(cli_dir, cli_name).name}.main'"
     )
 
 
@@ -434,7 +432,7 @@ def test_package_imports_cleanly(cli_name, cli_dir, command_filter):
     if command_filter:
         pytest.skip("Skipping general setup tests (command filter active)")
 
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     pkg_dir = cli_dir / pkg_name
     if not pkg_dir.exists():
         pytest.skip(f"{cli_name} has no {pkg_name}/ package directory")
@@ -467,7 +465,7 @@ def test_package_imports_cleanly(cli_name, cli_dir, command_filter):
     assert not failures, (
         f"{cli_name} has {len(failures)} modules that fail to import:\n"
         + "\n".join(f"  - {mod}: {err}" for mod, err in failures)
-        + f"\nFix: uv tool install -e {cli_dir} --force --refresh"
+        + f'\nFix: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )
 
 
@@ -559,7 +557,7 @@ def test_env_example_has_base_url(cli_name, cli_dir, test_config, command_filter
             [str(venv_python), "-c",
              "from cli_tools_shared.credentials import CredentialType; "
              "import importlib, sys; "
-             f"pkg = '{cli_name}'.replace('-', '_') + '_cli'; "
+             f"pkg = {get_pkg_dir(cli_dir, cli_name).name!r}; "
              "sys.path.insert(0, '.'); "
              "mod = importlib.import_module(pkg + '.config'); "
              "cfg = [c for c in vars(mod).values() "

@@ -30,6 +30,26 @@ cloudflare cache purge ZONE_ID
 
 ## Commands
 
+### Account Token Discovery
+
+These read-only commands use the CLI's existing credential without exporting it.
+They require Account API Tokens Read or Write. Successful reads and the available
+permission catalog do not prove that the caller has Account API Tokens Write.
+No create, delete, rotation, or bearer-value command is provided.
+
+```bash
+cloudflare account-tokens list ACCOUNT_ID --limit 0
+cloudflare account-tokens list ACCOUNT_ID --filter 'name:eq:Issue Manager Queue' --properties id,name,status
+cloudflare account-tokens get TOKEN_ID ACCOUNT_ID --table
+cloudflare account-tokens permissions list ACCOUNT_ID --filter 'name:contains:Queues' --limit 0
+cloudflare account-tokens permissions get PERMISSION_ID ACCOUNT_ID --table
+```
+
+Token lists follow page metadata with 50 records requested per page. Filters run
+client-side before the limit; `--limit 0` returns all matching records. The permission
+catalog has no pagination parameters. Its `get` command selects an ID from that catalog.
+Both list/get support `--properties`, `--table`, and the shared `--profile` option.
+
 ### Authentication
 
 ```bash
@@ -178,6 +198,106 @@ cloudflare dns records update ZONE_ID RECORD_ID --content 5.6.7.8
 # Delete a record
 cloudflare dns records delete ZONE_ID RECORD_ID --force
 ```
+
+### Email Routing
+
+Custom-address-to-destination email forwarding for a zone (e.g. `sales@example.com`
+forwards to your personal inbox). Settings and rules are zone-scoped
+(`/zones/{zone_id}/email/routing...`); destination addresses are account-scoped
+(`/accounts/{account_id}/email/routing/addresses...`) because one verified
+address can be reused as a forward target across every zone in the account.
+
+#### Settings
+
+```bash
+# Check whether Email Routing is enabled for a zone
+cloudflare email-routing settings get example.com
+cloudflare email-routing settings get ZONE_ID --table
+
+# Enable Email Routing (Cloudflare adds and locks the required MX/SPF records)
+cloudflare email-routing settings enable example.com
+
+# Disable Email Routing (Cloudflare removes the MX records it added)
+cloudflare email-routing settings disable example.com
+```
+
+#### Rules
+
+Each rule matches a custom address (or every address, with `--catch-all`) and
+either forwards matched mail to a verified destination address or drops it.
+
+```bash
+# List rules for a zone
+cloudflare email-routing rules list example.com
+cloudflare email-routing rules list ZONE_ID --limit 0
+cloudflare email-routing rules list ZONE_ID --filter "name:contains:Support" --table
+cloudflare email-routing rules list ZONE_ID --enabled true
+
+# Get a single rule
+cloudflare email-routing rules get example.com RULE_ID
+
+# Create a rule: custom address -> forward
+cloudflare email-routing rules create example.com --address sales@example.com --forward-to me@gmail.com
+cloudflare email-routing rules create example.com --address sales@example.com --forward-to me@gmail.com --name "Sales inbox" --priority 0
+
+# Create a catch-all rule that drops everything not matched elsewhere
+cloudflare email-routing rules create example.com --catch-all --drop --name "Catch-all drop" --disabled
+
+# Advanced: pass raw matchers/actions JSON (e.g. for a "worker" action)
+cloudflare email-routing rules create example.com \
+  --matchers-json '[{"type":"literal","field":"to","value":"hooks@example.com"}]' \
+  --actions-json '[{"type":"worker","value":["my-worker"]}]'
+
+# Update a rule (only the fields provided are changed)
+cloudflare email-routing rules update example.com RULE_ID --disabled
+cloudflare email-routing rules update example.com RULE_ID --forward-to new-dest@example.net
+
+# Delete a rule
+cloudflare email-routing rules delete example.com RULE_ID --force
+```
+
+`rules list` follows Cloudflare page metadata (5-50 rows per page); `--filter`
+runs client-side before `--limit` (default 100; `--limit 0` returns all pages).
+`--enabled` is a server-side filter. Forward actions require exactly one
+already-verified destination address (see Destination Addresses below); create
+sends one POST attempt and is never replayed on failure.
+
+#### Destination Addresses
+
+Account-scoped. Cloudflare emails a verification link when an address is
+added; the address cannot be used as a forward target until that link is
+clicked.
+
+```bash
+# List destination addresses for an account
+cloudflare email-routing addresses list --limit 0
+cloudflare email-routing addresses list ACCOUNT_ID --verified false --table
+cloudflare email-routing addresses list ACCOUNT_ID --filter "email:contains:gmail"
+
+# Get a single address
+cloudflare email-routing addresses get ADDRESS_ID ACCOUNT_ID
+
+# Add a destination address (one POST attempt, never replayed)
+cloudflare email-routing addresses create me@gmail.com
+cloudflare email-routing addresses create me@gmail.com ACCOUNT_ID
+
+# Delete a destination address
+cloudflare email-routing addresses delete ADDRESS_ID ACCOUNT_ID --force
+```
+
+The `ACCOUNT` argument is optional on every address/rule command that accepts
+it; it defaults to the single account visible to the token.
+
+**API gap:** Cloudflare's Email Routing API has no documented endpoint to
+resend a destination address's verification email or to mark an address
+verified programmatically (only the dashboard offers "resend verification").
+No `verify`/`resend-verification` command is provided for this reason; resend
+from the Cloudflare dashboard if the link is lost.
+
+Read commands need the `Zone > Email Routing Rules > Read` (rules), `Zone >
+Zone Settings > Read` (settings), or `Account > Email Routing Addresses >
+Read` (addresses) permission group on the API token; writes need the matching
+`Edit` group.
 
 ### Analytics
 
@@ -389,6 +509,76 @@ cloudflare pages domains update my-site docs.example.com
 # Remove a custom domain (confirmation prompt; --force skips it)
 cloudflare pages domains delete my-site docs.example.com --force
 ```
+
+### R2
+
+```bash
+cloudflare r2 buckets list --table
+cloudflare r2 buckets get BUCKET_NAME ACCOUNT_ID
+```
+
+Use `cloudflare r2 buckets --help` and `cloudflare r2 objects --help` for the
+bucket and object command groups, including upload and synchronization options.
+
+### Queues
+
+```bash
+cloudflare queues list --limit 0
+cloudflare queues list ACCOUNT_ID --filter "queue_name:eq:issue-manager" --properties queue_id,queue_name
+cloudflare queues get QUEUE_ID ACCOUNT_ID --table
+cloudflare queues create issue-manager ACCOUNT_ID
+cloudflare queues create regional-work ACCOUNT_ID --jurisdiction eu
+```
+
+All queue commands accept an optional account name or ID; omit it only when the
+token sees exactly one account. JSON preserves Cloudflare queue fields, including
+`queue_id` and `queue_name`. List/get support `--properties/-p` and `--table/-t`;
+create also supports table output.
+
+Queues list follows Cloudflare page metadata, matching Wrangler's `page` query
+behavior. Filters run before `--limit/-l` (default 100; 0 means all pages).
+Create sends one POST attempt, including on timeout or HTTP
+5xx. If it fails, inspect `cloudflare queues list ACCOUNT_ID --limit 0` for the
+requested name before retrying: the remote write may have succeeded. Creation
+does not configure a consumer, buy a plan, or replace existing resources.
+Optional jurisdictions are `eu`, `us`, and `fedramp`.
+
+Read operations accept Queues Read/Write or Workers Scripts Read/Write; creation
+requires Queues Write or Workers Scripts Write. Successful reads do not prove
+write permission.
+
+API references: [list](https://developers.cloudflare.com/api/resources/queues/methods/list/),
+[get](https://developers.cloudflare.com/api/resources/queues/methods/get/),
+[create](https://developers.cloudflare.com/api/resources/queues/methods/create/).
+
+#### HTTP-pull consumers
+
+```bash
+cloudflare queues consumers list QUEUE_ID ACCOUNT_ID --limit 0
+cloudflare queues consumers get QUEUE_ID CONSUMER_ID ACCOUNT_ID
+cloudflare queues consumers create QUEUE_ID ACCOUNT_ID --batch-size 1 --visibility-timeout-ms 30000
+```
+
+Consumer list/get preserve native records and support `--table`, `--properties`,
+and account/profile selection. List filters precede the limit; 0 returns all.
+The consumer collection endpoint returns an array without pagination metadata.
+Create configures only `type: http_pull`. Optional settings are `--batch-size`,
+`--max-retries`, `--retry-delay` (seconds), `--visibility-timeout-ms` (milliseconds),
+and `--dead-letter-queue` (queue name). Unspecified settings are omitted and
+Cloudflare validates setting ranges. Create attempts one POST; inspect consumer
+list before retrying a failed or ambiguous create. Existing consumer conflicts
+are returned as errors; these commands never remove or replace a consumer.
+
+Configuration enables external HTTP consumption; it does not run a poller or
+acknowledge messages. The external consumer needs its own Queues read/write API
+token and must pull and acknowledge messages through the native messages API.
+Queue expiry and retry exhaustion remain separate from an application's durable
+source receipts.
+
+API references: [consumer list](https://developers.cloudflare.com/api/resources/queues/subresources/consumers/methods/list/),
+[consumer get](https://developers.cloudflare.com/api/resources/queues/subresources/consumers/methods/get/),
+[consumer create](https://developers.cloudflare.com/api/resources/queues/subresources/consumers/methods/create/),
+[HTTP-pull configuration](https://developers.cloudflare.com/queues/configuration/pull-consumers/).
 
 ## Output Formats
 

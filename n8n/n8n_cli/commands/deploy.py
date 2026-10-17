@@ -5,7 +5,6 @@ n8n auto-discovers packages in this directory without any extra env vars.
 """
 import json
 import subprocess
-import time
 from pathlib import Path
 import typer
 
@@ -20,11 +19,10 @@ from ..config import get_config
 from ..parser import parse_cli_tool, ParserError
 from ..n8n_api import get_n8n_api_client, N8nApiError
 from cli_tools_shared.output import print_error, print_info, print_success, print_json
-from ..server import run_on_server_raw, sync_to_server, copy_file_to_server, get_server_host
+from ..server import restart_n8n, run_on_server_raw, sync_to_server, copy_file_to_server, get_server_host
 
 
 N8N_NODES_DIR = str(Path.home() / ".n8n" / "nodes")
-N8N_PLIST = "/Library/LaunchDaemons/com.n8n.server.plist"
 N8N_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 
 RSYNC_EXCLUDES = [
@@ -173,14 +171,13 @@ def deploy_node(
     pkg_json = json.loads(pkg_json_path.read_text())
     package_name = pkg_json["name"]
 
-    # Auto-increment patch version
+    # Compute the next patch version but DEFER writing it to package.json until
+    # after the build step succeeds, so a failed deploy never consumes a version
+    # number (previously a failed `npm run build` still left the version bumped).
     old_version = pkg_json.get("version", "0.0.0")
     parts = old_version.split(".")
     parts[-1] = str(int(parts[-1]) + 1)
     new_version = ".".join(parts)
-    pkg_json["version"] = new_version
-    pkg_json_path.write_text(json.dumps(pkg_json, indent=2) + "\n")
-    print_info(f"Version: {old_version} → {new_version}")
 
     # Detect bundled CLI
     has_bundled_cli = (Path(package_dir) / "cli" / "pyproject.toml").exists()
@@ -223,14 +220,29 @@ def deploy_node(
             print_error(f"npm install failed: {result.stderr or result.stdout}")
             raise typer.Exit(1)
 
-        result = _run_local(["npm", "run", "build"], cwd=package_dir)
-        if result.returncode != 0:
-            print_error(f"npm run build failed: {result.stderr or result.stdout}")
-            raise typer.Exit(1)
-
-        print_success("Build complete")
+        # Only run `npm run build` when the package actually defines a build
+        # script. Hand-written-JS CommonJS node packages (e.g. n8n-nodes-claudecode)
+        # ship checked-in runtime JS and have no build script, so `npm run build`
+        # would fail with "Missing script: build". Skip it automatically for
+        # those instead of requiring --skip-build.
+        has_build_script = bool(pkg_json.get("scripts", {}).get("build"))
+        if has_build_script:
+            result = _run_local(["npm", "run", "build"], cwd=package_dir)
+            if result.returncode != 0:
+                print_error(f"npm run build failed: {result.stderr or result.stdout}")
+                raise typer.Exit(1)
+            print_success("Build complete")
+        else:
+            print_info("No build script in package.json; skipping npm run build")
     else:
         print_info("[2/8] Skipping build")
+
+    # The build step did not fail (it succeeded, had no build script, or was
+    # skipped), so it is now safe to bump the version. Doing it here means a
+    # failed build above raises before consuming a version number.
+    pkg_json["version"] = new_version
+    pkg_json_path.write_text(json.dumps(pkg_json, indent=2) + "\n")
+    print_info(f"Version: {old_version} → {new_version}")
 
     # Step 2: Rsync to server temp dir
     print_info(f"[3/8] Syncing {package_name} to server...")
@@ -371,22 +383,11 @@ def deploy_node(
     if not skip_restart:
         print_info("[6/8] Restarting n8n...")
 
-        result = run_on_server_raw(f"sudo launchctl unload {N8N_PLIST}")
-        if result.returncode != 0:
-            print_error(f"Failed to stop n8n: {result.stderr}")
-            raise typer.Exit(1)
-
-        time.sleep(2)
-
-        result = run_on_server_raw(f"sudo launchctl load {N8N_PLIST}")
-        if result.returncode != 0:
-            print_error(f"Failed to start n8n: {result.stderr}")
-            raise typer.Exit(1)
-
-        print_info("Waiting for n8n to be ready...")
         try:
-            api = get_n8n_api_client()
-            api.wait_for_ready(timeout=60)
+            restart_n8n()
+        except RuntimeError as e:
+            print_error(str(e))
+            raise typer.Exit(1)
         except N8nApiError as e:
             print_error(f"n8n failed to start: {e}")
             print_info("Check logs on the configured n8n server.")

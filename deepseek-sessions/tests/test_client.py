@@ -4,6 +4,7 @@ import pytest
 from deepseek_sessions_cli import client as client_module
 from deepseek_sessions_cli import config as config_module
 from deepseek_sessions_cli.client import ClientError, DeepSeekSessionsClient
+from conftest import PROJECT_CWD, PROJECT_KEY, event, header, write_log
 
 
 @pytest.fixture
@@ -74,6 +75,85 @@ def test_sessions_sort_newest_first(client):
     sessions = client.list_sessions()
     activity = [session.last_activity for session in sessions]
     assert activity == sorted(activity, reverse=True)
+
+
+def test_list_sessions_loads_only_the_requested_newest_rows(
+    sessions_root, monkeypatch
+):
+    monkeypatch.setenv("DSH_HOME", str(sessions_root.parent))
+    monkeypatch.setattr(config_module, "_config", None)
+    monkeypatch.setattr(client_module, "_client", None)
+
+    for index in range(8):
+        session_id = f"session-{index:08d}-1111-4111-8111-111111111111"
+        records = [
+            header(session_id, PROJECT_CWD, created_at=1_787_000_000_000 + index),
+            event("session/title", 1, 1_787_000_000_100 + index, title=f"Session {index}"),
+        ]
+        write_log(sessions_root / PROJECT_KEY / session_id, records)
+
+    client = DeepSeekSessionsClient()
+    loaded = []
+    original_load = client._load
+
+    def record_load(session_dir, *, strict=False):
+        loaded.append(session_dir.name)
+        return original_load(session_dir, strict=strict)
+
+    monkeypatch.setattr(client, "_load", record_load)
+
+    rows = client.list_sessions(limit=2, include_subagents=False)
+
+    assert len(rows) == 2
+    assert len(loaded) == 2
+
+
+def test_resolve_session_id_does_not_load_full_transcripts(
+    sessions_root, monkeypatch
+):
+    monkeypatch.setenv("DSH_HOME", str(sessions_root.parent))
+    monkeypatch.setattr(config_module, "_config", None)
+    monkeypatch.setattr(client_module, "_client", None)
+
+    session_id = "session-77777777-7777-4777-8777-777777777777"
+    write_log(
+        sessions_root / PROJECT_KEY / session_id,
+        [
+            header(session_id, PROJECT_CWD),
+            event("session/title", 1, 1_787_000_000_100, title="Indexed title"),
+        ],
+    )
+
+    client = DeepSeekSessionsClient()
+    monkeypatch.setattr(
+        client,
+        "_load",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("full transcript loaded")
+        ),
+    )
+
+    assert client.resolve_session_id("Indexed title") == session_id
+
+
+def test_malformed_line_warning_is_preserved(sessions_root, monkeypatch, capsys):
+    monkeypatch.setenv("DSH_HOME", str(sessions_root.parent))
+    monkeypatch.setattr(config_module, "_config", None)
+    monkeypatch.setattr(client_module, "_client", None)
+
+    session_id = "session-66666666-6666-4666-8666-666666666666"
+    path = write_log(
+        sessions_root / PROJECT_KEY / session_id,
+        [header(session_id, PROJECT_CWD)],
+        compressed=False,
+    )
+    path.write_text(path.read_text(encoding="utf-8") + "not-json\n", encoding="utf-8")
+
+    client = DeepSeekSessionsClient()
+    rows = client.list_sessions(limit=1, include_subagents=False)
+
+    assert [row.id for row in rows] == [session_id]
+    assert "skipped 1 malformed line(s) (2)" in capsys.readouterr().err
 
 
 def test_resolve_session_id_passes_through_ids(client, subagent_pair):
@@ -159,6 +239,22 @@ def test_search_all_matches_across_projects(client):
     assert [result.session_id for result in results] == [SIMPLE]
     assert results[0].custom_title == "Demo session"
     assert client.search_all("nothing matches this") == []
+
+
+def test_search_sessions_resolves_title_matches_without_transcript_scan(
+    client, monkeypatch
+):
+    monkeypatch.setattr(
+        client,
+        "search_all",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("transcript scan ran")
+        ),
+    )
+
+    rows = client.search_sessions("Demo")
+
+    assert [row.id for row in rows] == [SIMPLE]
 
 
 def test_todos_and_retries_are_project_scoped(client):

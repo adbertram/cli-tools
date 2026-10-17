@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Optional
 
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, config_for, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
 
@@ -65,6 +65,9 @@ class Config(BaseConfig):
             return {"api_test": f"failed: {e}"}
 
 
+_configs = {}
+
+
 def get_config(profile=None) -> Config:
     """Get or create a Config instance."""
-    return Config(profile=profile)
+    return config_for(Config, profile, _configs)

@@ -191,6 +191,9 @@ slack files get F1234567890
 slack files upload document.pdf --channels C1234567890
 slack files upload image.png --channels C1234567890 --title "Screenshot"
 
+# Upload several files in ONE message with one comment (max 10; each title is its filename)
+slack files upload a.pptx b.pptx c.pptx --channels C1234567890 --comment "Decks for review"
+
 # Download a file
 slack files download F1234567890
 slack files download F1234567890 --output ./downloads/report.pdf

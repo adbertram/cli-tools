@@ -133,3 +133,34 @@ def test_final_failure_message_still_matches_admin_classifiers(fake_cdp, monkeyp
         asyncio.run(daemon.connect_cdp("ws://127.0.0.1:9222/devtools/browser/x"))
 
     assert admin._needs_chrome_remote_debugging_prompt(str(excinfo.value)) is True
+
+
+@pytest.mark.parametrize('blocked_send',[False,True])
+def test_bounded_cdp_cancels_and_removes_only_owned_future(blocked_send):
+    import json
+    from cdp_use.client import CDPClient
+    async def exercise():
+        sent=[]
+        class Socket:
+            async def send(self,value):
+                sent.append(json.loads(value))
+                if blocked_send:await asyncio.Future()
+        client=CDPClient('ws://127.0.0.1:1');client.ws=Socket()
+        unrelated=asyncio.Future();unrelated.cancel();client.pending_requests[999]=unrelated
+        d=daemon.Daemon.__new__(daemon.Daemon);d.cdp=client;d.session='exact-session'
+        response=await d.handle({'method':'Page.navigate','params':{'url':'https://example.test/'},'session_id':'specified-session','request_timeout':.01})
+        assert response=={'error':'cdp_request_deadline_exceeded'}
+        assert set(client.pending_requests)=={999}
+        assert sent[0]['sessionId']=='specified-session'
+        assert 'request_timeout' not in sent[0]['params'] and 'timeout' not in sent[0]['params']
+    asyncio.run(exercise())
+
+
+def test_bounded_cdp_rejects_invalid_timeout_before_send():
+    from unittest.mock import Mock
+    async def exercise():
+        d=daemon.Daemon.__new__(daemon.Daemon);d.cdp=Mock();d.session='exact-session'
+        for value in (0,-1,float('nan'),float('inf'),True,301,'1'):
+            assert await d.handle({'method':'Page.navigate','request_timeout':value})=={'error':'invalid_cdp_request_timeout'}
+        d.cdp.send_raw.assert_not_called()
+    asyncio.run(exercise())

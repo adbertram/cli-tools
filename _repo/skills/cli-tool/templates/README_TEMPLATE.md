@@ -13,8 +13,7 @@ Use this CLI when you need scriptable, JSON-first access to {ServiceName} from a
 ## Installation
 
 ```bash
-cd <cli-tools-root>/{toolname}
-uv tool install -e . --force --refresh
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh {toolname}
 ```
 
 After installation, the `{toolname}` command will be available in your terminal.

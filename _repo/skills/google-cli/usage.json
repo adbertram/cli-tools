@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-08-27T16:46:11Z",
-  "total_commands": 105,
+  "discovered_at": "2026-10-09T20:28:19Z",
+  "total_commands": 110,
   "global_options": [
     {
       "name": "--version",
@@ -525,6 +525,19 @@
               "options": []
             }
           }
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
@@ -1766,6 +1779,58 @@
           "arguments": [],
           "options": [],
           "commands": {
+            "insert-rows": {
+              "help": "Insert empty rows into a table in a Google Doc. Inserts COUNT rows below (or with --above, above) row ROW of table TABLE. Each row is one Docs API insertTableRow request; all run in one batchUpdate.",
+              "examples": [
+                "google docs tables insert-rows DOC_ID --table 0 --row 2",
+                "google docs tables insert-rows DOC_ID --table 3 --row 1 --count 3 --above"
+              ],
+              "arguments": [
+                {
+                  "name": "document_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Document ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Table index (0-based)",
+                  "short": "-t"
+                },
+                {
+                  "name": "--row",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Reference row index (0-based)",
+                  "short": "-r"
+                },
+                {
+                  "name": "--count",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Number of rows to insert (at least 1)",
+                  "short": "-n",
+                  "default": "1"
+                },
+                {
+                  "name": "--above",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Insert above the reference row instead of below it",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
             "update": {
               "help": "Update table cells in a Google Doc. Supports two modes: 1. Single cell update: Use --table, --row (or --label), --col, and --content 2. Batch updates: Use --data or --file with array of updates For batch updates, JSON format: [ {\"table\": 0, \"row\": 1, \"col\": 1, \"content\": \"New value\"}, {\"table\": 0, \"label\": \"Course Title\", \"col\": 1, \"content\": \"My Course\"} ] When using --label, it finds the row where the first column matches the label.",
               "examples": [
@@ -1991,6 +2056,13 @@
               "required": false,
               "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
               "short": "-f"
+            },
+            {
+              "name": "--folder",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only list direct children of this Google Drive folder ID",
+              "short": "-F"
             },
             {
               "name": "--properties",
@@ -3193,7 +3265,7 @@
               ]
             },
             "permissions-add-members": {
-              "help": "[OPTIONS] {report_id} Add members to a Looker Studio report permission role.",
+              "help": "Add members to a Looker Studio report permission role.",
               "usage_instructions": "Add members to a Looker Studio report permission role by report ID.",
               "arguments": [
                 {
@@ -3295,7 +3367,7 @@
               ]
             },
             "permissions-revoke-all": {
-              "help": "{report_id} Revoke all permissions for members on a Looker Studio report.",
+              "help": "Revoke all permissions for members on a Looker Studio report.",
               "usage_instructions": "Revoke all permissions for members on a Looker Studio report by report ID.",
               "arguments": [
                 {
@@ -3480,6 +3552,120 @@
               "help": "Profile name"
             }
           ]
+        },
+        "sitemaps": {
+          "help": "Manage submitted Search Console sitemaps",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Get Google's processing status for a submitted sitemap.",
+              "arguments": [
+                {
+                  "name": "site_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact Search Console property URL or sc-domain property"
+                },
+                {
+                  "name": "sitemap_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Submitted sitemap URL"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List sitemaps submitted for a Search Console property.",
+              "arguments": [
+                {
+                  "name": "site_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact Search Console property URL or sc-domain property"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=1]  Maximum number of sitemaps",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            },
+            "submit": {
+              "help": "Submit a sitemap URL to Google; acceptance does not guarantee indexing.",
+              "arguments": [
+                {
+                  "name": "site_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact Search Console property URL or sc-domain property"
+                },
+                {
+                  "name": "sitemap_url",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Public sitemap URL to submit"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Profile name"
+                }
+              ]
+            }
+          }
         },
         "sites": {
           "help": "Manage Search Console sites",
@@ -4062,7 +4248,7 @@
               "options": [
                 {
                   "name": "--listing-file",
-                  "type": "FILE",
+                  "type": "file",
                   "required": false,
                   "help": "Chrome Web Store listing markdown file",
                   "default": "store-assets/chrome-webstore-listing.md"
@@ -4356,7 +4542,7 @@
           "arguments": [
             {
               "name": "package",
-              "type": "FILE",
+              "type": "file",
               "required": true,
               "help": "Extension ZIP package"
             }

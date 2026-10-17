@@ -21,7 +21,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -71,7 +72,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -91,7 +93,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -104,7 +107,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -145,7 +149,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -170,14 +175,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -195,6 +202,19 @@
             }
           }
         },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
+        },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
@@ -211,7 +231,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -224,14 +245,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -284,7 +307,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -327,7 +351,8 @@
               "type": "bool",
               "required": false,
               "help": "Reverse the sort's natural order (newest -> oldest-first, over the fetched pages)",
-              "short": "-d"
+              "short": "-d",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -341,7 +366,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -379,7 +405,8 @@
           "type": "bool",
           "required": false,
           "help": "Reverse the sort's natural order (newest -> oldest-first, over the fetched page)",
-          "short": "-d"
+          "short": "-d",
+          "takes_value": false
         },
         {
           "name": "--filter",
@@ -393,7 +420,8 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--properties",
@@ -413,7 +441,8 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--properties",
@@ -448,7 +477,8 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--properties",
@@ -490,7 +520,8 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--properties",
@@ -502,6 +533,6 @@
       ]
     }
   },
-  "total_commands": 18,
-  "discovered_at": "2026-08-05T12:49:30Z"
+  "total_commands": 19,
+  "discovered_at": "2026-09-27T00:01:30Z"
 }

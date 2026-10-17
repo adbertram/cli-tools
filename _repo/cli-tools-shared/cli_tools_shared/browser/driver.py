@@ -12,16 +12,16 @@ browser-harness daemon (``BU_NAME``).  This mirrors the previous
 """
 
 import json
+import math
 import os
 import re
-import signal
 import socket
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
-import fcntl
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import parse_qsl, urlsplit, urlunsplit
@@ -29,13 +29,23 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from .._debug_logging import get_debug_logger
 from . import BrowserHarnessError
 from ._elements import _ServiceLocator
+from .desktop_lease import wait_for_desktop_lease
 from .processes import (
+    ProfileInUseError,
     ProcessCommand,
     ProcessTableUnavailableError,
+    acquire_profile_lifecycle_lock,
     command_user_data_dir,
+    format_profile_in_use_message,
     list_process_commands,
     pid_is_running,
+    profile_owner_is_orphaned,
+    profile_process_owner,
     profile_process_pids,
+    remove_stale_profile_artifacts,
+    release_profile_lifecycle_lock,
+    resolve_user_data_dir,
+    terminate_profile_processes,
 )
 
 logger = get_debug_logger("cli_tools.browser_service")
@@ -43,6 +53,10 @@ logger = get_debug_logger("cli_tools.browser_service")
 # macOS AF_UNIX paths are limited to 104 bytes.  Browser-harness writes its
 # socket under BH_RUNTIME_DIR; keep this short to stay within budget.
 _BH_RUNTIME_ROOT = Path("/tmp/cli-tools-bh")
+
+# Reclaim-and-retry budget for a profile whose owner is provably orphaned.  A
+# live concurrent CLI owner is never retried against, so this stays bounded.
+_ORPHANED_OWNER_RECOVERY_ATTEMPTS = 1
 
 
 def _ensure_runtime_dir(session: str) -> Path:
@@ -81,11 +95,19 @@ def _chrome_binary() -> str:
     )
 
 
-def _chrome_launch_command(chrome: str, args: list[str]) -> list[str]:
+def _chrome_launch_command(
+    chrome: str,
+    args: list[str],
+    *,
+    stderr_path: Path | None = None,
+) -> list[str]:
     """Return the command that starts an isolated Chrome instance."""
     if sys.platform == "darwin" and ".app/Contents/MacOS/" in chrome:
         app_path = chrome.split("/Contents/MacOS/", 1)[0]
-        return ["/usr/bin/open", "-na", app_path, "--args", *args[1:]]
+        command = ["/usr/bin/open", "-na", app_path]
+        if stderr_path is not None:
+            command.extend(["--stderr", str(stderr_path)])
+        return [*command, "--args", *args[1:]]
     return args
 
 
@@ -154,6 +176,26 @@ class _BrowserHarness:
         helpers.SOCK = _ipc.sock_addr(self.session)
         return helpers
 
+    @contextmanager
+    def bound(self):
+        """Scope administrative cleanup to this owner and restore cached IPC."""
+        from browser_harness import _ipc, helpers
+        environment = {key: os.environ.get(key) for key in
+            ("BH_RUNTIME_DIR", "BH_TMP_DIR", "BH_IPC_TIMEOUT")}
+        attributes = [(module, key, getattr(module, key)) for module, keys in
+            ((_ipc, ("_TMP", "_RUNTIME", "BH_TMP_DIR", "BH_RUNTIME_DIR")),
+             (helpers, ("NAME", "SOCK"))) for key in keys]
+        try:
+            yield self.h
+        finally:
+            for key, value in environment.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+            for module, key, value in attributes:
+                setattr(module, key, value)
+
 class BrowserHarnessService:
     """Browser automation service backed by browser-harness.
 
@@ -172,14 +214,15 @@ class BrowserHarnessService:
         # Chrome that is already serving this process.
         self._cdp_ws: Optional[str] = None
         self._opened = False
+        self._native_network_capture = None
         # Persistent Chromium user-data-dir. Set by ``browser_open`` from the
         # caller-supplied ``persistent_profile_dir``. Attribute (not method)
         # because the daemon-key scope and the Chrome user-data-dir scope are
         # decoupled — the caller resolves the path through config.
         self._user_data_dir: Optional[Path] = None
         self._runtime_dir = _ensure_runtime_dir(session)
-        self._lifecycle_lock_path = self._runtime_dir / "lifecycle.lock"
         self._lifecycle_lock_file = None
+        self._lifecycle_lock_profile: Optional[Path] = None
         # browser_harness._ipc reads BH_RUNTIME_DIR / BH_TMP_DIR at import
         # time and caches the resolved paths in module globals.  Set the env
         # vars BEFORE any browser_harness import (including the helper bind
@@ -226,6 +269,8 @@ class BrowserHarnessService:
 
     def _start_daemon(self):
         """Start (or reuse) the browser-harness daemon for this session."""
+        # Administrative calls use cached IPC paths too; bind this owner first.
+        self._bh.h
         from browser_harness.admin import ensure_daemon
         if not self._cdp_ws:
             raise BrowserHarnessError(
@@ -264,6 +309,7 @@ class BrowserHarnessService:
         daemon process directly via its pid file and move on.
         """
         import signal
+        self._bh.h  # Never stop a different instance's cached daemon endpoint.
         from browser_harness import _ipc as ipc
         try:
             pid_path = ipc.pid_path(self.session)
@@ -296,6 +342,97 @@ class BrowserHarnessService:
         finally:
             self._chrome_proc = None
 
+    def _wait_for_profile_release(self, timeout: float = 15.0) -> None:
+        """Block until no Chrome process still holds this profile.
+
+        ``_chrome_proc`` is only the launcher, so ``Browser.close`` returns
+        before the real Chrome has exited. A caller that reopens the profile
+        right after ``close()`` (e.g. ``BrowserAuthState.from_config`` followed
+        by ``is_authenticated``) would otherwise see the dying Chrome as a
+        foreign owner and fail with "profile already in use".
+        """
+        try:
+            pids = self._session_process_pids()
+        except (BrowserHarnessError, ProcessTableUnavailableError):
+            return
+        deadline = time.monotonic() + timeout
+        while pids and time.monotonic() < deadline:
+            time.sleep(0.2)
+            try:
+                pids = self._session_process_pids()
+            except (BrowserHarnessError, ProcessTableUnavailableError):
+                return
+        if pids:
+            logger.debug("_wait_for_profile_release: still held by %s after %.0fs", pids, timeout)
+
+    def _prepare_chrome_stderr(self) -> Path:
+        """Return an empty bounded diagnostic file for this launch only."""
+        path = self._runtime_dir / "chrome.stderr"
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        return path
+
+    def _chrome_profile_collision_detail(self) -> str | None:
+        """Return a bounded Chrome profile-collision diagnostic after failure."""
+        path = self._runtime_dir / "chrome.stderr"
+        try:
+            output = path.read_text(encoding="utf-8", errors="replace")[-4096:]
+        except OSError:
+            return None
+        lower = output.lower()
+        if not any(marker in lower for marker in (
+            "singletonlock",
+            "processsingleton",
+            "profile directory",
+            "user data directory",
+        )):
+            return None
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        if not lines:
+            return None
+        return " ".join(lines[-4:])[:1000]
+
+    def _chrome_start_failure(self, error: BrowserHarnessError) -> BrowserHarnessError:
+        """Enrich a failed Chrome launch only when stderr proves profile contention."""
+        detail = self._chrome_profile_collision_detail()
+        if detail is None:
+            return error
+        owner_detail = ""
+        try:
+            owner = self._profile_owner()
+        except (BrowserHarnessError, ProcessTableUnavailableError):
+            owner = None
+        if owner is not None:
+            if owner.parent_command:
+                owner_detail = (
+                    f" Owner PID {owner.pid} has parent PID {owner.parent_pid}: "
+                    f"{owner.parent_command}."
+                )
+            else:
+                owner_detail = f" Owner PID {owner.pid}."
+        return BrowserHarnessError(
+            f"Chrome profile {self._resolved_user_data_dir()} is already in use.{owner_detail} "
+            f"Chrome reported: {detail}"
+        )
+
+    def _reset_tabs_for_restore(self) -> None:
+        """Leave exactly one blank tab so the next launch restores nothing.
+
+        ``--restore-last-session`` is required to keep session-only cookies
+        across launches, but it also reopens every tab from the last run. On
+        the shared profile that meant each CLI's launch reloaded other CLIs'
+        login/logout pages (agent-issues#530). A single ``about:blank`` tab
+        still counts as a restored session, so session cookies survive.
+        """
+        helpers = self._bh.h
+        keep = helpers.current_tab()["targetId"]
+        for tab in helpers.list_tabs():
+            if tab["targetId"] != keep:
+                helpers.cdp("Target.closeTarget", targetId=tab["targetId"])
+        helpers.goto_url_for_close("about:blank", timeout=5)
+
     def _request_browser_close(self) -> None:
         """Ask Chrome to exit cleanly before hard-stop teardown.
 
@@ -305,6 +442,10 @@ class BrowserHarnessService:
         """
         if not self._opened:
             return
+        try:
+            self._reset_tabs_for_restore()
+        except Exception as e:
+            logger.warning("_request_browser_close: tab reset failed: %s", e)
         try:
             self._bh.h.cdp("Browser.close")
         except Exception as e:
@@ -341,144 +482,166 @@ class BrowserHarnessService:
     def _command_user_data_dir(command: str) -> Optional[str]:
         return command_user_data_dir(command)
 
-    def _pid_running(self, pid: int) -> bool:
-        for proc in self._list_process_table():
-            if proc.pid == pid:
-                return not proc.stat.startswith("Z")
-        return False
+    def _resolved_user_data_dir(self) -> Optional[Path]:
+        """Return the active profile path, accepting legacy callable test fixtures."""
+        user_data_dir = self._user_data_dir
+        if user_data_dir is None:
+            return None
+        if callable(user_data_dir):
+            user_data_dir = user_data_dir()
+        return resolve_user_data_dir(user_data_dir)
 
-    def _terminate_session_pid(self, pid: int) -> None:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        except OSError as e:
-            raise BrowserHarnessError(
-                f"Failed to stop stale browser process {pid}: {e}"
-            ) from e
-
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            if not self._pid_running(pid):
-                return
-            time.sleep(0.1)
-
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            return
-        except OSError as e:
-            raise BrowserHarnessError(
-                f"Failed to force-stop stale browser process {pid}: {e}"
-            ) from e
-
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            if not self._pid_running(pid):
-                return
-            time.sleep(0.1)
-
-        raise BrowserHarnessError(
-            f"Stale browser process {pid} for session '{self.session}' did not exit"
+    def _profile_owner(self):
+        """Return the current external Chrome owner for this profile, if any."""
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            return None
+        return profile_process_owner(
+            user_data_dir,
+            processes=self._list_process_table(),
         )
 
+    def _profile_owner_error(
+        self,
+        owner,
+        *,
+        parent_command_unavailable: bool = False,
+    ) -> BrowserHarnessError:
+        return BrowserHarnessError(
+            format_profile_in_use_message(
+                self._resolved_user_data_dir(),
+                owner,
+                parent_command_unavailable=parent_command_unavailable,
+            )
+        )
+
+    def _raise_if_profile_in_use(self) -> None:
+        try:
+            owner = self._profile_owner()
+        except ProcessTableUnavailableError as exc:
+            raise BrowserHarnessError(
+                f"Cannot verify whether Chrome profile {self._resolved_user_data_dir()} is in use "
+                "because the process table cannot be inspected."
+            ) from exc
+        if owner is not None:
+            raise self._profile_owner_error(owner)
+
     def _cleanup_session_lock_files(self) -> None:
-        """Delete stale lock files, but refuse to clobber a live SingletonLock.
-
-        Chrome stores its single-instance guard as a symlink at
-        ``SingletonLock`` whose target is ``<hostname>-<pid>``. When that
-        PID is still alive, another Chrome process owns the persistent
-        profile and starting a second one would corrupt the user data dir.
-        Fail fast with the PID and an actionable hint — never delete the
-        live lock.
-
-        Unparseable targets are treated as stale (Chrome leaves these
-        behind after a crash) and deleted.
-        """
-        # Resolve user-data-dir for this session. Tests monkeypatch
-        # ``service._user_data_dir`` directly with a Path; the attribute
-        # may also still be set via ``browser_open`` in real flows.
-        ud = self._user_data_dir
+        """Remove singleton artifacts only after proving no live owner exists."""
+        ud = self._resolved_user_data_dir()
         if ud is None:
             return
-        if callable(ud):  # legacy test paths
-            ud = ud()
-        lock_path = ud / "SingletonLock"
-        if lock_path.is_symlink():
-            target = os.readlink(str(lock_path))
-            # Target format: ``<hostname>-<pid>``. Parse PID from the right.
-            pid: Optional[int] = None
-            if "-" in target:
-                _, _, tail = target.rpartition("-")
-                try:
-                    pid = int(tail)
-                except ValueError:
-                    pid = None
-            if pid is not None and pid_is_running(pid):
-                raise BrowserHarnessError(
-                    f"Browser session '{self.session}' is held by PID {pid}. "
-                    "Finish or kill it before retrying."
-                )
-            # Stale or unparseable — fall through to delete below.
+        try:
+            remove_stale_profile_artifacts(
+                ud,
+                owner_lookup=self._profile_owner,
+                process_is_running=pid_is_running,
+            )
+        except ProfileInUseError as exc:
+            raise self._profile_owner_error(
+                exc.owner,
+                parent_command_unavailable=exc.parent_command_unavailable,
+            ) from exc
+        except ProcessTableUnavailableError as exc:
+            raise BrowserHarnessError(
+                f"Cannot remove stale Chrome profile artifacts for {ud} because "
+                "the process table cannot be inspected."
+            ) from exc
+        except OSError as exc:
+            raise BrowserHarnessError(
+                f"Failed to remove stale browser lock file for {ud}: {exc}"
+            ) from exc
 
-        for name in (
-            "SingletonCookie",
-            "SingletonLock",
-            "SingletonSocket",
-            "DevToolsActivePort",
-        ):
-            path = ud / name
-            if not path.exists() and not path.is_symlink():
-                continue
+    def _reclaim_orphaned_profile_owner(self) -> bool:
+        """Terminate a profile owner whose parent proves its CLI is gone.
+
+        Returns True only after the sanctioned profile-termination helper ran,
+        so the caller may retry once.  ``_cleanup_stale_session`` only runs
+        while this service holds the profile's lifecycle lock, so a live CLI
+        cannot be inside its own launch window here — which is what keeps the
+        macOS case safe, where ``open`` reparents every CLI-launched Chrome to
+        launchd (PID 1) for the whole life of that CLI.
+        """
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None or self._lifecycle_lock_profile != user_data_dir:
+            return False
+        try:
+            rows = self._list_process_table()
+        except (BrowserHarnessError, ProcessTableUnavailableError):
+            return False
+        owner = profile_process_owner(user_data_dir, processes=rows)
+        if owner is None or not profile_owner_is_orphaned(owner, processes=rows):
+            return False
+        logger.warning(
+            "browser_open: terminating orphaned Chrome profile owner PID %s "
+            "(parent PID %s) for %s",
+            owner.pid,
+            owner.parent_pid,
+            user_data_dir,
+        )
+        try:
+            terminate_profile_processes(user_data_dir)
+        except (OSError, RuntimeError) as exc:
+            # Keep the documented refusal (with the owner detail) as the error
+            # callers see; the failed termination is still reported here.
+            logger.warning(
+                "browser_open: could not terminate orphaned Chrome profile "
+                "owner PID %s: %s",
+                owner.pid,
+                exc,
+            )
+            return False
+        return True
+
+    def _cleanup_profile_artifacts_with_recovery(self) -> None:
+        """Remove stale artifacts, reclaiming an orphaned owner with one retry.
+
+        A CLI that exits or is killed leaves its Chrome behind; Chrome then
+        hands any new launch off to that orphan instead of opening its own CDP
+        port, so every retry would refuse and orphan another Chrome.  Reclaim
+        that owner once and retry, but keep the existing refusal — unchanged,
+        with the same owner detail — for a live concurrent CLI.
+        """
+        for attempt in range(_ORPHANED_OWNER_RECOVERY_ATTEMPTS + 1):
             try:
-                path.unlink()
-            except FileNotFoundError:
-                continue
-            except OSError as e:
-                raise BrowserHarnessError(
-                    f"Failed to remove stale browser lock file {path}: {e}"
-                ) from e
+                self._cleanup_session_lock_files()
+                return
+            except BrowserHarnessError:
+                if attempt >= _ORPHANED_OWNER_RECOVERY_ATTEMPTS:
+                    raise
+                if not self._reclaim_orphaned_profile_owner():
+                    raise
 
     def _cleanup_stale_session(self) -> None:
-        """Kill only stale browser-harness/Chrome state for this named session."""
+        """Restart this daemon and remove profile artifacts proven stale."""
         from browser_harness.admin import restart_daemon
 
         logger.debug("_cleanup_stale_session: session=%s", self.session)
-        restart_daemon(name=self.session)
-        for pid in self._stale_session_process_pids():
-            logger.debug("_cleanup_stale_session: stopping stale pid=%s", pid)
-            self._terminate_session_pid(pid)
-        self._cleanup_session_lock_files()
-
-    def _stale_session_process_pids(self) -> List[int]:
-        try:
-            return self._session_process_pids()
-        except ProcessTableUnavailableError as exc:
-            logger.debug("process-table cleanup unavailable for session %s: %s", self.session, exc)
-            return []
+        with self._bh.bound():
+            restart_daemon(name=self.session)
+            self._cleanup_profile_artifacts_with_recovery()
 
     def _acquire_lifecycle_lock(self) -> None:
-        """Acquire the per-session lifecycle lock until close/delete."""
+        """Acquire this resolved profile's cross-backend lock until close/delete."""
+        user_data_dir = self._resolved_user_data_dir()
+        if user_data_dir is None:
+            raise BrowserHarnessError("Cannot lock a browser profile before it is resolved.")
         if self._lifecycle_lock_file is not None:
-            return
-        self._lifecycle_lock_path.parent.mkdir(parents=True, exist_ok=True)
-        lock_file = open(self._lifecycle_lock_path, "a+")
-        try:
-            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        except Exception:
-            lock_file.close()
-            raise
-        self._lifecycle_lock_file = lock_file
+            if self._lifecycle_lock_profile == user_data_dir:
+                return
+            raise BrowserHarnessError("Cannot switch Chrome profiles while the current profile is open.")
+        self._lifecycle_lock_file = acquire_profile_lifecycle_lock(user_data_dir)
+        self._lifecycle_lock_profile = user_data_dir
 
     def _release_lifecycle_lock(self) -> None:
-        """Release the per-session lifecycle lock if held by this instance."""
+        """Release this service's cross-backend profile lock if held."""
         if self._lifecycle_lock_file is None:
             return
         try:
-            fcntl.flock(self._lifecycle_lock_file.fileno(), fcntl.LOCK_UN)
+            release_profile_lifecycle_lock(self._lifecycle_lock_file)
         finally:
-            self._lifecycle_lock_file.close()
             self._lifecycle_lock_file = None
+            self._lifecycle_lock_profile = None
 
     def _close_browser_locked(self) -> None:
         """Close browser and daemon while assuming the lifecycle lock is held."""
@@ -487,9 +650,9 @@ class BrowserHarnessService:
         self._request_browser_close()
         self._stop_daemon()
         self._terminate_chrome()
-        for pid in self._stale_session_process_pids():
-            self._terminate_session_pid(pid)
+        self._wait_for_profile_release()
         self._opened = False
+        self._native_network_capture = None
         self._cdp_port = None
         self._cdp_ws = None
 
@@ -520,14 +683,20 @@ class BrowserHarnessService:
             )
         if headed and os.getenv("CLI_TOOL_TEST_NO_HEADED_BROWSER") == "1":
             headed = False
+        chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
+        wait_for_desktop_lease(chrome)
         try:
-            self._acquire_lifecycle_lock()
+            requested_profile = resolve_user_data_dir(persistent_profile_dir)
+            if self._opened and self._resolved_user_data_dir() != requested_profile:
+                self._close_browser_locked()
+                self._release_lifecycle_lock()
 
-            # Resolve and persist the user-data-dir for this open() so that
-            # ``_session_process_pids``, ``_cleanup_session_lock_files``, and
-            # ``data_delete`` all agree on a single path.
-            self._user_data_dir = Path(persistent_profile_dir)
+            # Resolve and persist the user-data-dir before acquiring the
+            # cross-backend lock so both browser engines serialize on the
+            # exact same profile identity.
+            self._user_data_dir = requested_profile
             self._user_data_dir.mkdir(parents=True, exist_ok=True)
+            self._acquire_lifecycle_lock()
 
             if self._opened:
                 self._close_browser_locked()
@@ -537,7 +706,6 @@ class BrowserHarnessService:
             # Allocate port + spawn Chrome with the persistent user-data-dir.
             self._cdp_port = _find_free_port()
             user_data_dir = str(self._user_data_dir)
-            chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
 
             args = [
                 chrome,
@@ -557,14 +725,28 @@ class BrowserHarnessService:
             if not headed:
                 args.append("--headless=new")
             logger.debug("browser_open: spawning chrome args=%s", args)
-            launch_args = _chrome_launch_command(chrome, args)
+            chrome_stderr = self._prepare_chrome_stderr()
+            launch_args = _chrome_launch_command(
+                chrome,
+                args,
+                stderr_path=chrome_stderr,
+            )
             try:
-                self._chrome_proc = subprocess.Popen(
-                    launch_args,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
+                if sys.platform == "darwin" and ".app/Contents/MacOS/" in chrome:
+                    self._chrome_proc = subprocess.Popen(
+                        launch_args,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+                else:
+                    with chrome_stderr.open("wb") as stderr_file:
+                        self._chrome_proc = subprocess.Popen(
+                            launch_args,
+                            stdout=subprocess.DEVNULL,
+                            stderr=stderr_file,
+                            start_new_session=True,
+                        )
             except OSError as e:
                 raise BrowserHarnessError(f"Failed to spawn Chrome: {e}")
 
@@ -572,16 +754,23 @@ class BrowserHarnessService:
                 self._cdp_ws = _wait_for_cdp(
                     self._cdp_port, timeout=self.default_timeout
                 )
-            except BrowserHarnessError:
+            except BrowserHarnessError as exc:
                 self._terminate_chrome()
-                raise
+                failure = self._chrome_start_failure(exc)
+                if failure is exc:
+                    raise
+                raise failure from exc
 
             # Start the harness daemon bound to this Chrome's CDP endpoint.
             try:
                 self._start_daemon()
             except Exception as e:
                 self._terminate_chrome()
-                raise BrowserHarnessError(f"Failed to start browser-harness daemon: {e}")
+                error = BrowserHarnessError(f"Failed to start browser-harness daemon: {e}")
+                failure = self._chrome_start_failure(error)
+                if failure is error:
+                    raise error from e
+                raise failure from e
 
             self._opened = True
 
@@ -861,6 +1050,101 @@ class BrowserHarnessService:
                 return None
             raise BrowserHarnessError(f"Eval error: {e}")
 
+    @staticmethod
+    def _frame_deadline(request_timeout):
+        if request_timeout is None:
+            return None
+        if type(request_timeout) not in (int, float) or not math.isfinite(request_timeout) or not 0 < request_timeout <= 300:
+            raise BrowserHarnessError("invalid_frame_request_timeout")
+        return time.monotonic() + request_timeout
+
+    def _frame_cdp(self, deadline, method, **params):
+        options = {}
+        if deadline is not None:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise BrowserHarnessError("frame_request_deadline_exceeded")
+            options["request_timeout"] = remaining
+        try:
+            return self._bh.h.cdp(method, **options, **params)
+        except Exception:
+            raise BrowserHarnessError("frame_cdp_request_failed") from None
+
+    def _detach_owned_frame(self, session_id, deadline):
+        primary_failure = sys.exc_info()[0] is not None
+        # Cleanup has its own quarter-second budget after the action deadline.
+        cleanup_deadline = time.monotonic() + 0.25 if deadline is not None else None
+        try:
+            self._frame_cdp(cleanup_deadline, "Target.detachFromTarget", sessionId=session_id)
+        except BrowserHarnessError:
+            if not primary_failure:
+                raise
+
+    def frame_documents(self, *, request_timeout=None) -> List[Dict[str, Any]]:
+        """Bounded frame diagnostics with no query, fragment or document content."""
+        self._require_open()
+        deadline = self._frame_deadline(request_timeout)
+        result = []
+        def add(frame, kind):
+            if len(result) >= 128:
+                raise BrowserHarnessError("frame_document_limit_exceeded")
+            try:
+                url = urlsplit(str(frame.get("url", "")))
+                origin = url.scheme + ":"
+                path = ""
+                if url.scheme in ("http", "https"):
+                    origin = url.scheme + "://" + (url.hostname or "") + (":" + str(url.port) if url.port else "")
+                    path = url.path
+            except (ValueError, TypeError):
+                raise BrowserHarnessError("frame_document_url_invalid") from None
+            result.append({"id": frame.get("id", frame.get("targetId")),
+                           "parent_id": frame.get("parentId"), "kind": kind,
+                           "origin": origin, "path": path})
+        def visit(tree):
+            if not isinstance(tree, dict) or not isinstance(tree.get("frame"), dict):
+                raise BrowserHarnessError("invalid_frame_tree")
+            add(tree["frame"], "frame")
+            for child in tree.get("childFrames", []) or []:
+                visit(child)
+        tree = self._frame_cdp(deadline, "Page.getFrameTree")
+        if not isinstance(tree, dict) or "frameTree" not in tree:
+            raise BrowserHarnessError("invalid_frame_tree")
+        visit(tree["frameTree"])
+        targets = self._frame_cdp(deadline, "Target.getTargets")
+        if not isinstance(targets, dict) or not isinstance(targets.get("targetInfos"), list):
+            raise BrowserHarnessError("invalid_frame_targets")
+        for target in targets["targetInfos"]:
+            if isinstance(target, dict) and target.get("type") == "iframe":
+                add(target, "iframe_target")
+        return result
+
+    def goto_frame(self, frame_id: str, url: str, *, request_timeout=None) -> None:
+        """Navigate one verified frame within its current HTTPS origin."""
+        if not isinstance(frame_id, str) or not frame_id or len(frame_id) > 256:
+            raise BrowserHarnessError("invalid_frame_id")
+        deadline = self._frame_deadline(request_timeout)
+        try:
+            target = urlsplit(url)
+            port = target.port
+        except (ValueError, TypeError):
+            raise BrowserHarnessError("invalid_frame_navigation_url") from None
+        if target.scheme != "https" or not target.hostname or target.username or target.password or target.query or target.fragment:
+            raise BrowserHarnessError("invalid_frame_navigation_url")
+        origin = "https://" + target.hostname + (":" + str(port) if port else "")
+        frames = [f for f in self.frame_documents(**({"request_timeout": deadline-time.monotonic()} if deadline else {})) if f["id"] == frame_id]
+        if not frames or any(f["origin"] != origin for f in frames):
+            raise BrowserHarnessError("frame_navigation_origin_mismatch")
+        session_id = None
+        try:
+            if any(f["kind"] == "iframe_target" for f in frames):
+                session_id = self._frame_cdp(deadline, "Target.attachToTarget", targetId=frame_id, flatten=True)["sessionId"]
+            result = self._frame_cdp(deadline, "Page.navigate", session_id=session_id, frameId=frame_id, url=url)
+            if result.get("errorText") or result.get("isDownload"):
+                raise BrowserHarnessError("frame_navigation_failed")
+        finally:
+            if session_id:
+                self._detach_owned_frame(session_id, deadline)
+
     def iframe_target(self, url_substr: str) -> Optional[str]:
         """Return the first iframe target or frame id containing ``url_substr``."""
         self._require_open()
@@ -877,9 +1161,34 @@ class BrowserHarnessService:
         except Exception as e:
             raise BrowserHarnessError(f"iframe_target error: {e}") from e
 
-    def evaluate_in_iframe(self, url_substr: str, js: str, arg: Any = None) -> Any:
+    def evaluate_in_iframe(self, url_substr: str, js: str, arg: Any = None, *, request_timeout=None) -> Any:
         """Run JS inside the first iframe whose URL contains ``url_substr``."""
         self._require_open()
+        if request_timeout is not None:
+            deadline = self._frame_deadline(request_timeout)
+            frames = self.frame_documents(request_timeout=deadline-time.monotonic())
+            matches = {f["id"]: f for f in frames if url_substr in f["origin"]+f["path"]}
+            if not matches:
+                return None
+            if len(matches) != 1:
+                raise BrowserHarnessError("frame_evaluation_ambiguous")
+            frame = next(iter(matches.values()))
+            session_id = None
+            try:
+                if frame["kind"] == "iframe_target":
+                    session_id = self._frame_cdp(deadline, "Target.attachToTarget", targetId=frame["id"], flatten=True)["sessionId"]
+                    context = {}
+                else:
+                    world = self._frame_cdp(deadline, "Page.createIsolatedWorld", frameId=frame["id"], worldName="cli-tools-iframe-eval")
+                    if not world.get("executionContextId"):
+                        return None
+                    context = {"contextId": world["executionContextId"]}
+                wrapped = self._wrap_callable_expression(js, arg)
+                value = self._frame_cdp(deadline, "Runtime.evaluate", session_id=session_id, **context, expression=wrapped, returnByValue=True, awaitPromise=True)
+                return self._decode_cdp_runtime_value(value, "frame evaluation")
+            finally:
+                if session_id:
+                    self._detach_owned_frame(session_id, deadline)
         helper_target_id = None
         try:
             helper_target_id = self._bh.h.iframe_target(url_substr)
@@ -968,6 +1277,163 @@ class BrowserHarnessService:
         self._require_open()
         from ._elements import _ServiceElement
         _ServiceElement(self, css=selector).fill(text)
+
+    def fill_framework_input(self, selector: str, text: str) -> None:
+        """Fill a framework-managed editor through existing native key events."""
+        self._require_open()
+        self._bh.h.fill_input(selector, text)
+
+    def click_native(self, selector: str) -> None:
+        """Send existing native mouse press/release to one visible hit-tested target."""
+        self._require_open()
+        point = self.evaluate(r"""(selector)=>{
+            const rows=[...document.querySelectorAll(selector)];
+            if(rows.length!==1)throw Error('NATIVE_CLICK_TARGET_NOT_UNIQUE');
+            const el=rows[0];if(!el.isConnected||el.disabled||el.getAttribute('aria-disabled')==='true')throw Error('NATIVE_CLICK_TARGET_DISABLED');
+            el.scrollIntoView({block:'center',inline:'center'});
+            const r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;
+            const style=getComputedStyle(el),hit=document.elementFromPoint(x,y);
+            if(!r.width||!r.height||style.visibility!=='visible'||style.display==='none'||!Number.isFinite(x)||!Number.isFinite(y)||x<0||y<0||x>=innerWidth||y>=innerHeight||!hit||!el.contains(hit))throw Error('NATIVE_CLICK_TARGET_NOT_HIT');
+            return {x,y}
+        }""", selector)
+        if not isinstance(point, dict) or set(point) != {'x', 'y'} or any(type(point[k]) not in (int, float) or not math.isfinite(point[k]) or point[k] < 0 for k in ('x', 'y')):
+            raise BrowserHarnessError('native_click_coordinates_invalid')
+        self._bh.h.click_at_xy(point['x'], point['y'])
+
+    def begin_network_observation(self, *, max_bytes: int = 1_000_000,
+                                  method: str = None, origin: str = None, path: str = None) -> str:
+        """Keep bounded response bodies outside the renderer across navigation.
+
+        Uses Network.enable/getResponseBody from the owning CDP connection:
+        https://chromedevtools.github.io/devtools-protocol/tot/Network/
+        """
+        self._require_open()
+        if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000:
+            raise BrowserHarnessError('network_observation_limit_invalid')
+        if self._native_network_capture is not None:
+            raise BrowserHarnessError('network_observation_already_armed')
+        routed = any(value is not None for value in (method, origin, path))
+        if routed:
+            from browser_harness.network_capture import route_scope
+            try:
+                route_scope('pending', method, origin, path, max_bytes)
+            except ValueError as exc:
+                raise BrowserHarnessError('network_observation_arguments_invalid') from exc
+        session = self._bh.h._send({'meta': 'session'}, timeout=5).get('session_id')
+        if not isinstance(session, str) or not session:
+            raise BrowserHarnessError('network_observation_session_missing')
+        if routed:
+            scope = route_scope(session, method, origin, path, max_bytes)
+            capture = self._bh.h._send({'meta': 'begin_network_capture', 'scope': scope}, timeout=5)
+            if (not isinstance(capture, dict) or set(capture) != {'capture_id', 'scope'}
+                    or capture['scope'] != scope or not isinstance(capture['capture_id'], str)
+                    or not re.fullmatch(r'[a-f0-9]{32}', capture['capture_id'])):
+                raise BrowserHarnessError('network_observation_capture_invalid')
+            self._native_network_capture = capture
+        try:
+            self._bh.h.cdp('Network.enable', session_id=session, request_timeout=5,
+                           maxTotalBufferSize=max_bytes*4, maxResourceBufferSize=max_bytes,
+                           maxPostDataSize=max_bytes, enableDurableMessages=True)
+        except Exception:
+            if routed:
+                try:
+                    self.end_network_observation(session)
+                except Exception:
+                    pass  # Preserve the original arming failure, never Post.
+            raise
+        if not routed:
+            self._bh.h._send({'meta': 'drain_events'}, timeout=5).get('events')
+        return session
+
+    def end_network_observation(self, session_id: str = None) -> None:
+        """Release only this service's registered route capture."""
+        capture = self._native_network_capture
+        if capture is None:
+            return
+        if session_id is not None and session_id != capture['scope']['session_id']:
+            raise BrowserHarnessError('network_observation_scope_changed')
+        result = self._bh.h._send({'meta': 'end_network_capture', **capture}, timeout=5)
+        if result != {'ended': True}:
+            raise BrowserHarnessError('network_observation_cleanup_invalid')
+        self._native_network_capture = None
+
+    def network_observations(self, session_id: str, *, method: str, origin: str, path: str,
+                             request_ids=(), max_bytes: int = 1_000_000, timeout: float = 5) -> List[Dict[str, Any]]:
+        """Return matching requests and their events, omitting every header."""
+        self._require_open()
+        if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000 or not isinstance(session_id, str) or not session_id or method not in ('GET', 'POST', 'PUT', 'PATCH') or not isinstance(origin, str) or not isinstance(path, str) or not path.startswith('/') or not isinstance(request_ids, (tuple, list)) or len(request_ids) > 100 or any(not isinstance(value, str) or not 1 <= len(value) <= 128 for value in request_ids) or type(timeout) not in (int, float) or not 0 < timeout <= 5:
+            raise BrowserHarnessError('network_observation_arguments_invalid')
+        capture = self._native_network_capture
+        if capture is not None:
+            from browser_harness.network_capture import route_scope
+            try:
+                scope = route_scope(session_id, method, origin, path, max_bytes)
+            except ValueError as exc:
+                raise BrowserHarnessError('network_observation_arguments_invalid') from exc
+            if scope != capture['scope']:
+                raise BrowserHarnessError('network_observation_scope_changed')
+            observed = self._bh.h._send({'meta': 'drain_network_capture', **capture}, timeout=timeout)
+            if (not isinstance(observed, dict) or set(observed) != {'capture_id', 'scope', 'events', 'loss'}
+                    or observed['capture_id'] != capture['capture_id'] or observed['scope'] != scope):
+                raise BrowserHarnessError('network_observation_capture_invalid')
+            if observed['loss'] is not None:
+                raise BrowserHarnessError('network_observation_capture_loss')
+            events = observed['events']
+        else:
+            events = self._bh.h._send({'meta': 'drain_events'}, timeout=timeout).get('events')
+        if not isinstance(events, list) or len(events) > 500 or capture is None and len(events) >= 500:
+            raise BrowserHarnessError('network_observation_buffer_inconclusive')
+        matched, result = set(request_ids), []
+        for event in events:
+            if event.get('session_id') != session_id:
+                continue
+            params = event.get('params', {});request_id = params.get('requestId')
+            if event.get('method') == 'Network.requestWillBeSent':
+                request = params.get('request', {});url = urlsplit(request.get('url', ''))
+                if request.get('method') != method or url.scheme+'://'+url.netloc != origin or url.path != path:
+                    continue
+                body = request.get('postData')
+                if method != 'GET' and (not isinstance(body, str) or len(body.encode()) > max_bytes):
+                    raise BrowserHarnessError('network_observation_request_body_unavailable')
+                matched.add(request_id)
+                record = {'kind': 'request', 'request_id': request_id, 'body': None if method == 'GET' else body}
+                if method == 'GET':
+                    import hashlib
+                    digest = request.get('url_sha256') if capture is not None else hashlib.sha256(request['url'].encode()).hexdigest()
+                    if not isinstance(digest, str) or not re.fullmatch(r'[a-f0-9]{64}', digest):
+                        raise BrowserHarnessError('network_observation_request_identity_invalid')
+                    record['url_sha256'] = digest
+                result.append(record)
+            elif request_id in matched:
+                if event.get('method') == 'Network.responseReceived':
+                    response = params.get('response', {});url = urlsplit(response.get('url', ''))
+                    result.append({'kind': 'response', 'request_id': request_id, 'status': response.get('status'),
+                                   'route_matches': url.scheme+'://'+url.netloc == origin and url.path == path})
+                elif event.get('method') == 'Network.loadingFinished':
+                    result.append({'kind': 'finished', 'request_id': request_id, 'encoded_bytes': params.get('encodedDataLength')})
+                elif event.get('method') == 'Network.loadingFailed':
+                    result.append({'kind': 'failed', 'request_id': request_id})
+        return result
+
+    def network_response_body(self, session_id: str, request_id: str, *, max_bytes: int = 1_000_000,
+                              timeout: float = 5) -> str:
+        """Read one exact request's bounded UTF-8 response through CDP."""
+        self._require_open()
+        if type(max_bytes) is not int or not 1 <= max_bytes <= 1_000_000 or not isinstance(session_id, str) or not session_id or not isinstance(request_id, str) or not 1 <= len(request_id) <= 128 or type(timeout) not in (int, float) or not 0 < timeout <= 5:
+            raise BrowserHarnessError('network_response_arguments_invalid')
+        result = self._bh.h.cdp('Network.getResponseBody', session_id=session_id,
+                               request_timeout=timeout, requestId=request_id)
+        if not isinstance(result, dict) or type(result.get('base64Encoded')) is not bool or not isinstance(result.get('body'), str):
+            raise BrowserHarnessError('network_response_body_invalid')
+        body = result['body']
+        if len(body.encode()) > max_bytes * 2:
+            raise BrowserHarnessError('network_response_body_oversize')
+        if result['base64Encoded']:
+            import base64
+            body = base64.b64decode(body, validate=True).decode('utf-8')
+        if len(body.encode()) > max_bytes:
+            raise BrowserHarnessError('network_response_body_oversize')
+        return body
 
     def set_input_files(self, selector: str, file_path: str) -> None:
         """Set a ``<input type="file">`` element's files to a local file.
@@ -1151,6 +1617,46 @@ class BrowserHarnessService:
 
     # ---------------- Storage ----------------
 
+    def cookie_set(self, cookies: List[Dict[str, Any]]) -> None:
+        """Set validated portable cookies without logging their payload."""
+        self._require_open()
+        try:
+            self._bh.h.cdp("Network.setCookies", cookies=cookies)
+        except Exception:
+            raise BrowserHarnessError("Portable cookie write failed") from None
+
+    def _portable_storage_id(self, origin: str) -> Dict[str, Any]:
+        self._require_open()
+        actual = urlsplit(self.url)
+        if f"{actual.scheme}://{actual.netloc}" != origin:
+            raise BrowserHarnessError("Portable storage origin mismatch")
+        return {"securityOrigin": origin, "isLocalStorage": True}
+
+    def localstorage_get(self, origin: str) -> List[Dict[str, str]]:
+        """Read one declared origin strictly; unavailable storage is an error."""
+        storage_id = self._portable_storage_id(origin)
+        try:
+            result = self._bh.h.cdp("DOMStorage.getDOMStorageItems", storageId=storage_id)
+            rows = result["entries"]
+            if not isinstance(rows, list) or any(
+                not isinstance(row, list) or len(row) != 2
+                or any(not isinstance(value, str) for value in row) for row in rows
+            ):
+                raise ValueError
+            return [{"key": row[0], "value": row[1]} for row in rows]
+        except Exception:
+            raise BrowserHarnessError("Portable storage read failed") from None
+
+    def localstorage_set(self, origin: str, items: List[Dict[str, str]]) -> None:
+        """Set validated string entries in the current exact origin."""
+        storage_id = self._portable_storage_id(origin)
+        try:
+            for item in items:
+                self._bh.h.cdp("DOMStorage.setDOMStorageItem", storageId=storage_id,
+                               key=item["key"], value=item["value"])
+        except Exception:
+            raise BrowserHarnessError("Portable storage write failed") from None
+
     def localstorage_list(self) -> List[Dict[str, str]]:
         self._require_open()
         try:
@@ -1171,10 +1677,14 @@ class BrowserHarnessService:
         owns turning those failures into actionable error messages.
         """
         import shutil
+        if self._resolved_user_data_dir() is None:
+            return {"success": True, "message": "Session data deleted"}
         try:
             self._acquire_lifecycle_lock()
             self._close_browser_locked()
-            ud = self._user_data_dir
+            self._raise_if_profile_in_use()
+            self._cleanup_session_lock_files()
+            ud = self._resolved_user_data_dir()
             if ud is not None and ud.exists():
                 shutil.rmtree(ud)
             return {"success": True, "message": "Session data deleted"}

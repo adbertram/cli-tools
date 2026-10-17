@@ -48,6 +48,14 @@ class Config(BaseConfig):
         """Root directory holding one subdirectory per project."""
         return self.dsh_home / "sessions"
 
+    @property
+    def title_index_path(self) -> Path:
+        """Durable CLI-owned title index for bounded session-name lookup."""
+        configured = os.getenv("DEEPSEEK_SESSIONS_TITLE_INDEX_PATH")
+        if configured and configured.strip():
+            return Path(configured.strip()).expanduser()
+        return self.get_profile_data_dir() / "session_title_index.json"
+
     def get_cli_executable(self) -> str:
         """Path to the dsh executable, or its command name."""
         if self.cli_path:

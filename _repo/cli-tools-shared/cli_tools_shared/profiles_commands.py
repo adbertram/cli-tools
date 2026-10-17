@@ -6,7 +6,13 @@ import click
 
 import typer
 
-from .config import ConfigError, get_profile_auth_settings, resolve_tool_dir
+from .config import (
+    ConfigError,
+    config_class_of,
+    get_profile_auth_settings,
+    resolve_tool_dir,
+    root_config_field_names_for,
+)
 from .filters import apply_filters, apply_limit, apply_properties_filter
 from .profiles import (
     ProfileStore,
@@ -17,22 +23,6 @@ from .profiles import (
     select_profile,
 )
 from .output import print_json, print_table, print_output, print_success, print_error, print_info, handle_error, command, confirm_destructive_action
-
-
-def _get_config_class(get_config_fn):
-    get_config_fn = getattr(get_config_fn, "__wrapped__", get_config_fn)
-    annotations = getattr(get_config_fn, "__annotations__", {}) or {}
-    config_cls = annotations.get("return")
-    if config_cls is not None:
-        return config_cls
-    config_cls = getattr(get_config_fn, "__globals__", {}).get("Config")
-    if config_cls is not None:
-        return config_cls
-    for cell in getattr(get_config_fn, "__closure__", ()) or ():
-        value = cell.cell_contents
-        if isinstance(value, type) and hasattr(value, "CREDENTIAL_TYPES"):
-            return value
-    return None
 
 
 def _tool_dir_from_closure(get_config_fn):
@@ -50,7 +40,7 @@ def _tool_dir_from_closure(get_config_fn):
 
 
 def _get_profile_store(get_config_fn, tool_name: str, probe_config=None) -> ProfileStore:
-    config_cls = _get_config_class(get_config_fn)
+    config_cls = config_class_of(get_config_fn)
     if config_cls is None and probe_config is not None:
         config_cls = type(probe_config)
     profile_auth_settings = get_profile_auth_settings(config_cls) if config_cls is not None else None
@@ -59,7 +49,12 @@ def _get_profile_store(get_config_fn, tool_name: str, probe_config=None) -> Prof
         tool_dir = _tool_dir_from_closure(get_config_fn)
     if tool_dir is None and config_cls is not None and getattr(config_cls, "DIST_NAME", None):
         tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
-    return ProfileStore(tool_name, tool_dir=tool_dir, profile_auth_settings=profile_auth_settings)
+    return ProfileStore(
+        tool_name,
+        tool_dir=tool_dir,
+        profile_auth_settings=profile_auth_settings,
+        root_config_fields=root_config_field_names_for(config_cls),
+    )
 
 
 def _parse_auth_params(raw_params: Optional[List[str]]) -> dict[str, str]:
@@ -106,7 +101,7 @@ def _collect_profile_auth_values(prompts, provided_values: dict[str, str]) -> di
         if value is None:
             try:
                 value = typer.prompt(f"Enter {prompt_text}", hide_input=hide_input)
-            except click.Abort:
+            except (click.Abort, typer.Abort):
                 print_error(
                     "Missing required auth parameter values. "
                     "Provide --auth-param FIELD=VALUE or run interactively to enter them."
@@ -131,7 +126,7 @@ def create_profiles_app(get_config_fn, tool_name: str):
     """
     app = typer.Typer(help="Manage authentication profiles", no_args_is_help=True)
     probe_config = None
-    if _get_config_class(get_config_fn) is None:
+    if config_class_of(get_config_fn) is None:
         try:
             probe_config = get_config_fn()
         except Exception:

@@ -1,0 +1,155 @@
+{
+  "tool": "frameio",
+  "description": "CLI interface for frameio",
+  "discovered_at": "2026-10-14T22:16:34Z",
+  "total_commands": 4,
+  "global_options": [],
+  "commands": {
+    "assets": {
+      "help": "List and download assets in a public Frame.io share",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "download": {
+          "help": "Download a video asset's original file to exactly --output.",
+          "arguments": [
+            {
+              "name": "share_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Public share URL (https://next.frame.io/share/<uuid> or an f.io short link)"
+            },
+            {
+              "name": "asset_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Asset ID (UUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "File path to write the original video to",
+              "short": "-o"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one asset in a share.",
+          "arguments": [
+            {
+              "name": "share_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Public share URL (https://next.frame.io/share/<uuid> or an f.io short link)"
+            },
+            {
+              "name": "asset_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Asset ID (UUID)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        },
+        "list": {
+          "help": "List the assets in a share's file collection.",
+          "arguments": [
+            {
+              "name": "share_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Public share URL (https://next.frame.io/share/<uuid> or an f.io short link)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=200]  Maximum number of assets",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "shares": {
+      "help": "Inspect public Frame.io shares",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get a share's id, url, enabled, downloadingEnabled and expiration.",
+          "arguments": [
+            {
+              "name": "share_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Public share URL (https://next.frame.io/share/<uuid> or an f.io short link)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `frameio` CLI. Run `frameio --help` to discover command groups and `--help` on any subcommand for its options."
+}

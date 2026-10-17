@@ -15,9 +15,30 @@ from cli_test_utils import (
 )
 
 
-def _usage_json_paths(cli_name):
+def _usage_json_paths(cli_name, cli_dir):
+    """Return the command map that describes the CLI under test.
+
+    A CLI that tracks usage.json in its own tool directory versions the map with
+    the code it describes, so the copy in the checkout under test (the worktree a
+    --cli-executable points at) is the one to check. Checking the skill-folder
+    link instead would compare a worktree's CLI against another checkout's map.
+    """
+    tracked = Path(cli_dir) / "usage.json"
+    if tracked.is_file():
+        return [tracked]
     return [
         Path(__file__).resolve().parents[3] / "skills" / f"{cli_name}-cli" / "usage.json",
+    ]
+
+
+def test_usage_json_paths_prefer_the_map_tracked_with_the_cli(tmp_path):
+    (tmp_path / "usage.json").write_text("{}")
+    assert _usage_json_paths("coursecraft", tmp_path) == [tmp_path / "usage.json"]
+
+
+def test_usage_json_paths_fall_back_to_the_skill_folder(tmp_path):
+    assert _usage_json_paths("jira", tmp_path) == [
+        Path(__file__).resolve().parents[3] / "skills" / "jira-cli" / "usage.json",
     ]
 
 
@@ -150,6 +171,7 @@ def test_help_parameters_parse_rich_sections():
 def test_usage_json_matches_installed_command_tree(
     cli_executable,
     cli_name,
+    cli_dir,
     test_config,
     command_filter,
     help_cache,
@@ -188,7 +210,7 @@ def test_usage_json_matches_installed_command_tree(
             )
         )
 
-    for usage_json in _usage_json_paths(cli_name):
+    for usage_json in _usage_json_paths(cli_name, cli_dir):
         if not usage_json.exists():
             pytest.skip(f"usage.json not found at {usage_json}")
 
@@ -222,6 +244,7 @@ def test_usage_json_matches_installed_command_tree(
 def test_usage_json_matches_installed_command_parameters(
     cli_executable,
     cli_name,
+    cli_dir,
     test_config,
     command_filter,
     help_cache,
@@ -274,7 +297,7 @@ def test_usage_json_matches_installed_command_parameters(
         for path in sorted(live_paths)
     }
 
-    for usage_json in _usage_json_paths(cli_name):
+    for usage_json in _usage_json_paths(cli_name, cli_dir):
         if not usage_json.exists():
             pytest.skip(f"usage.json not found at {usage_json}")
 

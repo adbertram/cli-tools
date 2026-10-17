@@ -424,7 +424,7 @@ class _EmptyLocator:
 
 class _NoopLocator:
     """Accepts fill()/click() and reports empty; used for create_flow tests
-    that stub out _save_flow/_disable_flow/get_flow so only the flow-name
+    that stub out _save_flow/_set_flow_enabled/get_flow so only the flow-name
     fill and flow_id-from-URL extraction in create_flow itself run for
     real."""
 
@@ -467,8 +467,8 @@ class _CreateFlowPage:
 
 def _create_flow_client(monkeypatch, url, disable_calls, get_flow_calls):
     """Build a GlobiflowClient wired to a minimal fake create-flow page, with
-    _save_flow/_disable_flow/get_flow replaced by spies/no-ops so the test
-    isolates create_flow's own dispatch logic (does it call _disable_flow
+    _save_flow/_set_flow_enabled/get_flow replaced by spies/no-ops so the test
+    isolates create_flow's own dispatch logic (does it call _set_flow_enabled
     when enabled=False, and never when enabled=True)."""
     page = _CreateFlowPage(url)
     client = GlobiflowClient()
@@ -481,10 +481,10 @@ def _create_flow_client(monkeypatch, url, disable_calls, get_flow_calls):
     monkeypatch.setattr(GlobiflowClient, "browser", property(lambda self: _FakeBrowser()))
     monkeypatch.setattr(client, "_save_flow", lambda page, timeout=2500: None)
 
-    def _fake_disable_flow(flow_id, app_id):
-        disable_calls.append((flow_id, app_id))
+    def _fake_set_flow_enabled(flow_id, app_id, enabled):
+        disable_calls.append((flow_id, app_id, enabled))
 
-    monkeypatch.setattr(client, "_disable_flow", _fake_disable_flow)
+    monkeypatch.setattr(client, "_set_flow_enabled", _fake_set_flow_enabled)
 
     def _fake_get_flow(flow_id, include_steps=False):
         get_flow_calls.append(flow_id)
@@ -508,11 +508,11 @@ def test_create_flow_enabled_true_does_not_disable(monkeypatch):
 
     client.create_flow(app_id="30529466", trigger_code="M", name="Enabled Flow")
 
-    assert disable_calls == [], "enabled=True must not call _disable_flow"
+    assert disable_calls == [], "enabled=True must not call _set_flow_enabled"
     assert get_flow_calls == ["4404950"]
 
 
-def test_create_flow_disabled_calls_disable_flow_with_new_id(monkeypatch):
+def test_create_flow_disabled_calls_set_flow_enabled_with_new_id(monkeypatch):
     """Creating a flow with enabled=False must disable the newly created
     flow_id via the flows.php toggle path before returning its details.
 
@@ -533,9 +533,9 @@ def test_create_flow_disabled_calls_disable_flow_with_new_id(monkeypatch):
         app_id="30529466", trigger_code="M", name="Disabled Flow", enabled=False
     )
 
-    assert disable_calls == [("4404951", "30529466")], (
-        "enabled=False must call _disable_flow with the newly created flow's "
-        "ID and the app_id it belongs to"
+    assert disable_calls == [("4404951", "30529466", False)], (
+        "enabled=False must call _set_flow_enabled(flow_id, app_id, False) with "
+        "the newly created flow's ID and the app_id it belongs to"
     )
     assert get_flow_calls == ["4404951"]
 
@@ -574,7 +574,7 @@ class _CheckboxLocator:
         return self
 
 
-class _DeactivateLinkLocator:
+class _BulkActionLinkLocator:
     def count(self):
         return 1
 
@@ -588,7 +588,7 @@ class _OkButtonLocator:
         self._state = state
 
     def count(self):
-        return 1 if self._state.deactivate_called else 0
+        return 1 if self._state.action_called else 0
 
     @property
     def first(self):
@@ -596,8 +596,11 @@ class _OkButtonLocator:
 
     def click(self):
         self._state.ok_clicked = True
-        if self._state.flips_state and self._state.checked and self._state.deactivate_called:
-            self._state.img_src = "/images/icons/small/transmit_off.png"
+        if self._state.flips_state and self._state.checked and self._state.action_called:
+            if self._state.action_called == "bulkDeactivate":
+                self._state.img_src = "/images/icons/small/transmit_off.png"
+            elif self._state.action_called == "bulkActivate":
+                self._state.img_src = "/images/icons/small/transmit.png"
 
 
 class _ImgLocator:
@@ -633,32 +636,37 @@ class _RowLocator:
 
 class _FlowsPhpState:
     """Models one flow row on ``flows.php?app=<app_id>``, with a status icon
-    that starts enabled (no "_off") and flips to the disabled variant once
-    the checkbox is checked, bulkDeactivate is invoked for the right app,
-    and the confirmation dialog's OK button is clicked -- mirroring the real
-    workflow-automation.podio.com behavior confirmed live (transmit.png ->
-    transmit_off.png).
+    that flips between the enabled variant (no "_off") and the disabled
+    variant once the checkbox is checked, bulkDeactivate/bulkActivate is
+    invoked for the right app, and the confirmation dialog's OK button is
+    clicked -- mirroring the real workflow-automation.podio.com behavior
+    confirmed live (transmit.png <-> transmit_off.png; both bulk functions
+    open an OK/Cancel dialog with no text input).
 
     flips_state=False models a broken toggle (OK click has no effect), to
-    prove _disable_flow raises rather than assuming success.
+    prove _set_flow_enabled raises rather than assuming success.
     """
 
-    def __init__(self, flow_id, app_id="30529466", flips_state=True):
+    def __init__(self, flow_id, app_id="30529466", flips_state=True, initially_enabled=True):
         self.flow_id = flow_id
         self.app_id = app_id
         self.flips_state = flips_state
         self.checked = False
-        self.deactivate_called = False
+        self.action_called = None
         self.ok_clicked = False
-        self.img_src = "/images/icons/small/transmit.png"
+        self.img_src = (
+            "/images/icons/small/transmit.png"
+            if initially_enabled
+            else "/images/icons/small/transmit_off.png"
+        )
 
 
 class _FlowsPhpPage:
     """Fake for a direct ``flows.php?app=<id>`` navigation -- a full page
     load, not the tree-walking AJAX flow list. No app-selection state is
-    modelled because _disable_flow no longer walks the org/workspace tree
+    modelled because _set_flow_enabled no longer walks the org/workspace tree
     (that per-app search loop -- shared by list_flows/get_flow/delete_flow
-    -- has a confirmed live timing race; see the _disable_flow docstring)."""
+    -- has a confirmed live timing race; see the _set_flow_enabled docstring)."""
 
     def __init__(self, state):
         self.state = state
@@ -677,8 +685,8 @@ class _FlowsPhpPage:
             if f'"{self.state.flow_id}"' in selector:
                 return _CheckboxLocator()
             return _EmptyLocator()
-        if selector == 'a[onclick*="bulkDeactivate"]':
-            return _DeactivateLinkLocator()
+        if selector in ('a[onclick*="bulkDeactivate"]', 'a[onclick*="bulkActivate"]'):
+            return _BulkActionLinkLocator()
         if selector.startswith("div.flowRowDiv:has(input.bulkCheck[value="):
             if f'"{self.state.flow_id}"' in selector:
                 return _RowLocator(self.state)
@@ -689,11 +697,13 @@ class _FlowsPhpPage:
         if "checked = true" in js and self.state.flow_id in js:
             self.state.checked = True
         elif js.startswith("bulkDeactivate(") and f"({self.state.app_id})" in js:
-            self.state.deactivate_called = True
+            self.state.action_called = "bulkDeactivate"
+        elif js.startswith("bulkActivate(") and f"({self.state.app_id})" in js:
+            self.state.action_called = "bulkActivate"
         return None
 
 
-def _disable_flow_client(monkeypatch, state):
+def _set_flow_enabled_client(monkeypatch, state):
     page = _FlowsPhpPage(state)
     client = GlobiflowClient()
     monkeypatch.setattr(client, "ensure_authenticated", lambda path="/": None)
@@ -706,34 +716,163 @@ def _disable_flow_client(monkeypatch, state):
     return client
 
 
-def test_disable_flow_toggles_and_reverifies_via_flows_php(monkeypatch):
-    """_disable_flow must select the flow's row, trigger bulkDeactivate for
-    its app, confirm the dialog, and re-read the row's icon afterward to
-    prove the toggle actually took effect (not assume a click succeeded
-    silently)."""
+def test_set_flow_enabled_false_deactivates_and_reverifies_via_flows_php(monkeypatch):
+    """_set_flow_enabled(enabled=False) must select the flow's row, trigger
+    bulkDeactivate for its app, confirm the dialog, and re-read the row's
+    icon afterward to prove the toggle actually took effect (not assume a
+    click succeeded silently)."""
     state = _FlowsPhpState(flow_id="4404950", app_id="30529466")
-    client = _disable_flow_client(monkeypatch, state)
+    client = _set_flow_enabled_client(monkeypatch, state)
 
-    client._disable_flow("4404950", "30529466")
+    client._set_flow_enabled("4404950", "30529466", False)
 
     assert state.checked is True
-    assert state.deactivate_called is True
+    assert state.action_called == "bulkDeactivate"
     assert state.ok_clicked is True
     assert state.img_src.endswith("transmit_off.png")
 
 
-def test_disable_flow_raises_when_icon_does_not_flip(monkeypatch):
+def test_set_flow_enabled_true_activates_and_reverifies_via_flows_php(monkeypatch):
+    """_set_flow_enabled(enabled=True) must trigger bulkActivate (the live
+    sibling of bulkDeactivate on flows.php) and verify the row's icon lost
+    its "_off" suffix afterward."""
+    state = _FlowsPhpState(flow_id="4404950", app_id="30529466", initially_enabled=False)
+    client = _set_flow_enabled_client(monkeypatch, state)
+
+    client._set_flow_enabled("4404950", "30529466", True)
+
+    assert state.checked is True
+    assert state.action_called == "bulkActivate"
+    assert state.ok_clicked is True
+    assert state.img_src.endswith("transmit.png")
+    assert "_off" not in state.img_src
+
+
+def test_set_flow_enabled_raises_when_icon_does_not_flip(monkeypatch):
     """If the deactivate click does not actually flip the row's status
-    icon, _disable_flow must raise instead of assuming the toggle
+    icon, _set_flow_enabled must raise instead of assuming the toggle
     succeeded."""
     state = _FlowsPhpState(flow_id="4404950", app_id="30529466", flips_state=False)
-    client = _disable_flow_client(monkeypatch, state)
+    client = _set_flow_enabled_client(monkeypatch, state)
 
     try:
-        client._disable_flow("4404950", "30529466")
+        client._set_flow_enabled("4404950", "30529466", False)
         raise AssertionError("Expected ClientError when the toggle does not take effect")
     except client_module.ClientError as e:
         assert "was not disabled" in str(e)
+
+
+def test_set_flow_enabled_raises_when_activate_does_not_take_effect(monkeypatch):
+    """The activate path must fail loudly too when the icon stays "_off"."""
+    state = _FlowsPhpState(
+        flow_id="4404950", app_id="30529466", flips_state=False, initially_enabled=False
+    )
+    client = _set_flow_enabled_client(monkeypatch, state)
+
+    try:
+        client._set_flow_enabled("4404950", "30529466", True)
+        raise AssertionError("Expected ClientError when the toggle does not take effect")
+    except client_module.ClientError as e:
+        assert "was not enabled" in str(e)
+
+
+def test_public_set_flow_enabled_resolves_app_toggles_then_rereads(monkeypatch):
+    """set_flow_enabled must resolve the owning app from configureflow.php,
+    toggle via _set_flow_enabled with that app id, and return a fresh
+    get_flow read so the reported `enabled` is the live post-toggle state."""
+    client = GlobiflowClient()
+    calls = []
+    monkeypatch.setattr(client, "_resolve_flow_app_id", lambda flow_id: calls.append(("resolve", flow_id)) or "30831883")
+    monkeypatch.setattr(client, "_set_flow_enabled", lambda flow_id, app_id, enabled: calls.append(("toggle", flow_id, app_id, enabled)))
+
+    def _fake_get_flow(flow_id, include_steps=False):
+        calls.append(("get", flow_id))
+        return FlowDetail(id=flow_id, name="toggle probe", enabled=True)
+
+    monkeypatch.setattr(client, "get_flow", _fake_get_flow)
+
+    result = client.set_flow_enabled("4411999", True)
+
+    assert calls == [
+        ("resolve", "4411999"),
+        ("toggle", "4411999", "30831883", True),
+        ("get", "4411999"),
+    ]
+    assert result.enabled is True
+
+
+# ---- flows update command ----
+
+
+class _UpdateFlowFakeClient:
+    def __init__(self, calls):
+        self._calls = calls
+
+    def set_flow_enabled(self, flow_id, enabled):
+        self._calls.append((flow_id, enabled))
+        return FlowDetail(id=flow_id, name="toggle probe", enabled=enabled, has_logs=False)
+
+    def close(self):
+        return None
+
+
+def test_flows_update_enabled_prints_flow_record(monkeypatch):
+    runner = CliRunner()
+    calls = []
+    monkeypatch.setattr(flows, "get_client", lambda: _UpdateFlowFakeClient(calls))
+
+    result = runner.invoke(flows.app, ["update", "4411999", "--enabled"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("4411999", True)]
+    payload = json.loads(result.stdout)
+    assert payload == {
+        "id": "4411999",
+        "name": "toggle probe",
+        "enabled": True,
+        "time_savings": None,
+        "notes": None,
+        "has_logs": False,
+        "steps": None,
+    }, "flows update must print the same record shape as flows get"
+
+
+def test_flows_update_disabled_dispatches_false(monkeypatch):
+    runner = CliRunner()
+    calls = []
+    monkeypatch.setattr(flows, "get_client", lambda: _UpdateFlowFakeClient(calls))
+
+    result = runner.invoke(flows.app, ["update", "4411999", "--disabled"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("4411999", False)]
+    assert json.loads(result.stdout)["enabled"] is False
+
+
+def test_flows_update_table_renders_summary_rows(monkeypatch):
+    runner = CliRunner()
+    calls = []
+    monkeypatch.setattr(flows, "get_client", lambda: _UpdateFlowFakeClient(calls))
+
+    result = runner.invoke(flows.app, ["update", "4411999", "--disabled", "--table"])
+
+    assert result.exit_code == 0, result.output
+    assert calls == [("4411999", False)]
+    for cell in ("4411999", "toggle probe", "Enabled", "No", "Time Savings", "N/A", "Has Logs"):
+        assert cell in result.output, f"table output missing {cell!r}: {result.output}"
+
+
+def test_flows_update_requires_enabled_or_disabled(monkeypatch):
+    """Neither flag given must fail before any browser work starts."""
+    runner = CliRunner()
+    calls = []
+    monkeypatch.setattr(flows, "get_client", lambda: _UpdateFlowFakeClient(calls))
+
+    result = runner.invoke(flows.app, ["update", "4411999"])
+
+    assert result.exit_code == 1
+    assert calls == [], "no toggle may run without --enabled/--disabled"
+    assert "Exactly one of --enabled or --disabled is required" in result.output
 
 
 # ---- Fakes and tests for get_flow/delete_flow/list_flows no longer
@@ -742,7 +881,7 @@ def test_disable_flow_raises_when_icon_does_not_flip(monkeypatch):
 # get_flow, delete_flow, and list_flows used to search every app by
 # clicking through the org/workspace tree and reading a shared,
 # AJAX-replaced flow-list panel -- a confirmed live timing race (see
-# _disable_flow's docstring): clicking one tree item while the previous
+# _set_flow_enabled's docstring): clicking one tree item while the previous
 # app's flow list is still being swapped out can make a stale,
 # about-to-be-removed checkbox transiently match the wrong app. Each
 # method now resolves its target app_id directly instead (via
@@ -755,7 +894,7 @@ def test_disable_flow_raises_when_icon_does_not_flip(monkeypatch):
 # regardless of its real state -- which would have hidden the --disabled
 # bug's fix, since a correctly-disabled flow would still read back as
 # enabled. get_flow now reads enabled from the row icon, same as
-# list_flows and _disable_flow.
+# list_flows and _set_flow_enabled.
 
 
 class _FlowNameLocatorPresent:
@@ -1231,7 +1370,7 @@ def test_list_flows_navigates_directly_per_app_using_tree_item_id(monkeypatch):
     """list_flows must resolve each app's id from its tree item's own
     id="app-<id>_anchor" attribute and navigate to it directly via
     /flows.php?app=<id> instead of clicking through the tree -- clicking
-    races the AJAX-replaced flow panel (see _disable_flow's docstring for
+    races the AJAX-replaced flow panel (see _set_flow_enabled's docstring for
     the confirmed live race)."""
     tree_items = [
         _TreeItemFake("Acme Org", "1"),

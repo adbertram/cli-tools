@@ -5,7 +5,7 @@ from typing import Optional, List
 import typer
 
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_error, print_success, print_info, print_table
+from cli_tools_shared.output import command, print_json, print_error, print_success, print_info, print_table
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 
 COMMAND_CREDENTIALS = {
@@ -39,6 +39,7 @@ app = typer.Typer(help="Album operations")
 
 
 @app.command("open")
+@command
 def open_app():
     """Open the Photos app to the Albums view.
 
@@ -74,6 +75,7 @@ def open_app():
 
 
 @app.command("list")
+@command
 def list_albums(
     include_system: bool = typer.Option(
         False, "--system", "-s", help="Include system albums"
@@ -155,6 +157,7 @@ def list_albums(
 
 
 @app.command("get")
+@command
 def get_album(
     identifier: str = typer.Argument(..., help="Album name or UUID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -191,6 +194,7 @@ def get_album(
 
 
 @app.command("create")
+@command
 def create_album(
     name: str = typer.Argument(..., help="Name for the new album"),
 ):
@@ -216,6 +220,7 @@ def create_album(
 
 
 @app.command("delete")
+@command
 def delete_album(
     name: str = typer.Argument(..., help="Name of the album to delete"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
@@ -247,6 +252,7 @@ def delete_album(
 
 
 @app.command("move")
+@command
 def move_album(
     name: str = typer.Argument(..., help="Name of the album to move"),
     folder: str = typer.Option(..., "--folder", "-f", help="Target folder name"),
@@ -280,6 +286,7 @@ def move_album(
 
 
 @app.command("enhance")
+@command
 def enhance_album(
     name: str = typer.Argument(..., help="Album name to enhance photos in"),
     limit: int = typer.Option(100, "--limit", "-l", help="Max photos to enhance"),
@@ -341,6 +348,7 @@ def enhance_album(
 
 
 @app.command("add-photos")
+@command
 def add_photos(
     album: str = typer.Option(..., "--album", "-a", help="Name of the target album"),
     photo_ids: str = typer.Option(..., "--photo-ids", "-p", help="Comma-separated photo UUIDs"),

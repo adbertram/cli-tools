@@ -1312,7 +1312,7 @@
               "name": "--customs-quantity",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]  Customs item quantity",
+              "help": "[x>=1]  Customs item quantity",
               "default": "1"
             },
             {

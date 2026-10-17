@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import json
+import math
+import os
 import posixpath
 import re
 import shlex
@@ -122,6 +124,12 @@ DEFAULT_RECORDING_LEAD_SECONDS = 1.0
 DEFAULT_SLIDE_PAUSE_SECONDS = 0.25
 DEFAULT_SLIDESHOW_START_SECONDS = 2.0
 CAPTURE_OVERLAY_SETTLE_SECONDS = 2.0
+# The capture records the whole display through ScreenCaptureKit with no content filter (any
+# filter freezes build animations); the final mux paints out the screen-recording indicator the
+# helper reports. `swift` compiles the helper on launch, so the first frame can take a while.
+SCREEN_CAPTURE_SCRIPT = Path(__file__).with_name("screen_capture.swift")
+POWERPOINT_BUNDLE_ID = "com.microsoft.Powerpoint"
+FIRST_FRAME_TIMEOUT_SECONDS = 120.0
 DEFAULT_CUE_MARKER = "||"
 # Pluralsight's delivery window is -12..-6 dBFS peak. Target the midpoint so
 # normal encode jitter cannot push the muxed output across either edge.
@@ -143,9 +151,14 @@ VOLUMEDETECT_MAX_VOLUME_PATTERN = re.compile(r"max_volume:\s*(-?\d+(?:\.\d+)?)\s
 OSASCRIPT_TIMEOUT_SECONDS = 30
 DEMO_ENVIRONMENT_RECORDING_PREP_TIMEOUT_SECONDS = 120
 DEMO_ENVIRONMENT_PWSH_PATH = Path("/usr/local/bin/pwsh")
+# The generic macOS host-automation module has exactly one home: ``prep/DemoEnvironmentAutomation``
+# inside RONIN's checkout ($RONIN_HOME on the recording host, the local GitRepos/ronin clone on
+# the laptop). This relative path resolves against that checkout root, never against a
+# CourseCraft repo — CourseCraft's skill tree no longer holds a copy of the module.
 DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH = Path(
-    ".agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1"
+    "prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1"
 )
+RONIN_HOME_ENV_VAR = "RONIN_HOME"
 # Bounded number of open/dismiss/recheck cycles open_deck() runs so a transient
 # benign PowerPoint startup dialog cannot block the recording indefinitely.
 OPEN_DECK_DISMISS_ATTEMPTS = 8
@@ -156,15 +169,16 @@ OPEN_DECK_DISMISS_ATTEMPTS = 8
 DIALOG_PROBE_ATTEMPTS = 3
 DIALOG_PROBE_RETRY_SECONDS = 0.5
 DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS = 2.0
-# Settle window between a probe Space press and reading the live slide index. The
-# click-build fades on these decks run 500ms; 0.7s leaves the show quiescent so the
-# index read reflects the press that just landed and never a press still in flight.
+# Floor for the settle window after a Space press, before the next press or a slide
+# index read. A press that lands while a click build is still playing is absorbed by
+# PowerPoint (it finishes the build instead of starting the next step), so each slide
+# settles for its own longest click build read from the deck (see
+# click_settle_seconds_for_slide). 0.7s is the measured window for the plain 500ms
+# fade builds and stays the minimum for every slide.
 SLIDE_CLICK_PROBE_SETTLE_SECONDS = 0.7
-# Keep the recording drive quiescent after a terminal next-click after-effect.
-# These effects use the same 500ms build timing as the probed click effects, so
-# the same measured 0.7s interval prevents the real slide advance from colliding
-# with an after-effect that is still in flight.
-TERMINAL_AFTER_EFFECT_SETTLE_SECONDS = SLIDE_CLICK_PROBE_SETTLE_SECONDS
+# Headroom added to a slide's longest authored click build: the same 200ms margin the
+# 0.7s floor gives a 500ms build, covering keystroke delivery and show-index latency.
+CLICK_BUILD_SETTLE_MARGIN_SECONDS = 0.2
 # Hard upper bound on click steps the probe will tolerate on a single slide before
 # declaring the walk runaway. Real authored slides are far below this; the bound only
 # exists so a slide that never advances cannot loop forever.
@@ -177,6 +191,7 @@ SLIDE_ADVANCE_CONFIRM_SECONDS = 3.0
 SLIDESHOW_ENDED_MARKER = "ended"
 PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
 PACKAGE_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
+DOCUMENT_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 SLIDE_LAYOUT_RELATIONSHIP_SUFFIX = "/slideLayout"
 # Hard bound on how late a scheduled slide advance may fire before the recording is
 # aborted. Every action time is absolute against the narration timeline, so lateness
@@ -192,6 +207,7 @@ SLIDE_IDENTITY_FIELD = "slide"
 SLIDE_LABEL_PREFIX = "Slide"
 SLIDE_ADVANCE_REASON = "next slide"
 TERMINAL_AFTER_EFFECT_REASON = "terminal after effect"
+EXPLICIT_CUE_OFFSETS_FIELD = "cue_offsets_seconds"
 INTER_SLIDE_ACTIONS = [{
     "key": "space",
     "reason": SLIDE_ADVANCE_REASON,
@@ -728,40 +744,72 @@ def require_path(path, description):
     return resolved_path
 
 
-def resolve_coursecraft_repo_root(start_path=None):
-    """Find the CourseCraft repo root that owns the demo-environment automation module.
+def demo_environment_automation_manifest_path(ronin_home):
+    return Path(ronin_home).expanduser() / DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
 
-    ``start_path`` is the recorder's ``--coursecraft-repo-root``. When it is omitted the
-    search starts at the current working directory, which is the only implicit input the
-    recorder takes; the failure names that flag so a caller outside the repo tree does not
-    have to guess which directory the message is about.
+
+def is_demo_environment_automation_module_present(ronin_home):
+    return demo_environment_automation_manifest_path(ronin_home).is_file()
+
+
+def resolve_ronin_home(start_path=None, env=None):
+    """Find the Ronin checkout that owns the demo-environment automation module.
+
+    Resolution order, first hit wins:
+
+    1. ``RONIN_HOME`` — the recording host exports it, so a remote run needs no flag.
+    2. ``start_path`` — the recorder's ``--ronin-home`` (``--coursecraft-repo-root`` is
+       still accepted as a deprecated alias for the same value).
+    3. An upward search from the current working directory for a checkout that holds
+       ``prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1``.
+
+    The failure names the flag and the environment variable instead of a directory the
+    caller never passed, so a run launched outside any checkout gets an actionable error.
     """
-    path = Path.cwd() if start_path is None else Path(start_path).expanduser()
+    environment = os.environ if env is None else env
+    attempted = []
+
+    env_home = environment.get(RONIN_HOME_ENV_VAR)
+    if env_home:
+        if is_demo_environment_automation_module_present(env_home):
+            return Path(env_home).expanduser().resolve()
+        attempted.append(f"{RONIN_HOME_ENV_VAR}={Path(env_home).expanduser()}")
+
+    if start_path is not None:
+        if is_demo_environment_automation_module_present(start_path):
+            return Path(start_path).expanduser().resolve()
+        attempted.append(f"--ronin-home={Path(start_path).expanduser()}")
+
+    path = Path.cwd()
     if path.is_file():
         path = path.parent
     path = path.resolve()
     for candidate in [path, *path.parents]:
-        if (candidate / "course-pipeline.json").is_file():
+        if is_demo_environment_automation_module_present(candidate):
             return candidate
+
+    tried = f" (tried {', '.join(attempted)})" if attempted else ""
     raise FileNotFoundError(
-        f"CourseCraft repo root not found from: {path} "
-        "(no course-pipeline.json in that directory or any parent). "
-        "Pass --coursecraft-repo-root PATH, or run the command from inside the CourseCraft repo."
+        f"Demo environment automation module not found: "
+        f"{DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH} is missing from the Ronin checkouts searched{tried} "
+        f"and from {path} and its parents. "
+        f"Set {RONIN_HOME_ENV_VAR} to the Ronin checkout, pass --ronin-home RONIN_HOME, "
+        f"or run the command from inside the Ronin checkout."
     )
 
 
-def resolve_demo_environment_automation_module_path(coursecraft_repo_root=None):
-    return resolve_coursecraft_repo_root(coursecraft_repo_root) / DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+def resolve_demo_environment_automation_module_path(ronin_home=None):
+    return demo_environment_automation_manifest_path(resolve_ronin_home(ronin_home))
 
 
 def powershell_single_quoted(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
-def run_demo_environment_recording_prep(coursecraft_repo_root=None):
+def run_demo_environment_recording_prep(ronin_home=None):
     pwsh_path = require_path(DEMO_ENVIRONMENT_PWSH_PATH, "PowerShell executable for demo environment prep")
     module_path = require_path(
-        resolve_demo_environment_automation_module_path(coursecraft_repo_root),
+        resolve_demo_environment_automation_module_path(ronin_home),
         "Demo environment automation manifest",
     )
     script = "\n".join([
@@ -820,7 +868,8 @@ def normalize_item(item, index, cue_marker):
     label = slide_label(item, index)
     transcript = read_transcript(item, label)
     segments = split_segments(label, transcript, cue_marker)
-    return {
+    cue_count = len(segments) - 1
+    normalized = {
         "index": index,
         "label": label,
         "identity": {
@@ -829,9 +878,42 @@ def normalize_item(item, index, cue_marker):
         },
         "transcript": transcript,
         "segments": segments,
-        "cue_count": len(segments) - 1,
+        "cue_count": cue_count,
         "audio_path": audio_path(item, label),
     }
+    if EXPLICIT_CUE_OFFSETS_FIELD in item:
+        normalized[EXPLICIT_CUE_OFFSETS_FIELD] = validate_explicit_cue_offsets(
+            label, item[EXPLICIT_CUE_OFFSETS_FIELD], cue_count
+        )
+    return normalized
+
+
+def validate_explicit_cue_offsets(label, offsets, cue_count):
+    """Check caller-supplied cue times: one finite number per cue, >= 0, strictly ascending."""
+    if not isinstance(offsets, list):
+        raise ValueError(f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} must be a list of numbers")
+    if len(offsets) != cue_count:
+        raise ValueError(
+            f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} has {len(offsets)} offsets "
+            f"but the transcript has {cue_count} cue markers"
+        )
+    previous = None
+    for position, offset in enumerate(offsets, start=1):
+        if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset):
+            raise ValueError(
+                f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} offset {position} must be a number, got {offset!r}"
+            )
+        if offset < 0:
+            raise ValueError(
+                f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} offset {position} must be >= 0, got {offset}"
+            )
+        if previous is not None and offset <= previous:
+            raise ValueError(
+                f"{label} {EXPLICIT_CUE_OFFSETS_FIELD} must be strictly ascending; "
+                f"offset {position} ({offset}) does not follow {previous}"
+            )
+        previous = offset
+    return offsets
 
 
 def word_count(text):
@@ -968,6 +1050,21 @@ def cue_offsets_from_word_ratio(label, segments, duration_seconds):
     return offsets
 
 
+def cue_offsets_for_item(item, duration_seconds):
+    """Return (cue offsets, timing method): the item's explicit offsets, else the word-ratio estimate."""
+    if EXPLICIT_CUE_OFFSETS_FIELD not in item:
+        return cue_offsets_from_word_ratio(item["label"], item["segments"], duration_seconds), "word-ratio"
+
+    offsets = item[EXPLICIT_CUE_OFFSETS_FIELD]
+    for position, offset in enumerate(offsets, start=1):
+        if offset >= duration_seconds:
+            raise ValueError(
+                f"{item['label']} {EXPLICIT_CUE_OFFSETS_FIELD} offset {position} ({offset}) "
+                f"must be less than the audio duration ({duration_seconds} seconds)"
+            )
+    return offsets, "explicit"
+
+
 def click_steps_from_slide_index_walk(slide_numbers, observed_indexes):
     """Derive per-slide click steps from the live slide indexes a Space walk produced.
 
@@ -1022,26 +1119,115 @@ def click_steps_from_slide_index_walk(slide_numbers, observed_indexes):
     )
 
 
-def terminal_next_click_after_effect_in_xml(part_xml):
-    """Return whether the part's final click effect owns a next-click after-effect."""
+def time_node_end_ms(time_node):
+    """Milliseconds from the parent's start until ``time_node`` and all its children finish.
+
+    A ``<p:cTn>`` starts at its numeric ``stCondLst`` delay (a click-triggered
+    ``indefinite`` delay counts from the press, so zero) and runs for the longer of its
+    own ``dur`` (times ``repeatCount``, in thousandths, and doubled by ``autoRev``) and
+    the latest end among its child time nodes. Child nodes run in parallel from the
+    parent's start, which is how After Previous chains are written: one parallel group
+    per chained effect, offset by its predecessors' durations in ``delay``.
+    """
+    delays = [
+        int(cond.get("delay"))
+        for cond in time_node.findall(f"{{{PRESENTATIONML_NAMESPACE}}}stCondLst/{{{PRESENTATIONML_NAMESPACE}}}cond")
+        if (cond.get("delay") or "").isdigit()
+    ]
+    own_ms = int(time_node.get("dur")) if (time_node.get("dur") or "").isdigit() else 0
+    if (time_node.get("repeatCount") or "").isdigit():
+        own_ms = own_ms * int(time_node.get("repeatCount")) // 1000
+    if time_node.get("autoRev") in ("1", "true"):
+        own_ms = own_ms * 2
+    time_node_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    children = time_node.find(f"{{{PRESENTATIONML_NAMESPACE}}}childTnLst")
+    # Each child element (par/seq/excl or an effect behavior) owns its time node as the
+    # first cTn in document order: the container's own cTn, or the behavior's cBhvr/cTn.
+    child_ends = [time_node_end_ms(next(child.iter(time_node_tag))) for child in (children if children is not None else [])]
+    return (min(delays) if delays else 0) + max([own_ms, *child_ends])
+
+
+def click_build_ms_in_xml(part_xml):
+    """Return each main-sequence click step's build length in milliseconds, in step order.
+
+    Only the animation that plays counts: ``<p:timing>/<p:tnLst>``, never the
+    ``<p:bldLst>`` build templates.
+    """
     root = ElementTree.fromstring(part_xml)
-    click_effect_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    timeline = root.find(f"{{{PRESENTATIONML_NAMESPACE}}}timing/{{{PRESENTATIONML_NAMESPACE}}}tnLst")
+    if timeline is None:
+        return []
+    time_node_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    return [
+        time_node_end_ms(next(step.iter(time_node_tag)))
+        for main_sequence in timeline.iter(time_node_tag)
+        if main_sequence.get("nodeType") == "mainSeq"
+        for step in main_sequence.find(f"{{{PRESENTATIONML_NAMESPACE}}}childTnLst")
+    ]
+
+
+def terminal_next_click_after_effect_in_xml(part_xml):
+    """Return whether the main sequence's final click effect owns a next-click after-effect.
+
+    Only the animation that plays counts: ``<p:timing>/<p:tnLst>``. The sibling
+    ``<p:bldLst>`` build templates also carry click effects but never play.
+    """
+    root = ElementTree.fromstring(part_xml)
+    timing_tag = f"{{{PRESENTATIONML_NAMESPACE}}}timing"
+    timeline_tag = f"{{{PRESENTATIONML_NAMESPACE}}}tnLst"
+    time_node_tag = f"{{{PRESENTATIONML_NAMESPACE}}}cTn"
+    timeline = root.find(f"{timing_tag}/{timeline_tag}")
+    if timeline is None:
+        return False
     click_effects = [
         node
-        for node in root.iter(click_effect_tag)
+        for main_sequence in timeline.iter(time_node_tag)
+        if main_sequence.get("nodeType") == "mainSeq"
+        for node in main_sequence.iter(time_node_tag)
         if node.get("nodeType") == "clickEffect"
     ]
     if not click_effects:
         return False
     return any(
         node.get("masterRel") == "nextClick" and node.get("afterEffect") == "1"
-        for node in click_effects[-1].iter(click_effect_tag)
+        for node in click_effects[-1].iter(time_node_tag)
     )
+
+
+def slide_part_member(deck, slide_number):
+    """Return the OOXML member of the slide at PowerPoint's 1-based ``slide_number`` in the show.
+
+    The index is the slide's position in ``<p:sldIdLst>``, not its part name: PowerPoint keeps a
+    slide's part name when other slides are deleted, so parts can read ``slide1, slide2, slide4``.
+    """
+    try:
+        presentation_root = ElementTree.fromstring(deck.read("ppt/presentation.xml"))
+        rels_root = ElementTree.fromstring(deck.read("ppt/_rels/presentation.xml.rels"))
+    except KeyError as error:
+        raise FileNotFoundError(f"{deck.filename}: presentation parts not found for slide index {slide_number}") from error
+    except ElementTree.ParseError as error:
+        raise ValueError(f"{deck.filename}: presentation parts are not valid XML") from error
+
+    slide_ids = list(presentation_root.iter(f"{{{PRESENTATIONML_NAMESPACE}}}sldId"))
+    if not 1 <= slide_number <= len(slide_ids):
+        raise ValueError(f"{deck.filename}: slide index {slide_number} is outside the {len(slide_ids)} slides in presentation.xml")
+    relationship_id = slide_ids[slide_number - 1].get(f"{{{DOCUMENT_RELATIONSHIPS_NAMESPACE}}}id")
+    targets = {
+        relationship.get("Id"): relationship.get("Target")
+        for relationship in rels_root.iter(f"{{{PACKAGE_RELATIONSHIPS_NAMESPACE}}}Relationship")
+    }
+    if relationship_id not in targets:
+        raise ValueError(f"{deck.filename}: slide index {slide_number} relationship {relationship_id} not found")
+    member = posixpath.normpath(posixpath.join("ppt", targets[relationship_id]))
+    if member not in deck.namelist():
+        raise FileNotFoundError(f"{deck.filename}: slide index {slide_number} part not found: {member}")
+    return member
 
 
 def slide_layout_member_for_slide(deck, slide_number):
     """Return the slide-layout OOXML member referenced by ``slide_number``."""
-    rels_member = f"ppt/slides/_rels/slide{slide_number}.xml.rels"
+    slide_member = slide_part_member(deck, slide_number)
+    rels_member = posixpath.join(posixpath.dirname(slide_member), "_rels", f"{posixpath.basename(slide_member)}.rels")
     try:
         rels_root = ElementTree.fromstring(deck.read(rels_member))
     except KeyError as error:
@@ -1058,22 +1244,34 @@ def slide_layout_member_for_slide(deck, slide_number):
     raise ValueError(f"Slide {slide_number} has no slide-layout relationship")
 
 
-def terminal_next_click_after_effect_step(deck_path, slide_number):
-    """Return one when the final slide effect has a separate next-click after-effect."""
-    slide_member = f"ppt/slides/slide{slide_number}.xml"
+def slide_animation_parts(deck_path, slide_number):
+    """Return the slide's OOXML and its slide layout's OOXML: the two parts whose timing plays."""
     try:
         with zipfile.ZipFile(deck_path) as deck:
+            slide_member = slide_part_member(deck, slide_number)
             layout_member = slide_layout_member_for_slide(deck, slide_number)
+            parts = []
             for member in (slide_member, layout_member):
                 try:
-                    part_xml = deck.read(member)
+                    parts.append(deck.read(member))
                 except KeyError as error:
                     raise FileNotFoundError(f"Slide animation part not found: {member}") from error
-                if terminal_next_click_after_effect_in_xml(part_xml):
-                    return 1
+            return parts
     except zipfile.BadZipFile as error:
         raise ValueError(f"PowerPoint deck is not a readable OOXML presentation: {deck_path}") from error
-    return 0
+
+
+def terminal_next_click_after_effect_step(deck_path, slide_number):
+    """Return one when the final slide effect has a separate next-click after-effect."""
+    return int(any(terminal_next_click_after_effect_in_xml(part) for part in slide_animation_parts(deck_path, slide_number)))
+
+
+def click_settle_seconds_for_slide(deck_path, slide_number):
+    """Seconds to wait after any press on this slide so its longest click build has finished."""
+    longest_build_ms = max(
+        [0, *(ms for part in slide_animation_parts(deck_path, slide_number) for ms in click_build_ms_in_xml(part))]
+    )
+    return round(max(SLIDE_CLICK_PROBE_SETTLE_SECONDS, longest_build_ms / 1000 + CLICK_BUILD_SETTLE_MARGIN_SECONDS), 3)
 
 
 def render_live_slideshow_slide_index():
@@ -1113,16 +1311,22 @@ def exit_slideshow_if_running():
     )
 
 
-def walk_slideshow_slide_indexes(press_budget):
-    """Press Space up to ``press_budget`` times, returning the live index after each."""
+def walk_slideshow_slide_indexes(press_budget, first_slide, settle_seconds):
+    """Press Space up to ``press_budget`` times, returning the live index after each.
+
+    A press on slide N either plays N's next click build or advances to N+1, so it
+    settles for the longer of the two slides' windows before the index is read.
+    """
     observed_indexes = []
+    current_slide = first_slide
     for _ in range(press_budget):
         press_space()
-        time.sleep(SLIDE_CLICK_PROBE_SETTLE_SECONDS)
+        time.sleep(max(settle_seconds.get(current_slide, 0), settle_seconds.get(current_slide + 1, 0)))
         observed_index = live_slideshow_slide_index()
         observed_indexes.append(observed_index)
         if observed_index is None:
             return observed_indexes
+        current_slide = observed_index
     return observed_indexes
 
 
@@ -1133,10 +1337,16 @@ def measure_slide_click_steps(config, slide_numbers):
     manual advance, and presses Space through the whole range while reading the live
     slide index. A final ``nextClick`` after-effect can consume one extra press only to
     dim the last build, so that terminal styling step is excluded from narration cues
-    but returned separately for the recording drive.
+    but returned separately for the recording drive. The third result is each slide's
+    settle window (``click_settle_seconds_for_slide``), which both this walk and the
+    recording drive wait after a press so no press lands inside a playing build.
     """
     terminal_after_effects = {
         slide_number: terminal_next_click_after_effect_step(config["deck_path"], slide_number)
+        for slide_number in slide_numbers
+    }
+    settle_seconds = {
+        slide_number: click_settle_seconds_for_slide(config["deck_path"], slide_number)
         for slide_number in slide_numbers
     }
     open_deck(config)
@@ -1151,7 +1361,7 @@ def measure_slide_click_steps(config, slide_numbers):
         )
 
     press_budget = len(slide_numbers) * (MAX_CLICK_STEPS_PER_SLIDE + 1)
-    observed_indexes = walk_slideshow_slide_indexes(press_budget)
+    observed_indexes = walk_slideshow_slide_indexes(press_budget, slide_numbers[0], settle_seconds)
     click_steps = click_steps_from_slide_index_walk(slide_numbers, observed_indexes)
     for slide_number, terminal_after_effect in terminal_after_effects.items():
         if terminal_after_effect > click_steps[slide_number]:
@@ -1160,7 +1370,7 @@ def measure_slide_click_steps(config, slide_numbers):
             )
         click_steps[slide_number] = click_steps[slide_number] - terminal_after_effect
     exit_slideshow_if_running()
-    return click_steps, terminal_after_effects
+    return click_steps, terminal_after_effects, settle_seconds
 
 
 def requested_slide_numbers(items):
@@ -1199,9 +1409,9 @@ def build_config(args):
     items = load_items(args.items)
     requested_slide_numbers(items)
     prepared_items = validate_items(items, args.cue_marker)
-    coursecraft_repo_root = None
-    if args.coursecraft_repo_root is not None:
-        coursecraft_repo_root = str(Path(args.coursecraft_repo_root).expanduser().resolve())
+    ronin_home = None
+    if args.ronin_home is not None:
+        ronin_home = str(Path(args.ronin_home).expanduser().resolve())
     return {
         "deck_path": str(deck_path),
         "items": prepared_items,
@@ -1217,7 +1427,7 @@ def build_config(args):
         "slide_pause_seconds": args.slide_pause_seconds,
         "slideshow_start_seconds": args.slideshow_start_seconds,
         "cue_marker": args.cue_marker,
-        "coursecraft_repo_root": coursecraft_repo_root,
+        "ronin_home": ronin_home,
     }
 
 
@@ -1225,7 +1435,14 @@ def prepared_slide_numbers(prepared_items):
     return [item["identity"]["value"] for item in prepared_items]
 
 
-def prepare(config, click_steps, terminal_after_effect_steps):
+def prepare(config, click_steps, terminal_after_effect_steps, click_settle_seconds):
+    """Build the narration track and the press schedule that drives the slide show.
+
+    Cue presses sit where the narration puts them. The presses the drive adds itself
+    (a terminal after-effect, then the slide advance) never land inside a playing click
+    build: they wait at least the slide's settle window after the slide's previous press,
+    padding the narration with silence when the narration ends sooner.
+    """
     work_dir = Path(config["work_dir"])
     audio_dir = work_dir / "audio"
     plan_path = work_dir / "timing-plan.json"
@@ -1233,16 +1450,11 @@ def prepare(config, click_steps, terminal_after_effect_steps):
     concat_path = work_dir / "concat.txt"
     lead_silence = audio_dir / "silence-lead.wav"
     inter_slide_silence = audio_dir / "silence-slide.wav"
-    terminal_after_effect_silence = audio_dir / "silence-terminal-after-effect.wav"
 
     audio_dir.mkdir(parents=True, exist_ok=True)
 
     generate_silence(lead_silence, config["recording_lead_seconds"])
     generate_silence(inter_slide_silence, config["slide_pause_seconds"])
-    generate_silence(
-        terminal_after_effect_silence,
-        TERMINAL_AFTER_EFFECT_SETTLE_SECONDS,
-    )
 
     timeline_seconds = config["recording_lead_seconds"]
     audio_files = [lead_silence]
@@ -1254,7 +1466,7 @@ def prepare(config, click_steps, terminal_after_effect_steps):
         normalize_audio(item["audio_path"], normalized_audio_path)
         duration_seconds = audio_duration(normalized_audio_path)
         item_started_at = timeline_seconds
-        cue_offsets = cue_offsets_from_word_ratio(item["label"], item["segments"], duration_seconds)
+        cue_offsets, cue_timing_method = cue_offsets_for_item(item, duration_seconds)
 
         audio_files.append(normalized_audio_path)
         for cue_offset in cue_offsets:
@@ -1267,9 +1479,19 @@ def prepare(config, click_steps, terminal_after_effect_steps):
             })
 
         timeline_seconds = timeline_seconds + duration_seconds
+        slide_number = item["identity"]["value"]
+        settle_seconds = click_settle_seconds[slide_number]
 
         if item_index < len(config["items"]) - 1:
-            for _ in range(terminal_after_effect_steps[item["identity"]["value"]]):
+            if cue_offsets:
+                builds_done_at = item_started_at + cue_offsets[-1] + settle_seconds
+                build_wait_seconds = round(builds_done_at - timeline_seconds, 3)
+                if build_wait_seconds > 0:
+                    build_wait_silence = audio_dir / f"silence-build-wait-{item['index']:03d}.wav"
+                    generate_silence(build_wait_silence, build_wait_seconds)
+                    audio_files.append(build_wait_silence)
+                    timeline_seconds = timeline_seconds + build_wait_seconds
+            for _ in range(terminal_after_effect_steps[slide_number]):
                 actions.append({
                     "at_seconds": round(timeline_seconds, 3),
                     "key": "space",
@@ -1277,8 +1499,10 @@ def prepare(config, click_steps, terminal_after_effect_steps):
                     "slide": item["identity"]["value"],
                     "reason": TERMINAL_AFTER_EFFECT_REASON,
                 })
+                terminal_after_effect_silence = audio_dir / f"silence-terminal-after-effect-{item['index']:03d}.wav"
+                generate_silence(terminal_after_effect_silence, settle_seconds)
                 audio_files.append(terminal_after_effect_silence)
-                timeline_seconds = timeline_seconds + TERMINAL_AFTER_EFFECT_SETTLE_SECONDS
+                timeline_seconds = timeline_seconds + settle_seconds
             for inter_item_action in INTER_SLIDE_ACTIONS:
                 actions.append({
                     "at_seconds": round(timeline_seconds, 3),
@@ -1296,9 +1520,10 @@ def prepare(config, click_steps, terminal_after_effect_steps):
             "cue_count": item["cue_count"],
             "measured_click_steps": click_steps[item["identity"]["value"]],
             "terminal_after_effect_steps": terminal_after_effect_steps[item["identity"]["value"]],
+            "click_settle_seconds": settle_seconds,
             "audio": str(item["audio_path"]),
             "duration_seconds": duration_seconds,
-            "cue_timing_method": "word-ratio",
+            "cue_timing_method": cue_timing_method,
         })
 
     write_concat_file(concat_path, audio_files)
@@ -1968,6 +2193,52 @@ def stop_audio_process(audio_process):
             audio_process.wait(timeout=10)
 
 
+def screen_capture_command(raw_video_path, framerate, width, height):
+    return [
+        "swift",
+        "-suppress-warnings",
+        str(SCREEN_CAPTURE_SCRIPT),
+        str(raw_video_path),
+        str(framerate),
+        str(width),
+        str(height),
+        POWERPOINT_BUNDLE_ID,
+    ]
+
+
+def wait_for_first_frame(capture_process, timeout_seconds=FIRST_FRAME_TIMEOUT_SECONDS, notes=None):
+    """Return the wall-clock time (epoch seconds) of the capture's first frame.
+
+    The helper prints ``firstFrameEpochMs=<ms>`` on stderr once its first frame is written, and
+    ``indicatorRect=x,y,w,h`` once it finds the screen-recording indicator; that rectangle lands in
+    ``notes["indicator_rect"]``. A thread keeps draining stderr to this process's stderr for the
+    life of the capture, so the pipe never fills.
+    """
+    first_frame = {}
+    seen = threading.Event()
+
+    def drain():
+        for raw_line in capture_process.stderr:
+            line = raw_line.decode(errors="replace") if isinstance(raw_line, bytes) else raw_line
+            match = re.match(r"firstFrameEpochMs=(\d+)", line.strip())
+            indicator = re.fullmatch(r"indicatorRect=(\d+),(\d+),(\d+),(\d+)", line.strip())
+            if match and not seen.is_set():
+                first_frame["epoch"] = int(match.group(1)) / 1000
+                seen.set()
+            elif indicator and notes is not None:
+                notes["indicator_rect"] = tuple(int(value) for value in indicator.groups())
+            elif line.strip():
+                sys.stderr.write(line if line.endswith("\n") else line + "\n")
+
+    threading.Thread(target=drain, name="screen-capture-stderr", daemon=True).start()
+    deadline = time.monotonic() + timeout_seconds
+    while not seen.wait(0.1):
+        ensure_process_running(capture_process, "screen recording")
+        if time.monotonic() >= deadline:
+            raise RuntimeError(f"screen recording wrote no frame within {timeout_seconds:.0f}s")
+    return first_frame["epoch"]
+
+
 def stop_ffmpeg_process(ffmpeg_process):
     if ffmpeg_process is None:
         return
@@ -2092,7 +2363,7 @@ def sleep_until(target_time, monitored_processes, presence_watcher=None):
 
 def wait_for_audio(audio_process, ffmpeg_process, presence_watcher=None):
     while True:
-        ensure_process_running(ffmpeg_process, "ffmpeg screen recording")
+        ensure_process_running(ffmpeg_process, "screen recording")
         if presence_watcher is not None:
             presence_watcher.raise_if_failed()
         audio_return_code = audio_process.poll()
@@ -2151,23 +2422,23 @@ def record(config):
             config["ffmpeg_video_input"],
         )
 
-        run_demo_environment_recording_prep(config["coursecraft_repo_root"])
+        run_demo_environment_recording_prep(config["ronin_home"])
 
         # Measure the live click steps BEFORE anything is captured. The probe opens the
         # deck and plays the requested range once, so PowerPoint state is recorded first
         # and the same cleanup path closes whatever the probe left behind on failure.
         state = create_powerpoint_state(config)
-        click_steps, terminal_after_effect_steps = measure_slide_click_steps(
+        click_steps, terminal_after_effect_steps, click_settle_seconds = measure_slide_click_steps(
             config,
             prepared_slide_numbers(config["items"]),
         )
         assert_cue_counts_match_click_steps(config["items"], click_steps)
 
-        plan = prepare(config, click_steps, terminal_after_effect_steps)
+        plan = prepare(config, click_steps, terminal_after_effect_steps, click_settle_seconds)
         work_dir = Path(config["work_dir"])
         output_path = Path(config["output_path"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_video_path = work_dir / "screen-recording.mov"
+        raw_video_path = work_dir / "screen-recording.mp4"
         narration_path = Path(plan["narration_audio"])
 
         start_slideshow(config)
@@ -2177,32 +2448,23 @@ def record(config):
             raw_video_path.unlink()
         if raw_video_path.exists() or raw_video_path.is_symlink():
             raise RuntimeError(f"Could not clear previous raw screen recording: {raw_video_path}")
-        ffmpeg_process = subprocess.Popen([
-            "ffmpeg",
-            "-y",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-f",
-            "avfoundation",
-            "-framerate",
-            str(config["ffmpeg_framerate"]),
-            "-pixel_format",
-            "nv12",
-            "-i",
-            str(config["ffmpeg_video_input"]),
-            "-pix_fmt",
-            "yuv420p",
-            str(raw_video_path),
-        ], stdin=subprocess.PIPE)
-        ensure_process_running(ffmpeg_process, "ffmpeg screen recording")
+        ffmpeg_process = subprocess.Popen(
+            screen_capture_command(raw_video_path, config["ffmpeg_framerate"], source_width, source_height),
+            stdin=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        ensure_process_running(ffmpeg_process, "screen recording")
+        capture_notes = {}
+        first_frame_epoch = wait_for_first_frame(ffmpeg_process, notes=capture_notes)
         settle_capture_overlay()
 
         started_at = time.monotonic()
+        # The raw recording's t=0 is its first frame; the narration starts now.
+        capture_lead_seconds = max(0.0, time.time() - first_frame_epoch)
         audio_process = subprocess.Popen(["afplay", str(narration_path)])
         ensure_process_running(audio_process, "afplay")
         monitored_processes = [
-            (ffmpeg_process, "ffmpeg screen recording"),
+            (ffmpeg_process, "screen recording"),
             (audio_process, "afplay"),
         ]
 
@@ -2240,7 +2502,7 @@ def record(config):
             raise RuntimeError(f"afplay exited with code {audio_return_code}")
 
         if ffmpeg_return_code != 0:
-            raise RuntimeError(f"ffmpeg screen recording exited with code {ffmpeg_return_code}")
+            raise RuntimeError(f"screen recording exited with code {ffmpeg_return_code}")
 
         close_slideshow_and_deck(config, state)
         state = None
@@ -2258,6 +2520,12 @@ def record(config):
                 f"{config['output_width']}x{config['output_height']}",
                 file=sys.stderr,
             )
+
+        # The capture is the whole display, so it carries the screen-recording indicator the capture
+        # itself causes; paint that rectangle out from its border before any crop or scale.
+        if "indicator_rect" in capture_notes:
+            x, y, w, h = capture_notes["indicator_rect"]
+            video_filter = f"delogo=x={x}:y={y}:w={w}:h={h},{video_filter}"
 
         # Pluralsight's delivery window is -12..-6 dBFS peak, and source narration arrives at
         # wildly different levels (hot generated takes measured -1.4 dBFS; other modules measured
@@ -2280,7 +2548,7 @@ def record(config):
             "-loglevel",
             "error",
             "-ss",
-            str(CAPTURE_OVERLAY_SETTLE_SECONDS),
+            f"{capture_lead_seconds:.3f}",
             "-i",
             str(raw_video_path),
             "-i",

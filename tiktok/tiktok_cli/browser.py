@@ -10,10 +10,9 @@ client therefore runs the request INSIDE the live tiktok.com page through
 `page.evaluate()` (see client.py), the same in-page-fetch pattern this repo
 already uses for OfferUp — not click-driven UI scraping.
 
-Login detection: TikTok's header renders a "Log in" nav control when signed
-out (React-hydrated, so the SSR HTML alone does not show it) and no such
-control once signed in. This mirrors the proven detection in
-`offerup_cli/browser.py`.
+Login detection: the page asks TikTok's passport account endpoint
+(`/passport/web/account/info/`) whether the session is live; an expired or
+signed-out session answers with `message: "error"` and a `data.error_code`.
 
 Sign-in flow (validated live via the harness headless Chromium):
 
@@ -31,33 +30,36 @@ Sign-in flow (validated live via the harness headless Chromium):
      message — all of which are detected and reported as explicit blockers.
 
 `AUTH_LOGIN_HANDLER` drives the email/password step headlessly through the
-CLI-owned harness browser (which renders TikTok fine), so `auth login` never
-opens the plain/headed Chrome that crashes this host. The one thing it cannot
-do is answer an out-of-band verification code or a CAPTCHA, so those are a
-hard stop with an explicit message rather than a silent failure.
+CLI-owned harness browser. The explicit `auth login --manual` option instead
+uses the shared engine's plain visible Chrome login in an isolated named
+profile. That route submits no stored credentials and lets the user complete
+verification in the same persistent profile before live session verification.
 """
 
 from __future__ import annotations
 
 import time
+from contextvars import ContextVar
 
 from cli_tools_shared.auth import BrowserAutomation, BrowserAutomationError
 from cli_tools_shared.config import read_cli_tool_secret, secret_manager_set_command
 
-# Truthy result means NOT authenticated. Polls for the signed-out "Log in" nav
-# control, and treats an unhydrated page as signed out as well.
+# Scoped to one CLI invocation; the cached Config never stores a login mode.
+manual_login_requested = ContextVar("tiktok_manual_login", default=False)
+
+# Truthy result means NOT authenticated. Asks TikTok's own passport account
+# endpoint instead of reading the header: a signed-out profile whose header
+# still hydrated passed the old "Log in" nav-control check. Confirmed live, a
+# signed-out/expired session answers ``{"message": "error", "data":
+# {"error_code": 13, "name": "session_expired", ...}}``.
 _LOGGED_OUT_JS = """async () => {
-    const isLoginControl = () => Array.from(
-        document.querySelectorAll('header a, header button, nav a, nav button')
-    ).some(el => /^(log ?in|sign ?in)$/i.test((el.textContent || '').trim()));
-    const isHydrated = () =>
-        document.querySelectorAll('header a, header button').length > 2;
-    for (let attempt = 0; attempt < 10; attempt++) {
-        if (isLoginControl()) { return true; }
-        if (isHydrated()) { return false; }
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+        const resp = await fetch('/passport/web/account/info/?aid=1988', { credentials: 'include' });
+        const payload = await resp.json();
+        return !resp.ok || payload.message === 'error' || !!(payload.data || {}).error_code;
+    } catch (e) {
+        return true;
     }
-    return true;
 }"""
 
 # The email/password form renders directly at this URL (validated live).
@@ -160,7 +162,8 @@ def _tiktok_login_handler(browser: "TiktokBrowser", page) -> None:
                 "TikTok presented a CAPTCHA / human-verification challenge "
                 "during login. This cannot be solved automatically and must "
                 "not be automated around. Re-run 'tiktok auth login "
-                "--credential-type browser_session' from an interactive shell "
+                "--profile <named-profile> --credential-type browser_session "
+                "--manual' from an interactive shell "
                 "and complete the challenge in the CLI-owned browser profile."
             )
         if issue == "rate_limit":
@@ -184,8 +187,9 @@ def _tiktok_login_handler(browser: "TiktokBrowser", page) -> None:
                 "TikTok requested a 6-digit verification code (two-factor "
                 "authentication). The code is delivered to Adam's phone/email, "
                 "not generated from a seed, so it cannot be completed "
-                "headlessly. Re-run 'tiktok auth login --credential-type "
-                "browser_session' from an interactive shell to enter the code."
+                "headlessly. Re-run 'tiktok auth login --profile <named-profile> "
+                "--credential-type browser_session --manual' from an interactive "
+                "shell to enter the code."
             )
     raise BrowserAutomationError(
         "TikTok login did not reach an authenticated state within "
@@ -201,9 +205,6 @@ class TiktokBrowser(BrowserAutomation):
     LOGIN_URL = "https://www.tiktok.com/login"
     AUTH_CHECK_URL = "https://www.tiktok.com/"
     AUTH_URL_PATTERN = r"/login"
-    # Polls for the control rather than reading the DOM once, so a slow nav
-    # render cannot report a cold profile as signed in, and an unhydrated page
-    # reports "not authenticated" instead of a false healthy session.
     AUTH_FAILURE_PAGE_JS = _LOGGED_OUT_JS
 
     # Fully non-interactive: the email/password form is submitted headlessly by
@@ -211,3 +212,18 @@ class TiktokBrowser(BrowserAutomation):
     # USERNAME/PASSWORD/SUBMIT selector constants are deliberately left unset
     # because that declarative path only runs on the crashing headed flow.
     AUTH_LOGIN_HANDLER = staticmethod(_tiktok_login_handler)
+
+
+class StudioPostingBrowser(TiktokBrowser):
+    """Studio publishing uses the shared engine and configured headless mode.
+
+    Native private publication persisted after browser restarts with the real
+    Chrome user agent and webdriver false (measured 2026-10-14).
+    """
+
+
+class ManualTiktokBrowser(TiktokBrowser):
+    """Opt-in plain Chrome login; shared code verifies and saves the session."""
+
+    AUTH_LOGIN_HANDLER = None
+    MANUAL_LOGIN = True

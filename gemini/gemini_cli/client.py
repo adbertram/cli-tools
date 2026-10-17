@@ -7,22 +7,23 @@ from pathlib import Path
 from google import genai
 from google.genai import types
 from google.genai import errors as genai_errors
+from cli_tools_shared.http_session import DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES
 
 from .config import get_config
 from .usage import record_usage
 from .file_types import resolve_upload_mime_type
 
-_RATE_LIMIT_DELAYS = [30, 60, 120, 240]
+_RETRY_DELAYS = [30, 60, 120, 240]
 _FILES_LIST_TIMEOUT_MS = 25_000
 _MODELS_LIST_TIMEOUT_MS = 25_000
 T = TypeVar("T")
 
 
-def _retry_on_rate_limit(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-    """Call fn with retry on HTTP 429 rate limit errors.
+def _retry_on_transient_api_error(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
+    """Call fn with retry on transient HTTP 429 and 5xx API errors.
 
     Retries with exponential backoff delays of 30s, 60s, 120s, 240s.
-    Only retries on 429 status codes; all other errors propagate immediately.
+    All other errors propagate immediately.
 
     Args:
         fn: Callable to invoke
@@ -32,16 +33,18 @@ def _retry_on_rate_limit(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         Return value of fn
 
     Raises:
-        Original exception after retries are exhausted, or immediately for non-429 errors
+        Original exception after retries are exhausted, or immediately for
+        non-retryable errors
     """
-    for attempt, delay in enumerate(_RATE_LIMIT_DELAYS):
+    for attempt, delay in enumerate(_RETRY_DELAYS):
         try:
             return fn(*args, **kwargs)
         except genai_errors.APIError as e:
-            if e.code != 429:
+            if e.code not in DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES:
                 raise
             print(
-                f"Rate limit hit, retrying in {delay}s... (attempt {attempt + 1}/{len(_RATE_LIMIT_DELAYS)})",
+                f"Gemini API returned HTTP {e.code}; retrying in {delay}s... "
+                f"(attempt {attempt + 1}/{len(_RETRY_DELAYS)})",
                 file=sys.stderr,
             )
             time.sleep(delay)
@@ -115,7 +118,7 @@ class GeminiClient:
             # Resolve an explicit mimetype so the Files API never fails on its
             # own mimetype auto-detection (e.g. "Unknown mime type" for .md).
             mime_type = resolve_upload_mime_type(file_path_obj)
-            uploaded_file = _retry_on_rate_limit(
+            uploaded_file = _retry_on_transient_api_error(
                 self.client.files.upload,
                 file=file_path,
                 config=types.UploadFileConfig(mime_type=mime_type),
@@ -140,7 +143,7 @@ class GeminiClient:
         """
         start_time = time.time()
         while time.time() - start_time < timeout:
-            file_obj = _retry_on_rate_limit(self.client.files.get, name=file_name)
+            file_obj = _retry_on_transient_api_error(self.client.files.get, name=file_name)
             if file_obj.state and file_obj.state.name == "ACTIVE":
                 return file_obj
             if file_obj.state and file_obj.state.name == "FAILED":
@@ -190,7 +193,7 @@ class GeminiClient:
             ClientError: If file not found
         """
         try:
-            return _retry_on_rate_limit(self.client.files.get, name=file_name)
+            return _retry_on_transient_api_error(self.client.files.get, name=file_name)
         except Exception as e:
             raise ClientError(f"Failed to get file: {e}")
 
@@ -205,7 +208,7 @@ class GeminiClient:
             ClientError: If deletion fails
         """
         try:
-            _retry_on_rate_limit(self.client.files.delete, name=file_name)
+            _retry_on_transient_api_error(self.client.files.delete, name=file_name)
         except Exception as e:
             raise ClientError(f"Failed to delete file: {e}")
 
@@ -265,7 +268,7 @@ class GeminiClient:
                     response_schema=response_schema
                 )
 
-            response = _retry_on_rate_limit(
+            response = _retry_on_transient_api_error(
                 self.client.models.generate_content,
                 model=model,
                 contents=contents,
@@ -354,7 +357,7 @@ class GeminiClient:
                 if fps is not None:
                     video_part.video_metadata = types.VideoMetadata(fps=fps)
 
-                response = _retry_on_rate_limit(
+                response = _retry_on_transient_api_error(
                     self.client.models.generate_content,
                     model=model,
                     contents=[
@@ -458,7 +461,7 @@ class GeminiClient:
                     )
             contents.append(prompt)
 
-            response = _retry_on_rate_limit(
+            response = _retry_on_transient_api_error(
                 self.client.models.generate_content,
                 model=model,
                 contents=contents,
@@ -501,7 +504,7 @@ class GeminiClient:
         """
         try:
             page_size = min(limit, 100)
-            pager = _retry_on_rate_limit(
+            pager = _retry_on_transient_api_error(
                 self.client.models.list,
                 config={
                     "page_size": page_size,

@@ -1,10 +1,14 @@
-"""TikTok transcript downloader using yt-dlp, plus the favorites (saved
-videos) client described in the module docstring below FavoritesClient."""
+"""TikTok transcript downloader using yt-dlp, plus the tiktok.com web client
+(favorites, own posted videos, delete) described above TikTokWebClient."""
 import subprocess
+from contextlib import contextmanager
 import time
 import json
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import quote, urlsplit, parse_qsl, urlencode
 
 from cli_tools_shared.http_session import (
     DEFAULT_REQUESTS_BASE_DELAY,
@@ -19,8 +23,14 @@ from .config import get_config
 
 
 class ClientError(Exception):
-    """Custom exception for TikTok CLI errors."""
-    pass
+    """Sanitized SDK failure; optional provider cooldown without message parsing."""
+    def __init__(self, message, *, code=None, category="unknown", status=None, retry_after_seconds=None):
+        super().__init__(message)
+        self.code = code
+        self.category = category
+        self.status = status
+        self.retry_after_seconds = retry_after_seconds
+        self.retry_after = retry_after_seconds
 
 
 class TiktokClient:
@@ -224,7 +234,7 @@ def get_client() -> TiktokClient:
 # automatically) with a clean ``HTTP 200`` and empty body — proving the route
 # and signing both work without any client-side signature code of our own,
 # and that the empty result is the server's private-endpoint gate, not a
-# signing failure. ``FavoritesClient`` therefore runs the exact same fetch
+# signing failure. ``TikTokWebClient`` therefore runs the exact same fetch
 # INSIDE the live tiktok.com page through ``page.evaluate()`` (the same
 # in-page-fetch pattern this repo already uses for OfferUp), carrying the
 # real browser's cookies via ``credentials: 'include'``, so once
@@ -243,28 +253,84 @@ def get_client() -> TiktokClient:
 # if the raw item happens to carry a ``collectTime`` key (TikTok's own naming
 # convention, mirroring ``createTime``), and is otherwise ``None`` rather than
 # guessed.
+#
+# Posted videos and delete
+# ------------------------
+# The Content Posting API cannot list or delete the caller's videos: Display
+# API ``video.list`` returns only public posts, a SELF_ONLY Direct Post never
+# gets a ``publicaly_available_post_id``, and no TikTok scope grants delete.
+# TikTok's own web app does both through the same signed in-page ``/api/*``
+# surface used for favorites, so ``TikTokWebClient`` reuses it:
+#
+# - Own posts: ``GET /api/post/item_list/?secUid=...`` — the call TikTok's
+#   profile page makes (``userPostList`` in its webapp bundle). ``secUid``
+#   comes from the profile page's ``webapp.user-detail`` rehydration data
+#   (``userInfo.user.secUid``), confirmed live.
+# - Delete: ``POST /api/aweme/delete/?aweme_id=...`` with ``tt_csrf_token``
+#   in the query and the ``tt-csrf-token`` header, both set to
+#   ``webapp.app-context.csrfToken`` — exactly how the webapp's
+#   ``postVideoDelete`` issues it. The endpoint answers
+#   ``{"status_code": 0}`` on success and, confirmed live,
+#   ``{"status_code": 8, "status_msg": "Login expired"}`` without a session.
+# - Who can watch: ``POST /api/aweme/modify/visibility/?aweme_id=...&type=...``
+#   with the same csrf query/header pair, exactly how the post page's
+#   ``postModifyVisibility`` issues it (live-served webapp bundle, 2026-10-14).
+#   Its ``type`` enum is Public="1", Private="2", Friends="3", the same codes
+#   Studio's item list reports as ``visibility`` (ITEM_VISIBILITY_TYPE_PUBLIC=1,
+#   _PRIVATE=2, _FRIEND=3). A live type=1 call on a public own post answered
+#   ``{"status_code": 0}``; success is only claimed after a Studio readback.
 
-ITEM_LIST_PATH = "/api/user/collect/item_list/"
+FAVORITES_PATH = "/api/user/collect/item_list/?aid=1988"
+POSTS_PATH = "/api/post/item_list/?aid=1988"
+DELETE_PATH = "/api/aweme/delete/?aid=1988"
+VISIBILITY_PATH = "/api/aweme/modify/visibility/?aid=1988"
+VISIBILITY_CODES = {"public": 1, "private": 2, "friends": 3}
+ACCOUNT_INFO_PATH = "/passport/web/account/info/?aid=1988"
+ACCOUNT_INFO_ORIGIN = "https://www.tiktok.com"
 
 # Page size TikTok's own web app requests, and the paging ceiling this client
 # walks before giving up on reaching --limit.
-FAVORITES_PAGE_SIZE = 30
-FAVORITES_MAX_PAGES = 50
+ITEM_PAGE_SIZE = 30
+ITEM_MAX_PAGES = 50
 
-_FAVORITES_FETCH_JS = """async (opts) => {
-    const resp = await fetch(opts.path, { credentials: 'include' });
-    const text = await resp.text();
+_LOGIN_HINT = (
+    "Run 'tiktok auth login --credential-type browser_session' "
+    "(or '--force' to refresh a stale session) and retry."
+)
+
+_WEB_FETCH_JS = """async (opts) => {
+    const init = { method: opts.method, credentials: 'include', headers: {} };
+    let path = opts.path;
+    if (opts.csrf) {
+        const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+        const scope = el ? (JSON.parse(el.textContent).__DEFAULT_SCOPE__ || {}) : {};
+        const token = (scope['webapp.app-context'] || {}).csrfToken;
+        if (!token) {
+            return { status: 0, statusText: 'page has no webapp.app-context csrfToken', body: '' };
+        }
+        path += '&tt_csrf_token=' + encodeURIComponent(token);
+        init.headers['tt-csrf-token'] = token;
+    }
+    const resp = await fetch(path, init);
     return {
         status: resp.status,
         statusText: resp.statusText,
         retryAfter: resp.headers.get('retry-after'),
-        body: text,
+        body: await resp.text(),
     };
 }"""
 
+_SEC_UID_JS = """() => {
+    const el = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+    if (!el) return null;
+    const detail = (JSON.parse(el.textContent).__DEFAULT_SCOPE__ || {})['webapp.user-detail'] || {};
+    const user = (detail.userInfo || {}).user;
+    if (detail.statusCode === 10221 && !user) return { error: 'account_not_found' };
+    return (user || {}).secUid || null;
+}"""
 
-def normalize_favorite(raw: dict) -> Dict:
-    """Normalize one TikTok aweme item into the favorites output contract."""
+
+def _aweme_record(raw: dict) -> Dict:
     video_id = str(raw.get("id") or "")
     author = raw.get("author") or raw.get("authorInfo") or {}
     author_id = author.get("uniqueId") or "_"
@@ -273,8 +339,17 @@ def normalize_favorite(raw: dict) -> Dict:
         "url": f"https://www.tiktok.com/@{author_id}/video/{video_id}",
         "caption": raw.get("desc"),
         "author": author.get("uniqueId"),
-        "saved_at": raw.get("collectTime"),
     }
+
+
+def normalize_favorite(raw: dict) -> Dict:
+    """Normalize one TikTok aweme item into the favorites output contract."""
+    return {**_aweme_record(raw), "saved_at": raw.get("collectTime")}
+
+
+def normalize_posted_video(raw: dict) -> Dict:
+    """Normalize one TikTok aweme item into the videos list output contract."""
+    return {**_aweme_record(raw), "created_at": raw.get("createTime")}
 
 
 def favorite_id_to_url(item: str) -> str:
@@ -311,8 +386,46 @@ def favorite_from_video_metadata(metadata: dict) -> Dict:
     }
 
 
-class FavoritesClient:
-    """Drives a live tiktok.com page and calls its own favorites feed API."""
+def normalize_account_identity(payload: dict) -> Dict:
+    """Whitelist observed passport identity fields; reject inconsistent IDs."""
+    malformed = "TikTok account identity response is malformed; identity was not verified."
+    if not isinstance(payload, dict):
+        raise ClientError(malformed)
+    data = payload.get("data")
+    if payload.get("message") == "error":
+        raise ClientError("TikTok account session is not authenticated. " + _LOGIN_HINT,
+                          code="account_not_authenticated", category="auth")
+    if payload.get("message") != "success" or not isinstance(data, dict):
+        raise ClientError(malformed)
+    if "error_code" in data:
+        if type(data["error_code"]) is not int:
+            raise ClientError(malformed)
+        if data["error_code"] != 0:
+            raise ClientError("TikTok account session is not authenticated. " + _LOGIN_HINT,
+                          code="account_not_authenticated", category="auth")
+    account_id = data.get("user_id_str")
+    numeric_id = data.get("user_id")
+    username = data.get("username")
+    if (
+        not isinstance(account_id, str)
+        or not re.fullmatch(r"[1-9][0-9]{0,63}", account_id)
+        or type(numeric_id) is not int
+        or str(numeric_id) != account_id
+        or not isinstance(username, str)
+        or not re.fullmatch(r"[A-Za-z0-9_.]{1,256}", username)
+        or not any(char.isalnum() or char == "_" for char in username)
+    ):
+        raise ClientError(malformed)
+    return {"account_id": account_id, "username": username}
+
+
+def _validate_feed_limit(limit):
+    if type(limit) is not int or not 1 <= limit <= ITEM_PAGE_SIZE * ITEM_MAX_PAGES:
+        raise ClientError("Feed limit must be 1–1500.", code="invalid_feed_limit", category="validation")
+
+
+class TikTokWebClient:
+    """Drives a live tiktok.com page and calls its own signed web API."""
 
     def __init__(
         self,
@@ -321,6 +434,7 @@ class FavoritesClient:
         base_delay: float = DEFAULT_REQUESTS_BASE_DELAY,
         max_delay: float = DEFAULT_REQUESTS_MAX_DELAY,
         jitter: float = DEFAULT_REQUESTS_JITTER,
+        browser=None,
     ):
         self.config = config or get_config()
         self._retry_policy = RequestsRetryPolicy(
@@ -330,7 +444,7 @@ class FavoritesClient:
             jitter=jitter,
             retryable_status_codes=DEFAULT_REQUESTS_RETRYABLE_STATUS_CODES,
         )
-        self._browser = None
+        self._browser = browser
 
     def _get_browser(self):
         if self._browser is None:
@@ -342,118 +456,429 @@ class FavoritesClient:
             self._browser.close()
             self._browser = None
 
-    @property
-    def _home_url(self) -> str:
-        return f"{self.config.base_url.rstrip('/')}/"
+    def _page(self, path: str = "/"):
+        return self._get_browser().get_page(f"{self.config.base_url.rstrip('/')}{path}")
 
     def _retry_after_seconds(self, raw: Optional[str]) -> Optional[float]:
-        if raw is None:
-            return None
-        try:
-            return float(raw)
-        except (TypeError, ValueError):
-            return None
+        from .studio import retry_after_seconds
+        return retry_after_seconds(raw)
 
-    def _fetch_page(self, cursor: int, count: int) -> dict:
-        """Run the in-page GET for one page of favorites, with retry."""
-        page = self._get_browser().get_page(self._home_url)
+    def _fetch_json(self, page, path: str, *, method: str = "GET", csrf: bool = False,
+                    check_status: bool = True) -> dict:
+        """Run one in-page request with retry and return its JSON payload."""
         policy = self._retry_policy
         last_exception: Optional[Exception] = None
         last_status = None
-        path = f"{ITEM_LIST_PATH}?aid=1988&count={count}&cursor={cursor}"
 
         for attempt in range(policy.max_retries + 1):
             try:
-                result = page.evaluate(_FAVORITES_FETCH_JS, {"path": path})
+                result = page.evaluate(
+                    _WEB_FETCH_JS, {"path": path, "method": method, "csrf": csrf}
+                )
             except Exception as exc:  # browser-harness / network failure
                 last_exception = exc
                 if attempt < policy.max_retries:
                     time.sleep(policy.calculate_delay(attempt))
                     continue
                 raise ClientError(
-                    f"TikTok favorites fetch failed after {attempt + 1} attempts: {exc}"
+                    f"TikTok web request {path} failed after {attempt + 1} attempts: {exc}",
+                    code="tiktok_transport_failed", category="transient", status=0
                 ) from exc
 
             status = int(result.get("status") or 0)
             last_status = status
             body = str(result.get("body") or "")
-            if status in policy.retryable_status_codes and attempt < policy.max_retries:
+            provider_delay = self._retry_after_seconds(result.get("retryAfter"))
+            if (status in policy.retryable_status_codes and attempt < policy.max_retries
+                    and (provider_delay is None or provider_delay <= policy.max_delay)):
                 time.sleep(
                     policy.calculate_delay(
-                        attempt, self._retry_after_seconds(result.get("retryAfter"))
+                        attempt, provider_delay
                     )
                 )
                 continue
             if status != 200:
                 raise ClientError(
-                    f"TikTok favorites fetch HTTP {status} "
-                    f"{result.get('statusText', '')}: {body[:300]}"
+                    f"TikTok web request {path} HTTP {status} "
+                    f"{result.get('statusText', '')}: {body[:300]}",
+                    code=f"tiktok_http_{status}", category="rate_limit" if status == 429 else "auth" if status in (401,403) else "transient" if status >= 500 or status == 0 else "upstream",
+                    status=status, retry_after_seconds=provider_delay
                 )
             if not body:
                 raise ClientError(
-                    "TikTok favorites fetch returned an empty response. "
-                    "This endpoint only returns data for the logged-in account's "
-                    "own saved videos — run "
-                    "'tiktok auth login --credential-type browser_session' "
-                    "(or '--force' to refresh a stale session) and retry."
+                    f"TikTok web request {path} returned an empty response. "
+                    "This endpoint only returns data for the logged-in account. "
+                    + _LOGIN_HINT,
+                    code="tiktok_empty_response", category="provider", status=status
                 )
             try:
                 payload = json.loads(body)
             except (ValueError, TypeError) as exc:
                 raise ClientError(
-                    f"TikTok favorites fetch returned a non-JSON body: {exc}"
+                    f"TikTok web request {path} returned a non-JSON body: {exc}",
+                    code="tiktok_non_json_response", category="provider", status=status
                 ) from exc
+            if not isinstance(payload, dict):
+                raise ClientError("TikTok web response is not a JSON object.", code="tiktok_malformed_response", category="provider", status=status)
             status_code = payload.get("statusCode", payload.get("status_code"))
-            if status_code not in (0, None):
+            if check_status and status_code not in (0, None):
                 raise ClientError(
-                    f"TikTok favorites fetch returned statusCode {status_code}: "
-                    f"{payload.get('statusMsg') or payload.get('status_msg')}"
+                    f"TikTok web request {path} returned status code {status_code}: "
+                    f"{payload.get('statusMsg') or payload.get('status_msg')}",
+                    code=f"tiktok_provider_{status_code}" if type(status_code) is int else "tiktok_provider_status",
+                    category="provider", status=status
                 )
             return payload
 
         raise ClientError(
-            f"TikTok favorites fetch failed after retries "
+            f"TikTok web request {path} failed after retries "
             f"(last status={last_status}): {last_exception}"
         )
 
-    def list_favorites(self, limit: int = 100) -> List[Dict]:
-        """List the logged-in account's saved (favorited) TikTok videos.
+    @contextmanager
+    def _studio_session(self, username, expected_account_id):
+        from uuid import uuid4
+        from .studio import (CAPTURE_JS, READY_JS, CLEANUP_JS, STUDIO_CONTENT_URL,
+                             STUDIO_PAGE_SIZE, STUDIO_ITEMS_PATH, StudioReader, StudioContractError)
+        identity = self.get_account(expected_username=username, expected_account_id=expected_account_id)
+        page = self._get_browser().get_page(STUDIO_CONTENT_URL)
+        key = "__tiktok_cli_read_" + uuid4().hex
+        try:
+            control = page.get_by_role("button", name="Views", exact=True)
+            for _ in range(60):
+                if control.count() == 1:
+                    break
+                page.wait_for_timeout(250)
+            else:
+                raise StudioContractError("TikTok Studio content control was unavailable; result is inconclusive.")
+            from .studio_inventory import canonical
+            actor = {field: identity[field] for field in ("account_id", "username", "profile")}
+            if len(canonical(actor)) > 4096:
+                raise StudioContractError("Studio inventory actor binding exceeds its 4 KiB limit.")
+            page.evaluate(CAPTURE_JS, {"key": key, "path": STUDIO_ITEMS_PATH, "page_size": STUDIO_PAGE_SIZE})
+            control.click()
+            for _ in range(60):
+                if page.evaluate(READY_JS, key):
+                    break
+                page.wait_for_timeout(250)
+            else:
+                raise StudioContractError("TikTok Studio native content read was unavailable; result is inconclusive.")
+            yield StudioReader(page, key, identity)
+            checked = self.get_account(expected_username=identity["username"], expected_account_id=identity["account_id"])
+            if any(checked.get(field) != identity[field] for field in ("account_id", "username", "profile")):
+                raise StudioContractError("TikTok Studio owner or profile changed during read; result is inconclusive.")
+        except ClientError:
+            raise
+        except StudioContractError as error:
+            raise ClientError(str(error), code=error.code, category=error.category, status=error.status,
+                              retry_after_seconds=error.retry_after_seconds) from None
+        except Exception:
+            raise ClientError("TikTok Studio content read failed; result is inconclusive.",
+                              code="studio_transport_failed", category="transient") from None
+        finally:
+            try:
+                page.evaluate(CLEANUP_JS, key)
+            except Exception:
+                pass
 
-        ``limit`` drives cursor pagination against TikTok's own page size
-        rather than slicing a client-side list.
+    def _studio_read(self, username: str, *, limit: int = 100, video_id: Optional[str] = None, expected_account_id: Optional[str] = None) -> List[Dict]:
+        """Read only observed Studio content for the verified session owner."""
+        from .studio import MAX_STUDIO_ITEMS, MAX_STUDIO_PAGES, StudioContractError
+        if type(limit) is not int or not 1 <= limit <= MAX_STUDIO_ITEMS:
+            raise ClientError(f"Studio --limit must be between 1 and {MAX_STUDIO_ITEMS}.")
+        if video_id is not None and not re.fullmatch(r"[1-9][0-9]{0,63}", video_id):
+            raise ClientError("Studio video ID must be a positive numeric string.")
+        missing = False
+        with self._studio_session(username, expected_account_id) as reader:
+            records, seen, cursor = [], set(), 0
+            for _ in range(MAX_STUDIO_PAGES):
+                items, more, next_cursor = reader.read_page(cursor)
+                for record in items:
+                    if record["id"] in seen:
+                        raise StudioContractError("TikTok Studio repeated a video; pagination is inconclusive.")
+                    seen.add(record["id"])
+                    records.append(record)
+                    if video_id == record["id"]:
+                        return [record]
+                    if video_id is None and len(records) >= limit:
+                        return records[:limit]
+                if not more:
+                    if video_id is not None:
+                        missing = True
+                        break
+                    return records
+                cursor = next_cursor
+                if len(records) >= limit:
+                    break
+            if not missing:
+                raise ClientError("studio_lookup_inconclusive: bounded content scan did not establish absence.")
+        raise ClientError("studio_video_not_found: the complete observed own-account feed did not contain that ID.")
+
+    def get_studio_videos(self, username: str, video_ids: List[str], *, expected_account_id: str,
+                          continuation: Optional[Dict] = None, max_pages: int = 20) -> Dict:
+        """Batch exact IDs through one bounded own-account Studio scan.
+
+        Caller retains prior records and the public continuation. Unresolved IDs
+        remain unknown, including when the provider ends this observation pass.
         """
-        favorites: List[Dict] = []
-        seen = set()
-        cursor = 0
-        pages = 0
+        from .studio_inventory import validate_request, batch_read
+        from .studio import StudioContractError
+        try:
+            request = validate_request(video_ids, continuation, max_pages, expected_account_id)
+            if request["continuation"] is not None and request["continuation"]["actor"]["username"] != username:
+                raise StudioContractError("Studio inventory continuation username changed.")
+        except StudioContractError as error:
+            raise ClientError(str(error), code=error.code, category="invalid_request", status=error.status,
+                              retry_after_seconds=error.retry_after_seconds) from None
+        with self._studio_session(username, expected_account_id) as reader:
+            return batch_read(reader, request)
 
-        while len(favorites) < limit and pages < FAVORITES_MAX_PAGES:
-            page_size = min(FAVORITES_PAGE_SIZE, max(limit - len(favorites), 1))
-            payload = self._fetch_page(cursor, page_size)
-            for item in payload.get("itemList") or []:
-                video_id = item.get("id")
-                if not video_id or video_id in seen:
-                    continue
-                seen.add(video_id)
-                favorites.append(normalize_favorite(item))
-            pages += 1
-            if not payload.get("hasMore"):
-                break
+    def check_account(self, username: str, *, limit: int = 20, expected_account_id: Optional[str] = None,
+                      video_ids: Optional[List[str]] = None) -> Dict:
+        """Read each recent own post's moderation penalty; read-only.
+
+        ``video_ids`` are also looked up: one missing from the complete Studio
+        feed is reported with ``in_studio_feed: false``, never guessed deleted.
+        """
+        from .account_check import PENALTY_PATH, normalize_penalty
+        from .studio import MAX_STUDIO_ITEMS, MAX_STUDIO_PAGES
+        if type(limit) is not int or not 1 <= limit <= MAX_STUDIO_ITEMS:
+            raise ClientError(f"--limit must be between 1 and {MAX_STUDIO_ITEMS}.")
+        wanted = list(dict.fromkeys(video_ids or []))
+        if len(wanted) > 100 or any(not re.fullmatch(r"[1-9][0-9]{0,63}", value) for value in wanted):
+            raise ClientError("--video-id takes up to 100 positive numeric IDs.")
+        with self._studio_session(username, expected_account_id) as reader:
+            found, cursor, complete = {}, 0, False
+            for _ in range(MAX_STUDIO_PAGES):
+                items, more, cursor = reader.read_page(cursor)
+                found.update((item["id"], item) for item in items)
+                if not more:
+                    complete = True
+                    break
+                if len(found) >= limit and all(value in found for value in wanted):
+                    break
+            recent = list(found)[:limit]
+            posts = []
+            for video_id in recent + [value for value in wanted if value not in recent]:
+                item = found.get(video_id)
+                post = {"id": video_id, "in_studio_feed": True if item else False if complete else None}
+                for field in ("url", "caption", "posted_at", "status", "visibility", "in_review"):
+                    post[field] = item[field] if item else None
+                post.update(normalize_penalty(self._fetch_json(
+                    reader.page, f"{PENALTY_PATH}?aid=1988&vid={video_id}", check_status=False)))
+                posts.append(post)
+            identity = reader.identity
+        return {
+            "account": {**{field: identity[field] for field in ("account_id", "username", "profile")},
+                        "standing": None,
+                        "standing_note": "TikTok web exposes no Account check; only per-post penalties are readable."},
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "feed_complete": complete,
+            "summary": {"posts": len(posts),
+                        **{state: sum(post["eligibility"] == state for post in posts) for state in ("restricted", "no_penalty")},
+                        "unknown": sum(post["eligibility"] is None for post in posts),
+                        "missing_from_feed": sum(post["in_studio_feed"] is False for post in posts)},
+            "posts": posts,
+            "provenance": "https://www.tiktok.com" + PENALTY_PATH,
+        }
+
+    def list_studio_videos(self, username: str, limit: int = 100, expected_account_id: Optional[str] = None) -> List[Dict]:
+        return self._studio_read(username, limit=limit, expected_account_id=expected_account_id)
+
+    def get_studio_watch_metrics(self, username: str, video_id: str, *, expected_account_id: str) -> Dict:
+        """Read exact owned-post watch time and retention; missing data remains null."""
+        from .studio_watch import read
+        return read(self, username, video_id, expected_account_id)
+
+    def get_studio_watch_metrics_many(self, username: str, video_ids: List[str], *, expected_account_id: str) -> Dict:
+        """Read many owned posts' watch metrics in one browser page; per-post failures land in ``errors``."""
+        from .studio_watch import read_many
+        return read_many(self, username, video_ids, expected_account_id)
+
+    def get_studio_video(self, username: str, video_id: str, expected_account_id: Optional[str] = None) -> Dict:
+        from .studio import MAX_STUDIO_ITEMS
+        return self._studio_read(username, limit=MAX_STUDIO_ITEMS, video_id=video_id, expected_account_id=expected_account_id)[0]
+
+    def _list_items(self, page, path: str, normalize, limit: int, initial_payload=None, expected_author=None) -> List[Dict]:
+        """Read a bounded native feed; reject missing data and stalled pagination."""
+        _validate_feed_limit(limit)
+        url = urlsplit(path)
+        params = dict(parse_qsl(url.query))
+        for key in ("msToken", "X-Bogus", "X-Gnarly", "X-Dynosaur"):
+            params.pop(key, None)
+        items, seen, cursors = [], set(), set()
+        cursor = "0"
+        for page_index in range(ITEM_MAX_PAGES):
+            params.update(count=str(min(ITEM_PAGE_SIZE, limit - len(items))), cursor=cursor)
+            try:
+                payload = initial_payload if page_index == 0 and initial_payload is not None else self._fetch_json(page, url.path + "?" + urlencode(params))
+            except ClientError as exc:
+                raise ClientError("TikTok native feed request failed.", code=exc.code, category=exc.category, status=exc.status, retry_after_seconds=exc.retry_after_seconds) from None
+            more = payload.get("hasMore")
+            raw = payload.get("itemList")
+            if raw is None and more is False and type(payload.get("total")) is int and payload["total"] == 0:
+                raw = []  # Observed native empty Favorites response explicitly carries total=0.
+            if not isinstance(raw, list) or type(more) not in (bool, int) or more not in (0, 1):
+                raise ClientError("TikTok feed response is malformed; absence was not verified.", code="feed_malformed", category="provider")
+            new_count = 0
+            for item in raw:
+                if not isinstance(item, dict) or not item.get("id"):
+                    raise ClientError("TikTok feed item is malformed.", code="feed_malformed", category="provider")
+                author = item.get("author") or item.get("authorInfo")
+                if not isinstance(author, dict) or not isinstance(author.get("uniqueId"), str) or not author["uniqueId"]:
+                    raise ClientError("TikTok feed author is malformed.", code="feed_malformed", category="provider")
+                record = normalize(item)
+                if expected_author and record["author"].casefold() != expected_author.casefold():
+                    raise ClientError("TikTok feed returned another profile's video.", code="feed_identity_mismatch", category="provider")
+                video_id = record["id"]
+                if video_id not in seen:
+                    seen.add(video_id); items.append(record); new_count += 1
+            if len(items) >= limit or not more:
+                return items[:limit]
             next_cursor = payload.get("cursor")
-            if next_cursor is None or str(next_cursor) == str(cursor):
-                break
-            cursor = next_cursor
+            if not isinstance(next_cursor, (str, int)) or isinstance(next_cursor, bool) or not str(next_cursor).isdigit() or str(next_cursor) == cursor or str(next_cursor) in cursors or not new_count:
+                raise ClientError("TikTok feed pagination did not advance.", code="feed_pagination_stalled", category="provider")
+            cursors.add(cursor); cursor = str(next_cursor)
+        raise ClientError("TikTok feed exceeded its pagination bound.", code="feed_incomplete", category="provider")
 
-        return favorites[:limit]
+    def get_account(self, expected_username: Optional[str] = None, expected_account_id: Optional[str] = None) -> Dict:
+        """Read verified current identity without exporting passport secrets.
+
+        The shared in-page fetch returns response TEXT, parsed by Python, so
+        64-bit user_id values never pass through a JavaScript Number.
+        """
+        if expected_username is not None:
+            expected_username = expected_username.strip().removeprefix("@")
+            if not re.fullmatch(r"[A-Za-z0-9_.]{1,256}", expected_username):
+                raise ClientError("--expected-username must be a nonempty TikTok handle.")
+        if expected_account_id is not None and not re.fullmatch(r"[1-9][0-9]{0,63}", expected_account_id):
+            raise ClientError("--expected-account-id must be a positive numeric ID.")
+        try:
+            page = self._get_browser().get_page(ACCOUNT_INFO_ORIGIN + "/")
+            payload = self._fetch_json(page, ACCOUNT_INFO_PATH)
+        except ClientError as error:
+            # Keep only structured provider metadata; never passport bodies.
+            raise ClientError("TikTok account identity request failed; identity was not verified.",
+                              code=error.code, category=error.category, status=error.status,
+                              retry_after_seconds=error.retry_after_seconds) from None
+        except Exception:
+            raise ClientError("TikTok account identity request failed; identity was not verified.",
+                              code="account_transport_failed", category="transient") from None
+        identity = normalize_account_identity(payload)
+        if expected_username is not None and identity["username"].casefold() != expected_username.casefold():
+            raise ClientError("TikTok account identity mismatch: username does not match --expected-username.")
+        if expected_account_id is not None and identity["account_id"] != expected_account_id:
+            raise ClientError("TikTok account identity mismatch: account ID does not match --expected-account-id.")
+        return {
+            **identity,
+            "profile": self.config.get_active_profile_name(),
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "provenance": ACCOUNT_INFO_ORIGIN + ACCOUNT_INFO_PATH,
+        }
+
+    def search_hashtag_videos(self, hashtag: str, *, limit: int = 30, max_pages: int = 2) -> List[Dict]:
+        """Read a bounded public-video sample matching one exact hashtag."""
+        from .search import search_hashtag_videos
+        return search_hashtag_videos(self, hashtag, limit=limit, max_pages=max_pages)
+
+    def list_favorites(self, limit: int = 100) -> List[Dict]:
+        """Read the verified session owner's native Favorites feed."""
+        from .native import observe_get
+        _validate_feed_limit(limit)
+        actor = self.get_account()
+        def navigate(page):
+            page.goto(self.config.base_url.rstrip('/') + '/@' + quote(actor['username'], safe=''))
+            for _ in range(20):
+                ready = page.evaluate("""() => {
+                    const tab = Array.from(document.querySelectorAll('[role=tab]')).find(el => el.innerText === 'Favorites');
+                    if (!tab) return false;
+                    performance.clearResourceTimings(); tab.click(); return true;
+                }""")
+                if ready:
+                    return
+                time.sleep(.25)
+            raise ClientError("TikTok native Favorites tab is unavailable.", code="favorites_unavailable", category="provider")
+        page, payload, native_url = observe_get(self, urlsplit(FAVORITES_PATH).path, navigate)
+        url = urlsplit(native_url)
+        if url.hostname != 'www.tiktok.com' or url.path != urlsplit(FAVORITES_PATH).path:
+            raise ClientError("TikTok Favorites request origin is invalid.", code="feed_malformed", category="provider")
+        return self._list_items(page, native_url, normalize_favorite, limit, initial_payload=payload)
+
+    def list_posted_videos(self, username: str, limit: int = 100) -> List[Dict]:
+        """Read a public profile's native feed; provider failure is never absence."""
+        from .native import observe_get
+        _validate_feed_limit(limit)
+        handle = (username or "").strip().lstrip("@")
+        if not re.fullmatch(r'[A-Za-z0-9_.]{1,256}', handle):
+            raise ClientError("A valid TikTok username is required.")
+        sec_uid = None
+        def navigate(page):
+            nonlocal sec_uid
+            page.goto(self.config.base_url.rstrip('/') + '/@' + quote(handle, safe=''))
+            sec_uid = page.evaluate(_SEC_UID_JS)
+            if isinstance(sec_uid, dict) and sec_uid.get('error') == 'account_not_found':
+                raise ClientError(f"account_not_found: TikTok profile @{handle} was not found.")
+            if not isinstance(sec_uid, str) or not sec_uid:
+                raise ClientError("TikTok profile did not expose its native secUid.", code="feed_identity_unavailable", category="provider")
+        page, payload, native_url = observe_get(self, urlsplit(POSTS_PATH).path, navigate)
+        url = urlsplit(native_url)
+        if url.hostname != 'www.tiktok.com' or url.path != urlsplit(POSTS_PATH).path or dict(parse_qsl(url.query)).get('secUid') != sec_uid:
+            raise ClientError("TikTok post request does not match the requested profile.", code="feed_identity_mismatch", category="provider")
+        return self._list_items(page, native_url, normalize_posted_video, limit, initial_payload=payload, expected_author=handle)
+
+    def get_posted_video(self, username: str, video_id: str) -> Dict:
+        """Find one of a profile's posted videos by id."""
+        for video in self.list_posted_videos(username, limit=ITEM_PAGE_SIZE * ITEM_MAX_PAGES):
+            if video["id"] == str(video_id):
+                return video
+        raise ClientError(f"Video {video_id} not found in @{username.lstrip('@')}'s bounded post scan.", code="feed_lookup_inconclusive", category="provider")
+
+    def delete_video(self, video_id: str) -> Dict:
+        """Delete one of the logged-in account's videos."""
+        value = str(video_id or "").strip()
+        if not value.isdigit():
+            raise ClientError(f"TikTok video id must be numeric, got {video_id!r}.")
+        self._fetch_json(
+            self._page(),
+            f"{DELETE_PATH}&aweme_id={value}",
+            method="POST",
+            csrf=True,
+        )
+        return {"video_id": value, "deleted": True}
+
+    def set_video_privacy(self, username: str, video_id: str, setting: str, *, expected_account_id: str) -> Dict:
+        """Set who can watch one own post, then prove it with an exact Studio readback."""
+        code = VISIBILITY_CODES.get(setting)
+        if code is None:
+            raise ClientError(f"--to must be one of: {', '.join(VISIBILITY_CODES)}.", code="invalid_privacy", category="validation")
+        if expected_account_id is None:
+            raise ClientError("--expected-account-id is required to change privacy.")
+        before = self.get_studio_video(username, video_id, expected_account_id=expected_account_id)
+        page = self._page(f"/@{quote(before['author'], safe='')}/video/{video_id}")
+        self._fetch_json(page, f"{VISIBILITY_PATH}&aweme_id={video_id}&type={code}", method="POST", csrf=True)
+        after = self.get_studio_video(username, video_id, expected_account_id=expected_account_id)
+        if after["visibility"] != code:
+            raise ClientError(
+                f"privacy_unconfirmed: TikTok accepted the request, but Studio readback shows visibility "
+                f"{after['visibility']!r}, not {code} ({setting}).",
+                code="privacy_unconfirmed", category="provider")
+        return {
+            "id": after["id"], "url": after["url"], "account_id": after["account_id"], "profile": after["profile"],
+            "requested": setting, "requested_visibility": code,
+            "previous_visibility": before["visibility"], "visibility": after["visibility"],
+            "changed": before["visibility"] != after["visibility"],
+            "observed_at": after["observed_at"],
+            "endpoint": ACCOUNT_INFO_ORIGIN + urlsplit(VISIBILITY_PATH).path, "provenance": after["provenance"],
+        }
 
 
-# Module-level favorites client instance - singleton pattern
-_favorites_client: Optional[FavoritesClient] = None
+# Module-level web client instance - singleton pattern
+_web_client: Optional[TikTokWebClient] = None
 
 
-def get_favorites_client() -> FavoritesClient:
-    """Get or create the global favorites client instance."""
-    global _favorites_client
-    if _favorites_client is None:
-        _favorites_client = FavoritesClient()
-    return _favorites_client
+def get_web_client() -> TikTokWebClient:
+    """Get or create the global TikTok web client instance."""
+    global _web_client
+    if _web_client is None:
+        _web_client = TikTokWebClient()
+    return _web_client

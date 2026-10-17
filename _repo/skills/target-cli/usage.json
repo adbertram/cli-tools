@@ -8,7 +8,7 @@
       "options": [],
       "commands": {
         "login": {
-          "help": "Configure authentication credentials.",
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
           "arguments": [],
           "options": [
             {
@@ -23,7 +23,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -73,7 +74,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -93,7 +95,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -106,7 +109,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -147,7 +151,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -172,14 +177,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -197,8 +204,21 @@
             }
           }
         },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
+        },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
           "options": [
             {
@@ -213,7 +233,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -226,14 +247,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -252,9 +275,16 @@
       "options": [],
       "commands": {
         "clear": {
-          "help": "Remove all cached responses.",
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -264,7 +294,7 @@
       "options": [],
       "commands": {
         "add": {
-          "help": "Add an item to the cart.",
+          "help": "Add an item to the cart (defaults to store pickup).",
           "arguments": [
             {
               "name": "item_id",
@@ -285,7 +315,7 @@
           ]
         },
         "checkout": {
-          "help": "Review checkout (dry run) or place the order with --yes; --card selects a saved card pointer.",
+          "help": "Review checkout (dry run) or place the order with --yes. Fulfillment (pickup/shipping) is chosen per item at 'cart add --method'. --card selects a saved card pointer at checkout; if it needs a CVV you're prompted securely at that moment (or it uses a stored CVV). Pickup contact falls back to the profile default ('pickup set') when the flags are omitted.",
           "arguments": [],
           "options": [
             {
@@ -293,7 +323,8 @@
               "type": "bool",
               "required": false,
               "help": "Actually place the order (spends money). Omit for a dry run",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--card",
@@ -324,7 +355,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             }
           ]
         },
@@ -337,7 +369,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -383,7 +416,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -418,7 +452,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -449,7 +484,7 @@
       "options": [],
       "commands": {
         "cancel": {
-          "help": "Cancel all items of an order (only works while it's still cancellable).",
+          "help": "Cancel all items of an order (only works while it's still cancellable). --cancel-reason must match one of Target's reasons (a unique partial is fine): Chose wrong store | Used wrong payment method | Ordered it somewhere else | Needed it sooner | Ordered wrong item | Purchased it at another Target store | Wanted the item shipped | No longer want the item | Couldn't pick up in time | Store requested I cancel it | Other - Please describe",
           "arguments": [
             {
               "name": "order_number",
@@ -472,7 +507,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             }
           ]
         },
@@ -492,7 +528,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -513,7 +550,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         }
@@ -525,7 +563,7 @@
       "options": [],
       "commands": {
         "add": {
-          "help": "Save a selectable pointer to a Target wallet card.",
+          "help": "Save a selectable pointer to a Target wallet card. Default: opens Target's add-card page (headed) so you enter and save a NEW card yourself; the CLI captures only a pointer (name + last4 + brand), never the card number or CVV. With --last4, points at a card already in your wallet without opening the page. Then 'cart checkout --card <name>' selects it.",
           "arguments": [],
           "options": [
             {
@@ -545,12 +583,13 @@
               "name": "--no-default",
               "type": "bool",
               "required": false,
-              "help": "Do not mark this pointer as the default"
+              "help": "Do not mark this pointer as the default",
+              "takes_value": false
             }
           ]
         },
         "get": {
-          "help": "Get one saved card pointer by name or last4 (never prints the stored CVV).",
+          "help": "Get one saved card pointer by name or last4 (never prints the stored CVV). Cross-checks the pointer against the live Target wallet (like 'list') so 'in_wallet' tells you whether it still points at a real saved card.",
           "arguments": [
             {
               "name": "identifier",
@@ -565,7 +604,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -578,7 +618,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -598,7 +639,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             }
           ]
         },
@@ -639,7 +681,7 @@
           "options": []
         },
         "set": {
-          "help": "Store the default pickup email and/or name for this profile.",
+          "help": "Store the default pickup email and/or name for this profile. 'cart checkout' uses these when --pickup-email / --pickup-name are not passed.",
           "arguments": [],
           "options": [
             {
@@ -667,7 +709,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         }
@@ -700,7 +743,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -739,7 +783,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -786,7 +831,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -837,7 +883,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -857,13 +904,14 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         }
       }
     }
   },
-  "total_commands": 39,
-  "discovered_at": "2026-07-04T23:47:16Z"
+  "total_commands": 40,
+  "discovered_at": "2026-09-26T23:33:26Z"
 }

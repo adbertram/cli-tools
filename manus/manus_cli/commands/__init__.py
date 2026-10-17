@@ -1,1 +1,0 @@
-"""Manus CLI commands."""

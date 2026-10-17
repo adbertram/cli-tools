@@ -26,6 +26,25 @@ def test_reads_concatenated_zstd_frames(simple_log: Path):
     assert len(log.events) == 15
 
 
+def test_find_log_path_prefers_v3_artifact(sessions_root: Path):
+    session_id = "session-88888888-8888-4888-8888-888888888888"
+    session_dir = sessions_root / PROJECT_KEY / session_id
+    records = [header(session_id, PROJECT_CWD)]
+    legacy = write_log(session_dir, records)
+    v3 = write_log(
+        session_dir,
+        records,
+        basename="session.v3.jsonl",
+    )
+
+    assert legacy.name == "session.jsonl.zstd"
+    assert v3.name == "session.v3.jsonl.zstd"
+    assert find_log_path(session_dir) == v3
+
+    loaded = load_log(find_log_path(session_dir))
+    assert loaded.session_id == session_id
+
+
 def test_load_log_header_does_not_decode_later_frames(simple_log: Path):
     """Metadata discovery must not pay the cost of decoding the transcript."""
     raw = simple_log.read_bytes()

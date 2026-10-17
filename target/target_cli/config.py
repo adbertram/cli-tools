@@ -6,7 +6,7 @@ Browser automation lives in browser.py.
 
 from typing import Optional
 
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, resolve_tool_dir, config_for
 from cli_tools_shared.credentials import CredentialType
 
 
@@ -95,7 +95,4 @@ _configs: dict = {}
 
 def get_config(profile=None) -> Config:
     """Get or create config instance for a profile."""
-    key = profile or "_default"
-    if key not in _configs:
-        _configs[key] = Config(profile=profile)
-    return _configs[key]
+    return config_for(Config, profile, _configs)

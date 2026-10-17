@@ -1,10 +1,13 @@
 import contextlib
 import io
 import json
+import os
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -64,53 +67,95 @@ def slide_config(root, **overrides):
         "recording_lead_seconds": 1.0,
         "slide_pause_seconds": 0.75,
         "cue_marker": "||",
-        "coursecraft_repo_root": None,
+        "ronin_home": None,
     }
     config.update(overrides)
     return config
 
 
+def ronin_env(**overrides):
+    """Process environment for a resolution test, never carrying an ambient RONIN_HOME."""
+    env = {key: value for key, value in os.environ.items() if key != record.RONIN_HOME_ENV_VAR}
+    env.update(overrides)
+    return mock.patch.dict(record.os.environ, env, clear=True)
+
+
+def write_ronin_module(ronin_home):
+    """Create the DemoEnvironmentAutomation manifest in a checkout and return its path."""
+    manifest = ronin_home / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text("@{}\n", encoding="utf-8")
+    return manifest
+
+
 class DemoEnvironmentPrepTests(unittest.TestCase):
-    def test_demo_environment_manifest_resolves_from_coursecraft_projection(self):
+    def test_demo_environment_manifest_resolves_from_ronin_checkout_above_cwd(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            manifest = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
-            manifest.parent.mkdir(parents=True)
-            manifest.write_text("@{}", encoding="utf-8")
-            (root / "course-pipeline.json").write_text("{}", encoding="utf-8")
+            manifest = write_ronin_module(root)
 
-            with mock.patch.object(record.Path, "cwd", return_value=root / "nested"):
+            with ronin_env(), mock.patch.object(record.Path, "cwd", return_value=root / "prep" / "nested"):
                 self.assertEqual(record.resolve_demo_environment_automation_module_path(), manifest.resolve())
 
-    def test_demo_environment_manifest_requires_coursecraft_projection_root(self):
+    def test_demo_environment_manifest_requires_a_ronin_checkout(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
-                with self.assertRaisesRegex(FileNotFoundError, "CourseCraft repo root not found"):
+            with ronin_env(), mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
+                with self.assertRaisesRegex(FileNotFoundError, "Demo environment automation module not found"):
                     record.resolve_demo_environment_automation_module_path()
 
-    def test_demo_environment_manifest_resolves_from_explicit_repo_root_outside_cwd(self):
-        # The recorder is otherwise fully path-explicit; --coursecraft-repo-root must let a
+    def test_demo_environment_manifest_resolves_from_ronin_home_env_var(self):
+        # The recording host exports RONIN_HOME, so an unattended run resolves the
+        # module even though its working directory is nowhere near the checkout.
+        with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as unrelated_cwd:
+            manifest = write_ronin_module(Path(temp_dir))
+
+            with ronin_env(**{record.RONIN_HOME_ENV_VAR: temp_dir}), \
+                    mock.patch.object(record.Path, "cwd", return_value=Path(unrelated_cwd)):
+                resolved = record.resolve_demo_environment_automation_module_path()
+
+        self.assertEqual(resolved, manifest.resolve())
+
+    def test_ronin_home_env_var_wins_over_the_explicit_option(self):
+        with tempfile.TemporaryDirectory() as env_dir, tempfile.TemporaryDirectory() as explicit_dir:
+            env_manifest = write_ronin_module(Path(env_dir))
+            write_ronin_module(Path(explicit_dir))
+
+            with ronin_env(**{record.RONIN_HOME_ENV_VAR: env_dir}):
+                resolved = record.resolve_demo_environment_automation_module_path(explicit_dir)
+
+        self.assertEqual(resolved, env_manifest.resolve())
+
+    def test_stale_ronin_home_env_var_falls_through_to_the_explicit_option(self):
+        with tempfile.TemporaryDirectory() as stale_dir, tempfile.TemporaryDirectory() as explicit_dir:
+            explicit_manifest = write_ronin_module(Path(explicit_dir))
+
+            with ronin_env(**{record.RONIN_HOME_ENV_VAR: stale_dir}):
+                resolved = record.resolve_demo_environment_automation_module_path(explicit_dir)
+
+        self.assertEqual(resolved, explicit_manifest.resolve())
+
+    def test_demo_environment_manifest_resolves_from_explicit_ronin_home_outside_cwd(self):
+        # The recorder is otherwise fully path-explicit; --ronin-home must let a
         # caller record from any working directory without the cwd walk finding anything.
         with tempfile.TemporaryDirectory() as temp_dir, tempfile.TemporaryDirectory() as unrelated_cwd:
             root = Path(temp_dir)
-            manifest = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
-            manifest.parent.mkdir(parents=True)
-            manifest.write_text("@{}", encoding="utf-8")
-            (root / "course-pipeline.json").write_text("{}", encoding="utf-8")
+            manifest = write_ronin_module(root)
 
-            with mock.patch.object(record.Path, "cwd", return_value=Path(unrelated_cwd)):
+            with ronin_env(), mock.patch.object(record.Path, "cwd", return_value=Path(unrelated_cwd)):
                 resolved = record.resolve_demo_environment_automation_module_path(root)
 
             self.assertEqual(resolved, manifest.resolve())
 
-    def test_coursecraft_repo_root_failure_names_the_explicit_option(self):
+    def test_ronin_home_failure_names_the_flag_and_env_var(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            with mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
-                with self.assertRaisesRegex(FileNotFoundError, "--coursecraft-repo-root"):
-                    record.resolve_coursecraft_repo_root()
+            with ronin_env(), mock.patch.object(record.Path, "cwd", return_value=Path(temp_dir)):
+                with self.assertRaisesRegex(FileNotFoundError, "--ronin-home"):
+                    record.resolve_ronin_home()
+                with self.assertRaisesRegex(FileNotFoundError, record.RONIN_HOME_ENV_VAR):
+                    record.resolve_ronin_home()
 
-    def test_demo_environment_prep_passes_explicit_repo_root_to_the_manifest_lookup(self):
-        root = Path("/tmp/course")
+    def test_demo_environment_prep_passes_explicit_ronin_home_to_the_manifest_lookup(self):
+        root = Path("/tmp/ronin")
         module_path = root / record.DEMO_ENVIRONMENT_AUTOMATION_MODULE_RELATIVE_PATH
 
         with mock.patch.object(
@@ -123,7 +168,7 @@ class DemoEnvironmentPrepTests(unittest.TestCase):
         self.assertEqual(resolve_manifest.call_args.args[0], root)
 
     def test_demo_environment_prep_runs_existing_focus_and_notification_helpers(self):
-        module_path = Path("/tmp/course/.agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
+        module_path = Path("/tmp/ronin/prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
 
         with mock.patch.object(record, "resolve_demo_environment_automation_module_path", return_value=module_path), \
                 mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
@@ -143,7 +188,7 @@ class DemoEnvironmentPrepTests(unittest.TestCase):
         )
 
     def test_demo_environment_prep_failure_is_clear(self):
-        module_path = Path("/tmp/course/.agents/skills/demo-environment-automation/tools/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
+        module_path = Path("/tmp/ronin/prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1")
 
         with mock.patch.object(record, "resolve_demo_environment_automation_module_path", return_value=module_path), \
                 mock.patch.object(record, "require_path", side_effect=lambda path, description: Path(path)), \
@@ -162,7 +207,7 @@ class RecordTests(unittest.TestCase):
         # The live click-step probe drives PowerPoint; every record() test stubs it and
         # asserts on what the drive does with the measurement, not on the probe's IO.
         self.click_step_probe_patcher = mock.patch.object(
-            record, "measure_slide_click_steps", return_value={1: 1, 2: 1}
+            record, "measure_slide_click_steps", return_value=({1: 1, 2: 1}, {1: 0, 2: 0}, {1: 0.7, 2: 0.7})
         )
         self.click_step_probe = self.click_step_probe_patcher.start()
         self.cue_count_check_patcher = mock.patch.object(record, "assert_cue_counts_match_click_steps")
@@ -172,8 +217,17 @@ class RecordTests(unittest.TestCase):
         # narration gain stays a real computation over a known peak.
         self.audio_peak_patcher = mock.patch.object(record, "audio_peak_dbfs", return_value=-1.4)
         self.audio_peak = self.audio_peak_patcher.start()
+        # The screen-capture helper reports its first frame on stderr; FakeProcess has none.
+        # The first frame lands CAPTURE_OVERLAY_SETTLE_SECONDS before the narration starts.
+        self.first_frame_patcher = mock.patch.object(
+            record,
+            "wait_for_first_frame",
+            side_effect=lambda process, notes=None: record.time.time() - record.CAPTURE_OVERLAY_SETTLE_SECONDS,
+        )
+        self.first_frame = self.first_frame_patcher.start()
 
     def tearDown(self):
+        self.first_frame_patcher.stop()
         self.audio_peak_patcher.stop()
         self.cue_count_check_patcher.stop()
         self.click_step_probe_patcher.stop()
@@ -720,9 +774,12 @@ Input #0, avfoundation, from '3':
                     mock.patch.object(record, "audio_duration", side_effect=[2.0, 3.0]), \
                     mock.patch.object(record, "run", side_effect=fake_run):
                 with contextlib.redirect_stdout(io.StringIO()):
-                    plan = record.prepare(config, {1: 1, 2: 0})
+                    plan = record.prepare(config, {1: 1}, {1: 0}, {1: 0.7})
 
-            self.assertEqual(generated_silence, ["silence-lead.wav", "silence-slide.wav"])
+            self.assertEqual(generated_silence, [
+                "silence-lead.wav",
+                "silence-slide.wav",
+            ])
             self.assertEqual(plan["actions"], [{
                 "at_seconds": 2.0,
                 "key": "space",
@@ -735,6 +792,202 @@ Input #0, avfoundation, from '3':
                 "value": 1,
             })
             self.assertNotIn("slide", plan["items"][0])
+
+    def prepare_plan(self, config, durations, settle_seconds=None, terminal_after_effects=None, generated_silence=None):
+        # durations: one per item, in order; prepare() then measures the joined narration once.
+        def fake_generate_silence(path, duration_seconds):
+            if generated_silence is not None:
+                generated_silence.append((Path(path).name, duration_seconds))
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_bytes(b"silence")
+
+        def fake_normalize_audio(input_path, output_path):
+            Path(output_path).write_bytes(b"normalized")
+
+        def fake_run(command):
+            Path(command[-1]).write_bytes(b"narration")
+
+        slides = [item["identity"]["value"] for item in config["items"]]
+        with mock.patch.object(record, "generate_silence", side_effect=fake_generate_silence), \
+                mock.patch.object(record, "normalize_audio", side_effect=fake_normalize_audio), \
+                mock.patch.object(record, "audio_duration", side_effect=[*durations, 99.0]), \
+                mock.patch.object(record, "run", side_effect=fake_run):
+            with contextlib.redirect_stdout(io.StringIO()):
+                return record.prepare(
+                    config,
+                    {slide: 0 for slide in slides},
+                    terminal_after_effects or {slide: 0 for slide in slides},
+                    settle_seconds or {slide: 0.7 for slide in slides},
+                )
+
+    def test_prepare_uses_explicit_cue_offsets_verbatim(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir))
+            config["items"][0]["segments"] = ["one", "two", "three"]
+            config["items"][0]["cue_count"] = 2
+            config["items"][0]["cue_offsets_seconds"] = [1.7, 4.25]
+
+            plan = self.prepare_plan(config, [6.0])
+
+        # Lead is 1.0s; word-ratio would have put these at 3.0 and 5.0.
+        self.assertEqual([action["at_seconds"] for action in plan["actions"]], [2.7, 5.25])
+        self.assertEqual([action["reason"] for action in plan["actions"]], ["action cue", "action cue"])
+        self.assertEqual(plan["items"][0]["cue_timing_method"], "explicit")
+
+    def test_prepare_without_explicit_cue_offsets_keeps_word_ratio(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir))
+
+            plan = self.prepare_plan(config, [2.0])
+
+        self.assertEqual([action["at_seconds"] for action in plan["actions"]], [2.0])
+        self.assertEqual(plan["items"][0]["cue_timing_method"], "word-ratio")
+
+    def two_slide_config(self, root):
+        config = slide_config(root)
+        second = dict(config["items"][0])
+        second.update({"index": 2, "label": "Slide 2", "identity": {"field": "slide", "value": 2}})
+        config["items"].append(second)
+        return config
+
+    def test_prepare_waits_out_the_last_cues_build_before_the_slide_advance(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.two_slide_config(Path(temp_dir))
+            config["items"][0]["cue_offsets_seconds"] = [1.5]
+            silence = []
+
+            plan = self.prepare_plan(config, [2.0, 3.0], settle_seconds={1: 2.8, 2: 0.7}, generated_silence=silence)
+
+        # Cue at 1.0 + 1.5 = 2.5s; its 2.8s build ends at 5.3s, after the narration's 3.0s end.
+        self.assertIn(("silence-build-wait-001.wav", 2.3), silence)
+        advance = next(action for action in plan["actions"] if action["reason"] == "next slide")
+        self.assertEqual(advance["at_seconds"], 5.3)
+        self.assertEqual(plan["items"][0]["click_settle_seconds"], 2.8)
+
+    def test_prepare_adds_no_wait_when_the_build_ends_inside_the_narration(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.two_slide_config(Path(temp_dir))
+            silence = []
+
+            plan = self.prepare_plan(config, [2.0, 3.0], generated_silence=silence)
+
+        self.assertFalse([name for name, _ in silence if name.startswith("silence-build-wait")])
+        advance = next(action for action in plan["actions"] if action["reason"] == "next slide")
+        self.assertEqual(advance["at_seconds"], 3.0)
+
+    def test_prepare_settles_a_terminal_after_effect_for_the_slides_build(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = self.two_slide_config(Path(temp_dir))
+            silence = []
+
+            plan = self.prepare_plan(
+                config,
+                [4.0, 3.0],
+                settle_seconds={1: 2.8, 2: 0.7},
+                terminal_after_effects={1: 1, 2: 0},
+                generated_silence=silence,
+            )
+
+        self.assertIn(("silence-terminal-after-effect-001.wav", 2.8), silence)
+        # Cue at 3.0s + 2.8s build = 5.8s, past the 5.0s narration end: wait, dim, settle, advance.
+        presses = [(action["reason"], action["at_seconds"]) for action in plan["actions"]]
+        self.assertEqual(presses[:3], [("action cue", 3.0), ("terminal after effect", 5.8), ("next slide", 8.6)])
+
+    def test_prepare_mixes_explicit_and_word_ratio_items(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir))
+            second = dict(config["items"][0])
+            second.update({
+                "index": 2,
+                "label": "Slide 2",
+                "identity": {"field": "slide", "value": 2},
+                "cue_offsets_seconds": [2.5],
+            })
+            config["items"].append(second)
+
+            plan = self.prepare_plan(config, [2.0, 3.0])
+
+        cues = [action["at_seconds"] for action in plan["actions"] if action["reason"] == "action cue"]
+        # Slide 1: 1.0 lead + 2.0 * 1/2. Slide 2 starts at 1.0 + 2.0 + 0.75 pause.
+        self.assertEqual(cues, [2.0, 6.25])
+        self.assertEqual(
+            [item["cue_timing_method"] for item in plan["items"]],
+            ["word-ratio", "explicit"],
+        )
+
+    def test_prepare_rejects_explicit_cue_offset_at_or_past_audio_duration(self):
+        for offsets in ([2.0], [2.5]):
+            with self.subTest(offsets=offsets), tempfile.TemporaryDirectory() as temp_dir:
+                config = slide_config(Path(temp_dir))
+                config["items"][0]["cue_offsets_seconds"] = offsets
+
+                with self.assertRaisesRegex(
+                    ValueError,
+                    r"Slide 1 cue_offsets_seconds offset 1 .* must be less than the audio duration \(2\.0 seconds\)",
+                ):
+                    self.prepare_plan(config, [2.0])
+
+    def validate_item_with_cue_offsets(self, transcript_text, cue_offsets):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "transcript.txt"
+            audio = root / "audio.wav"
+            transcript.write_text(transcript_text, encoding="utf-8")
+            audio.write_bytes(b"audio")
+            return record.validate_items([{
+                "slide": 4,
+                "transcript_path": str(transcript),
+                "audio_path": str(audio),
+                "cue_offsets_seconds": cue_offsets,
+            }], "||")[0]
+
+    def test_validate_items_keeps_explicit_cue_offsets(self):
+        item = self.validate_item_with_cue_offsets("one || two || three", [0, 1.5])
+
+        self.assertEqual(item["cue_offsets_seconds"], [0, 1.5])
+
+    def test_validate_items_accepts_empty_cue_offsets_for_a_cueless_item(self):
+        item = self.validate_item_with_cue_offsets("no cues here", [])
+
+        self.assertEqual(item["cue_offsets_seconds"], [])
+
+    def test_validate_items_omits_cue_offsets_when_the_key_is_absent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            transcript = root / "transcript.txt"
+            audio = root / "audio.wav"
+            transcript.write_text("one || two", encoding="utf-8")
+            audio.write_bytes(b"audio")
+            items = record.validate_items([{
+                "slide": 4,
+                "transcript_path": str(transcript),
+                "audio_path": str(audio),
+            }], "||")
+
+        self.assertNotIn("cue_offsets_seconds", items[0])
+
+    def test_validate_items_rejects_invalid_explicit_cue_offsets(self):
+        cases = [
+            ("not a list", "one || two", "1.5", "Slide 4 cue_offsets_seconds must be a list of numbers"),
+            ("null", "one || two", None, "Slide 4 cue_offsets_seconds must be a list of numbers"),
+            ("too few", "one || two || three", [1.0],
+             "Slide 4 cue_offsets_seconds has 1 offsets but the transcript has 2 cue markers"),
+            ("too many", "one || two", [1.0, 2.0],
+             "Slide 4 cue_offsets_seconds has 2 offsets but the transcript has 1 cue markers"),
+            ("cueless item", "no cues here", [1.0],
+             "Slide 4 cue_offsets_seconds has 1 offsets but the transcript has 0 cue markers"),
+            ("string value", "one || two", ["1.0"], "Slide 4 cue_offsets_seconds offset 1 must be a number"),
+            ("bool value", "one || two", [True], "Slide 4 cue_offsets_seconds offset 1 must be a number"),
+            ("nan value", "one || two", [float("nan")], "Slide 4 cue_offsets_seconds offset 1 must be a number"),
+            ("negative", "one || two", [-0.1], "Slide 4 cue_offsets_seconds offset 1 must be >= 0"),
+            ("descending", "one || two || three", [2.0, 1.0],
+             "Slide 4 cue_offsets_seconds must be strictly ascending; offset 2"),
+            ("equal", "one || two || three", [1.0, 1.0],
+             "Slide 4 cue_offsets_seconds must be strictly ascending; offset 2"),
+        ]
+        for name, transcript_text, cue_offsets, message in cases:
+            with self.subTest(name), self.assertRaisesRegex(ValueError, message):
+                self.validate_item_with_cue_offsets(transcript_text, cue_offsets)
 
     def test_ui_action_renderer_builds_applescript_from_data(self):
         lines = record.render_ui_actions([
@@ -902,7 +1155,7 @@ Input #0, avfoundation, from '3':
         audio_process = FakeProcess([None, 0], 0)
         events = []
 
-        def fake_prepare(config, click_steps):
+        def fake_prepare(config, click_steps, terminal_after_effect_steps, click_settle_seconds):
             events.append("prepare")
             return {
                 "narration_audio": "/tmp/narration.wav",
@@ -921,13 +1174,13 @@ Input #0, avfoundation, from '3':
 
         def fake_popen(command, **kwargs):
             events.append(command[0])
-            if command[0] == "ffmpeg":
+            if command[0] == "swift":
                 return ffmpeg_process
             if command[0] == "afplay":
                 return audio_process
             raise AssertionError(command)
 
-        self.demo_environment_prep.side_effect = lambda coursecraft_repo_root: events.append("demo_prep")
+        self.demo_environment_prep.side_effect = lambda ronin_home: events.append("demo_prep")
 
         with mock.patch.object(record, "probe_capture_dimensions", return_value=(1920, 1080)), \
                 mock.patch.object(record, "prepare", side_effect=fake_prepare), \
@@ -942,20 +1195,20 @@ Input #0, avfoundation, from '3':
         # PowerPoint state is captured before the live click-step probe opens the deck,
         # so the same cleanup path closes whatever the probe left behind.
         self.assertEqual(events[:4], ["demo_prep", "state", "prepare", "slideshow"])
-        self.assertEqual(events[4], "ffmpeg")
+        self.assertEqual(events[4], "swift")
 
-    def test_record_forwards_configured_coursecraft_repo_root_to_demo_environment_prep(self):
+    def test_record_forwards_configured_ronin_home_to_demo_environment_prep(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config = slide_config(
                 Path(temp_dir),
                 work_dir="/tmp/work",
-                coursecraft_repo_root="/tmp/coursecraft",
+                ronin_home="/tmp/ronin",
             )
         ffmpeg_process = FakeProcess([None, None, None], 0)
         audio_process = FakeProcess([None, 0], 0)
 
         def fake_popen(command, **kwargs):
-            if command[0] == "ffmpeg":
+            if command[0] == "swift":
                 return ffmpeg_process
             if command[0] == "afplay":
                 return audio_process
@@ -977,7 +1230,7 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(subprocess, "Popen", side_effect=fake_popen):
             record.record(config)
 
-        self.assertEqual(self.demo_environment_prep.call_args.args[0], "/tmp/coursecraft")
+        self.assertEqual(self.demo_environment_prep.call_args.args[0], "/tmp/ronin")
 
     def test_record_aborts_clearly_when_demo_environment_prep_fails(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1017,7 +1270,7 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(record, "close_slideshow_and_deck"), \
                 mock.patch.object(record, "press_space") as press_space, \
                 mock.patch.object(subprocess, "Popen", side_effect=[ffmpeg_process, audio_process]):
-            with self.assertRaisesRegex(RuntimeError, "ffmpeg screen recording exited with code 1"):
+            with self.assertRaisesRegex(RuntimeError, "screen recording exited with code 1"):
                 record.record(config)
 
         press_space.assert_not_called()
@@ -1458,9 +1711,10 @@ Input #0, avfoundation, from '3':
             record.record(config)
 
         mux_command = commands[0]
-        self.assertEqual(
-            mux_command[mux_command.index("-ss") + 1],
-            str(record.CAPTURE_OVERLAY_SETTLE_SECONDS),
+        self.assertAlmostEqual(
+            float(mux_command[mux_command.index("-ss") + 1]),
+            record.CAPTURE_OVERLAY_SETTLE_SECONDS,
+            delta=0.5,
         )
         self.assertLess(mux_command.index("-ss"), mux_command.index("-i"))
         self.assertIn("-vf", mux_command)
@@ -1642,6 +1896,8 @@ Input #0, avfoundation, from '3':
                 mock.patch.object(record, "run_osascript") as run_osascript, \
                 mock.patch.object(record, "execute_ui_actions"), \
                 mock.patch.object(record, "force_slideshow_fullscreen"), \
+                mock.patch.object(record, "set_slideshow_pointer_automatic"), \
+                mock.patch.object(record, "park_slideshow_cursor"), \
                 mock.patch.object(record.time, "sleep"):
             config["slideshow_start_seconds"] = 0
             record.start_slideshow(config)
@@ -1749,7 +2005,7 @@ Input #0, avfoundation, from '3':
                     output_height=1080,
                     force_resolution=True,
                     force_aspect_ratio=(16, 9),
-                    coursecraft_repo_root=root,
+                    ronin_home=root,
                 )
 
         self.assertEqual(result.output_path, str(output))
@@ -1759,9 +2015,31 @@ Input #0, avfoundation, from '3':
         self.assertEqual(build_config.call_args.args[0].output_height, 1080)
         self.assertIs(build_config.call_args.args[0].force_resolution, True)
         self.assertEqual(build_config.call_args.args[0].force_aspect_ratio, (16, 9))
-        self.assertEqual(build_config.call_args.args[0].coursecraft_repo_root, root)
+        self.assertEqual(build_config.call_args.args[0].ronin_home, root)
 
-    def test_public_cli_forwards_coursecraft_repo_root(self):
+    def test_public_cli_forwards_ronin_home(self):
+        runner = CliRunner()
+
+        with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
+                mock.patch("powerpoint_slide_recorder_cli.commands.print_json"):
+            get_client.return_value.record.return_value = mock.Mock()
+            result = runner.invoke(app, [
+                "record",
+                "--deck", "/tmp/deck.pptx",
+                "--items", "/tmp/items.json",
+                "--output", "/tmp/out.mp4",
+                "--work-dir", "/tmp/work",
+                "--video-input", "3",
+                "--ronin-home", "/tmp/ronin",
+            ])
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(
+            get_client.return_value.record.call_args.kwargs["ronin_home"],
+            Path("/tmp/ronin"),
+        )
+
+    def test_public_cli_still_accepts_the_deprecated_coursecraft_repo_root_alias(self):
         runner = CliRunner()
 
         with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
@@ -1779,11 +2057,11 @@ Input #0, avfoundation, from '3':
 
         self.assertEqual(result.exit_code, 0)
         self.assertEqual(
-            get_client.return_value.record.call_args.kwargs["coursecraft_repo_root"],
+            get_client.return_value.record.call_args.kwargs["ronin_home"],
             Path("/tmp/coursecraft"),
         )
 
-    def test_public_cli_defaults_coursecraft_repo_root_to_cwd_discovery(self):
+    def test_public_cli_defaults_ronin_home_to_environment_and_cwd_discovery(self):
         runner = CliRunner()
 
         with mock.patch("powerpoint_slide_recorder_cli.commands.get_client") as get_client, \
@@ -1799,7 +2077,7 @@ Input #0, avfoundation, from '3':
             ])
 
         self.assertEqual(result.exit_code, 0)
-        self.assertIsNone(get_client.return_value.record.call_args.kwargs["coursecraft_repo_root"])
+        self.assertIsNone(get_client.return_value.record.call_args.kwargs["ronin_home"])
 
 
     def test_build_config_prepares_items_without_touching_powerpoint(self):
@@ -1837,17 +2115,17 @@ Input #0, avfoundation, from '3':
                 output_height=1080,
                 force_resolution=False,
                 force_aspect_ratio=None,
-                coursecraft_repo_root=root / "coursecraft",
+                ronin_home=root / "ronin",
             )
             config = record.build_config(args)
-            resolved_repo_root = str((root / "coursecraft").resolve())
+            resolved_ronin_home = str((root / "ronin").resolve())
 
         self.assertEqual(config["items"][0]["cue_count"], 2)
         self.assertEqual(config["output_width"], 1920)
         self.assertEqual(config["output_height"], 1080)
-        self.assertEqual(config["coursecraft_repo_root"], resolved_repo_root)
+        self.assertEqual(config["ronin_home"], resolved_ronin_home)
 
-    def test_build_config_leaves_coursecraft_repo_root_unset_for_cwd_discovery(self):
+    def test_build_config_leaves_ronin_home_unset_for_environment_and_cwd_discovery(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             transcript = root / "transcript.txt"
@@ -1880,11 +2158,11 @@ Input #0, avfoundation, from '3':
                 output_height=1080,
                 force_resolution=False,
                 force_aspect_ratio=None,
-                coursecraft_repo_root=None,
+                ronin_home=None,
             )
             config = record.build_config(args)
 
-        self.assertIsNone(config["coursecraft_repo_root"])
+        self.assertIsNone(config["ronin_home"])
 
 
 class LiveClickStepProbeTests(unittest.TestCase):
@@ -1902,10 +2180,12 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "exit_slideshow_if_running") as exit_slideshow, \
                 mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
                 mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
+                mock.patch.object(record, "click_settle_seconds_for_slide", return_value=0.7), \
                 mock.patch.object(record.time, "sleep"):
-            counts = record.measure_slide_click_steps(config, [3, 4])
+            counts, terminal_after_effects, _settle = record.measure_slide_click_steps(config, [3, 4])
 
         self.assertEqual(counts, {3: 1, 4: 1})
+        self.assertEqual(terminal_after_effects, {3: 0, 4: 0})
         self.assertEqual(press_space.call_count, 4)
         exit_slideshow.assert_called_once()
 
@@ -1920,32 +2200,66 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "exit_slideshow_if_running"), \
                 mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
                 mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=1), \
+                mock.patch.object(record, "click_settle_seconds_for_slide", return_value=0.7), \
                 mock.patch.object(record.time, "sleep"):
-            counts = record.measure_slide_click_steps(config, [26])
+            counts, terminal_after_effects, _settle = record.measure_slide_click_steps(config, [26])
 
         self.assertEqual(counts, {26: 5})
+        self.assertEqual(terminal_after_effects, {26: 1})
 
-    def test_terminal_next_click_after_effect_in_xml_checks_only_the_final_click_effect(self):
-        nonterminal_only = f'''<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}">
-          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
-          <p:cTn nodeType="clickEffect"/>
-        </p:sld>'''.encode()
-        terminal = f'''<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}">
-          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
-          <p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>
-        </p:sld>'''.encode()
+    @staticmethod
+    def _timing_part(main_sequence_steps, build_templates=""):
+        namespace = TEST_PRESENTATIONML_NAMESPACE
+        return f'''<p:sldLayout xmlns:p="{namespace}"><p:timing>
+          <p:tnLst><p:par><p:cTn nodeType="tmRoot"><p:childTnLst>
+            <p:seq><p:cTn nodeType="mainSeq"><p:childTnLst>{main_sequence_steps}</p:childTnLst></p:cTn></p:seq>
+          </p:childTnLst></p:cTn></p:par></p:tnLst>
+          <p:bldLst>{build_templates}</p:bldLst>
+        </p:timing></p:sldLayout>'''.encode()
 
-        self.assertFalse(record.terminal_next_click_after_effect_in_xml(nonterminal_only))
-        self.assertTrue(record.terminal_next_click_after_effect_in_xml(terminal))
+    AFTER_EFFECT_STEP = (
+        '<p:par><p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn></p:par>'
+    )
+    PLAIN_STEP = '<p:par><p:cTn nodeType="clickEffect"/></p:par>'
+    BUILD_TEMPLATES = (
+        '<p:bldP><p:tmplLst><p:tmpl><p:tnLst><p:par>'
+        '<p:cTn nodeType="clickEffect"><p:cTn masterRel="nextClick" afterEffect="1"/></p:cTn>'
+        '</p:par></p:tnLst></p:tmpl></p:tmplLst></p:bldP>'
+    )
+
+    def test_terminal_next_click_after_effect_in_xml_true_when_last_main_sequence_step_has_it(self):
+        part = self._timing_part(self.PLAIN_STEP + self.AFTER_EFFECT_STEP)
+
+        self.assertTrue(record.terminal_next_click_after_effect_in_xml(part))
+
+    def test_terminal_next_click_after_effect_in_xml_ignores_earlier_steps_and_build_templates(self):
+        part = self._timing_part(
+            self.AFTER_EFFECT_STEP + self.PLAIN_STEP,
+            build_templates=self.BUILD_TEMPLATES,
+        )
+
+        self.assertFalse(record.terminal_next_click_after_effect_in_xml(part))
+
+    def test_terminal_next_click_after_effect_in_xml_false_without_main_sequence_click_effects(self):
+        part = self._timing_part("", build_templates=self.BUILD_TEMPLATES)
+
+        self.assertFalse(record.terminal_next_click_after_effect_in_xml(part))
 
     def test_slide_layout_member_resolves_the_relationship_target(self):
         relationships = b'''<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
           <Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout"
                         Target="../slideLayouts/custom/slideLayout53.xml"/>
         </Relationships>'''
-        deck = SimpleNamespace(read=mock.Mock(return_value=relationships))
+        presentation, presentation_relationships = self._presentation_parts([26])
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w") as written:
+            written.writestr("ppt/presentation.xml", presentation)
+            written.writestr("ppt/_rels/presentation.xml.rels", presentation_relationships)
+            written.writestr("ppt/slides/slide26.xml", "<p:sld/>")
+            written.writestr("ppt/slides/_rels/slide26.xml.rels", relationships)
 
-        member = record.slide_layout_member_for_slide(deck, 26)
+        with zipfile.ZipFile(buffer) as deck:
+            member = record.slide_layout_member_for_slide(deck, 1)
 
         self.assertEqual(member, "ppt/slideLayouts/custom/slideLayout53.xml")
 
@@ -1958,9 +2272,231 @@ class LiveClickStepProbeTests(unittest.TestCase):
                 mock.patch.object(record, "press_space"), \
                 mock.patch.object(record, "live_slideshow_slide_index", return_value=1), \
                 mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
+                mock.patch.object(record, "click_settle_seconds_for_slide", return_value=0.7), \
                 mock.patch.object(record.time, "sleep"):
             with self.assertRaisesRegex(RuntimeError, "started on slide 1, expected slide 3"):
                 record.measure_slide_click_steps(config, [3, 4])
+
+    @staticmethod
+    def _effect(node_type, duration_ms, delay_ms=0, extra=""):
+        # One parallel group holding one effect: a visibility set plus an animation of duration_ms.
+        return (
+            f'<p:par><p:cTn fill="hold"><p:stCondLst><p:cond delay="{delay_ms}"/></p:stCondLst><p:childTnLst>'
+            f'<p:par><p:cTn nodeType="{node_type}" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst><p:childTnLst>'
+            '<p:set><p:cBhvr><p:cTn dur="1" fill="hold"><p:stCondLst><p:cond delay="0"/></p:stCondLst></p:cTn></p:cBhvr></p:set>'
+            f'<p:animEffect transition="in" filter="fade"><p:cBhvr><p:cTn dur="{duration_ms}"{extra}/></p:cBhvr></p:animEffect>'
+            '</p:childTnLst></p:cTn></p:par></p:childTnLst></p:cTn></p:par>'
+        )
+
+    @classmethod
+    def _click_step(cls, *groups):
+        return (
+            '<p:par><p:cTn fill="hold"><p:stCondLst><p:cond delay="indefinite"/></p:stCondLst>'
+            f'<p:childTnLst>{"".join(groups)}</p:childTnLst></p:cTn></p:par>'
+        )
+
+    # Shape of slide 8 in m2_raw.pptx (Getting Started with Cursor AI v2), the native-diagram
+    # slide whose chained After Previous builds made the 0.7s probe count 6 presses for 5 steps.
+    @classmethod
+    def slide_eight_steps(cls):
+        return (
+            cls._click_step(cls._effect("clickEffect", 400))
+            + cls._click_step(
+                cls._effect("clickEffect", 400),
+                cls._effect("afterEffect", 400, delay_ms=400),
+                cls._effect("afterEffect", 400, delay_ms=800),
+                cls._effect("afterEffect", 400, delay_ms=1200),
+                cls._effect("afterEffect", 500, delay_ms=1600),
+            )
+            + cls._click_step(
+                cls._effect("clickEffect", 500),
+                cls._effect("withEffect", 500),
+                cls._effect("afterEffect", 500, delay_ms=500),
+            )
+        )
+
+    def test_click_build_ms_in_xml_follows_after_previous_chains(self):
+        part = self._timing_part(self.slide_eight_steps(), build_templates=self.BUILD_TEMPLATES)
+
+        # Step 2 chains four After Previous effects: the last starts at 1600ms and runs 500ms.
+        self.assertEqual(record.click_build_ms_in_xml(part), [400, 2100, 1000])
+
+    def test_click_build_ms_in_xml_counts_repeats_and_auto_reverse(self):
+        part = self._timing_part(
+            self._click_step(self._effect("clickEffect", 500, extra=' repeatCount="3000"'))
+            + self._click_step(self._effect("clickEffect", 500, extra=' autoRev="1"'))
+        )
+
+        self.assertEqual(record.click_build_ms_in_xml(part), [1500, 1000])
+
+    def test_click_build_ms_in_xml_is_empty_without_timing(self):
+        part = f'<p:sld xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}"/>'.encode()
+
+        self.assertEqual(record.click_build_ms_in_xml(part), [])
+
+    def _deck(self, root, slide_steps, layout_steps=""):
+        import zipfile
+
+        deck_path = root / "deck.pptx"
+        presentation, presentation_relationships = self._presentation_parts(range(1, 9))
+        with zipfile.ZipFile(deck_path, "w") as deck:
+            deck.writestr("ppt/presentation.xml", presentation)
+            deck.writestr("ppt/_rels/presentation.xml.rels", presentation_relationships)
+            deck.writestr("ppt/slides/slide8.xml", self._timing_part(slide_steps))
+            deck.writestr("ppt/slideLayouts/slideLayout2.xml", self._timing_part(layout_steps))
+            deck.writestr(
+                "ppt/slides/_rels/slide8.xml.rels",
+                '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                '<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" '
+                'Target="../slideLayouts/slideLayout2.xml"/></Relationships>',
+            )
+        return deck_path
+
+    def test_click_settle_seconds_waits_out_the_slides_longest_chain(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._deck(Path(temp_dir), self.slide_eight_steps())
+
+            settle = record.click_settle_seconds_for_slide(deck_path, 8)
+
+        self.assertAlmostEqual(settle, 2.1 + record.CLICK_BUILD_SETTLE_MARGIN_SECONDS)
+
+    def test_click_settle_seconds_reads_layout_builds(self):
+        long_layout_step = self._click_step(self._effect("clickEffect", 1800))
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._deck(Path(temp_dir), self._click_step(self._effect("clickEffect", 500)), long_layout_step)
+
+            settle = record.click_settle_seconds_for_slide(deck_path, 8)
+
+        self.assertAlmostEqual(settle, 1.8 + record.CLICK_BUILD_SETTLE_MARGIN_SECONDS)
+
+    def test_click_settle_seconds_keeps_the_floor_for_short_or_no_builds(self):
+        for steps in ("", self._click_step(self._effect("clickEffect", 500))):
+            with self.subTest(steps=steps[:20]), tempfile.TemporaryDirectory() as temp_dir:
+                deck_path = self._deck(Path(temp_dir), steps)
+
+                self.assertEqual(
+                    record.click_settle_seconds_for_slide(deck_path, 8),
+                    record.SLIDE_CLICK_PROBE_SETTLE_SECONDS,
+                )
+
+    @staticmethod
+    def _presentation_parts(part_numbers):
+        # presentation.xml lists the show's slides in play order; the rels map each r:id to its part.
+        ids = "".join(f'<p:sldId id="{256 + i}" r:id="rId{10 + i}"/>' for i in range(len(part_numbers)))
+        rels = "".join(
+            f'<Relationship Id="rId{10 + i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" '
+            f'Target="slides/slide{part}.xml"/>'
+            for i, part in enumerate(part_numbers)
+        )
+        presentation = (
+            f'<p:presentation xmlns:p="{TEST_PRESENTATIONML_NAMESPACE}" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            f"<p:sldIdLst>{ids}</p:sldIdLst></p:presentation>"
+        )
+        relationships = f'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">{rels}</Relationships>'
+        return presentation, relationships
+
+    def _renumbered_deck(self, root, with_part_four=True):
+        # A deck whose slide 3 was left as part 4 after the old slide 3 was deleted: parts [1, 2, 4].
+        layout_rels = (
+            '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" '
+            'Target="../slideLayouts/slideLayout{layout}.xml"/></Relationships>'
+        )
+        presentation, relationships = self._presentation_parts([1, 2, 4])
+        deck_path = root / "renumbered.pptx"
+        with zipfile.ZipFile(deck_path, "w") as deck:
+            deck.writestr("ppt/presentation.xml", presentation)
+            deck.writestr("ppt/_rels/presentation.xml.rels", relationships)
+            deck.writestr("ppt/slides/slide1.xml", self._timing_part(""))
+            deck.writestr("ppt/slides/slide2.xml", self._timing_part(self._click_step(self._effect("clickEffect", 300))))
+            deck.writestr("ppt/slideLayouts/slideLayout1.xml", self._timing_part(""))
+            deck.writestr("ppt/slideLayouts/slideLayout3.xml", self._timing_part(""))
+            for part, layout in ((1, 1), (2, 1), (4, 3)):
+                deck.writestr(f"ppt/slides/_rels/slide{part}.xml.rels", layout_rels.format(layout=layout))
+            if with_part_four:
+                deck.writestr("ppt/slides/slide4.xml", self._timing_part(self._click_step(self._effect("clickEffect", 1800))))
+        return deck_path
+
+    def test_slide_animation_parts_resolves_the_slide_index_through_presentation_order(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            parts = record.slide_animation_parts(deck_path, 3)
+
+            with zipfile.ZipFile(deck_path) as deck:
+                self.assertEqual(parts, [deck.read("ppt/slides/slide4.xml"), deck.read("ppt/slideLayouts/slideLayout3.xml")])
+
+    def test_slide_index_two_still_reads_part_two_in_a_renumbered_deck(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            parts = record.slide_animation_parts(deck_path, 2)
+
+            with zipfile.ZipFile(deck_path) as deck:
+                self.assertEqual(parts, [deck.read("ppt/slides/slide2.xml"), deck.read("ppt/slideLayouts/slideLayout1.xml")])
+
+    def test_click_settle_seconds_reads_the_renumbered_slides_builds(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            settle = record.click_settle_seconds_for_slide(deck_path, 3)
+            terminal_step = record.terminal_next_click_after_effect_step(deck_path, 3)
+
+        self.assertAlmostEqual(settle, 1.8 + record.CLICK_BUILD_SETTLE_MARGIN_SECONDS)
+        self.assertEqual(terminal_step, 0)
+
+    def test_slide_animation_parts_rejects_an_index_past_the_end_of_the_show(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            with self.assertRaisesRegex(ValueError, r"renumbered\.pptx.*slide index 4.*3 slides"):
+                record.slide_animation_parts(deck_path, 4)
+
+    def test_slide_animation_parts_rejects_a_slide_index_below_one(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir))
+
+            with self.assertRaisesRegex(ValueError, r"renumbered\.pptx.*slide index 0.*3 slides"):
+                record.slide_animation_parts(deck_path, 0)
+
+    def test_slide_animation_parts_names_the_deck_and_index_when_the_part_is_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._renumbered_deck(Path(temp_dir), with_part_four=False)
+
+            with self.assertRaisesRegex(FileNotFoundError, r"renumbered\.pptx.*slide index 3.*ppt/slides/slide4\.xml"):
+                record.slide_animation_parts(deck_path, 3)
+
+    def test_walk_settles_each_press_for_the_current_and_next_slide(self):
+        # Slide 7 (0.7s) has one build, then advances into slide 8 (2.8s), which has two.
+        settle = {7: 0.7, 8: 2.8, 9: 0.7}
+        indexes = [7, 8, 8, 8, 9, None]
+
+        with mock.patch.object(record, "press_space"), \
+                mock.patch.object(record, "live_slideshow_slide_index", side_effect=indexes), \
+                mock.patch.object(record.time, "sleep") as sleep:
+            observed = record.walk_slideshow_slide_indexes(20, 7, settle)
+
+        self.assertEqual(observed, indexes)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [2.8, 2.8, 2.8, 2.8, 2.8, 0.7])
+
+    def test_measure_slide_click_steps_returns_each_slides_settle(self):
+        config = {"deck_path": "/tmp/deck.pptx", "slideshow_start_seconds": 0}
+
+        with mock.patch.object(record, "open_deck"), \
+                mock.patch.object(record, "clear_benign_dialogs_before_slideshow"), \
+                mock.patch.object(record, "run_osascript"), \
+                mock.patch.object(record, "press_space"), \
+                mock.patch.object(record, "exit_slideshow_if_running"), \
+                mock.patch.object(record, "live_slideshow_slide_index", side_effect=[8, 8, 8, None]), \
+                mock.patch.object(record, "terminal_next_click_after_effect_step", return_value=0), \
+                mock.patch.object(record, "click_settle_seconds_for_slide", return_value=2.8), \
+                mock.patch.object(record.time, "sleep") as sleep:
+            counts, _terminal, settle = record.measure_slide_click_steps(config, [8])
+
+        self.assertEqual(counts, {8: 2})
+        self.assertEqual(settle, {8: 2.8})
+        self.assertIn(mock.call(2.8), sleep.call_args_list)
 
     def test_assert_cue_counts_match_click_steps_accepts_matching_counts(self):
         items = [{"label": "Slide 1", "identity": {"field": "slide", "value": 1}, "cue_count": 2}]
@@ -1976,3 +2512,55 @@ class LiveClickStepProbeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScreenCaptureTests(unittest.TestCase):
+    """The capture records the unfiltered main display, through the bundled ScreenCaptureKit helper."""
+
+    def test_command_runs_the_bundled_helper_for_powerpoint(self):
+        command = record.screen_capture_command(Path("/tmp/raw.mp4"), 30, 1920, 1080)
+
+        self.assertEqual(command[:2], ["swift", "-suppress-warnings"])
+        self.assertTrue(Path(command[2]).is_file())
+        self.assertEqual(command[3:], ["/tmp/raw.mp4", "30", "1920", "1080", "com.microsoft.Powerpoint"])
+
+    def test_helper_captures_one_app_without_cursor(self):
+        source = record.SCREEN_CAPTURE_SCRIPT.read_text(encoding="utf-8")
+
+        self.assertIn("SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])", source)
+        self.assertIn("configuration.showsCursor = false", source)
+
+    def test_first_frame_time_is_read_from_helper_stderr(self):
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import sys,time; sys.stderr.write('compiling\\nfirstFrameEpochMs=1791379152503\\n'); sys.stderr.flush(); time.sleep(5)"],
+            stderr=subprocess.PIPE,
+        )
+        try:
+            self.assertAlmostEqual(record.wait_for_first_frame(process, timeout_seconds=10), 1791379152.503)
+        finally:
+            process.kill()
+            process.wait()
+
+    def test_indicator_rect_is_read_from_helper_stderr(self):
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import sys,time; sys.stderr.write('firstFrameEpochMs=1791379152503\\nindicatorRect=1905,1,13,14\\n'); sys.stderr.flush(); time.sleep(5)"],
+            stderr=subprocess.PIPE,
+        )
+        notes = {}
+        try:
+            record.wait_for_first_frame(process, timeout_seconds=10, notes=notes)
+            deadline = time.monotonic() + 5
+            while "indicator_rect" not in notes and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertEqual(notes["indicator_rect"], (1905, 1, 13, 14))
+        finally:
+            process.kill()
+            process.wait()
+
+    def test_helper_exit_before_a_frame_fails(self):
+        process = subprocess.Popen(
+            [sys.executable, "-c", "import sys; sys.stderr.write('ScreenCaptureKit: start: denied\\n'); sys.exit(1)"],
+            stderr=subprocess.PIPE,
+        )
+        with self.assertRaisesRegex(RuntimeError, "screen recording exited with code 1"):
+            record.wait_for_first_frame(process, timeout_seconds=10)

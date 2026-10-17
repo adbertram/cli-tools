@@ -1,5 +1,6 @@
 from cli_tools_shared.filters import (
     apply_filters,
+    exact_session_ids,
     parse_filter_part,
     parse_filter_string,
     split_filter_parts,
@@ -8,6 +9,32 @@ from cli_tools_shared.filters import (
 )
 
 import pytest
+
+
+# exact_session_ids: consolidated from the three sessions CLIs (agent-issues #588).
+def test_exact_session_ids_returns_none_without_filters():
+    assert exact_session_ids(None) is None
+    assert exact_session_ids([]) is None
+
+
+def test_exact_session_ids_pins_single_id():
+    assert exact_session_ids(["id:eq:abc"]) == ["abc"]
+
+
+def test_exact_session_ids_ors_across_filter_flags():
+    # Each --filter flag ORs; every OR group must carry an id:eq: part.
+    assert exact_session_ids(["id:eq:abc", "id:eq:def"]) == ["abc", "def"]
+
+
+def test_exact_session_ids_none_when_any_group_lacks_id_eq():
+    # A group without an id:eq: part means the result set is not id-bounded.
+    assert exact_session_ids(["id:eq:abc", "model:eq:opus"]) is None
+    assert exact_session_ids(["model:eq:opus"]) is None
+
+
+def test_exact_session_ids_requires_eq_operator():
+    # id:in: or other operators do not pin a specific transcript file.
+    assert exact_session_ids(["id:contains:abc"]) is None
 
 
 @pytest.mark.parametrize(

@@ -16,12 +16,19 @@ import json
 import typer
 from typing import Optional, List
 
-from ..client import get_client
+from ..client import ClientError, get_client
 from cli_tools_shared.output import print_json, print_table, handle_error, print_success, print_info, print_error
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 from ..properties import validate_and_filter_properties, PropertyValidationError
 
 app = typer.Typer(help="Manage eBay inventory items")
+
+
+def _parse_image_urls(value: str) -> list[str]:
+    """Normalize the comma-separated image URL option into an API array."""
+    if not value:
+        return []
+    return [url.strip() for url in value.split(",")]
 
 
 def _deep_merge(base: dict, updates: dict) -> dict:
@@ -212,6 +219,7 @@ def inventory_create(
     quantity: int = typer.Option(1, "--quantity", "-q", help="Available quantity"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="Product description"),
     image_urls: Optional[str] = typer.Option(None, "--images", help="Comma-separated list of image URLs (HTTPS)"),
+    video_id: Optional[str] = typer.Option(None, "--video-id", help="Media API video ID to attach to the item"),
     aspects: Optional[str] = typer.Option(None, "--aspects", help="Item specifics as JSON object: '{\"Brand\": [\"MyBrand\"], \"Color\": [\"Red\"]}'"),
     from_json: Optional[str] = typer.Option(None, "--from-json", help="Path to JSON file containing full inventory item payload"),
     locale: str = typer.Option("en_US", "--locale", help="Locale for the inventory item"),
@@ -227,6 +235,7 @@ def inventory_create(
         ebay inventory create SKU123 --title "My Product" --quantity 10
         ebay inventory create SKU123 --title "Widget" --condition USED_GOOD --quantity 5 --description "Gently used widget"
         ebay inventory create SKU123 --from-json payload.json
+        ebay inventory create SKU123 --title "Widget" --video-id 1a2b3c4d
     """
     try:
         client = get_client()
@@ -247,8 +256,11 @@ def inventory_create(
         if description:
             payload["product"]["description"] = description
 
-        if image_urls:
-            payload["product"]["imageUrls"] = [url.strip() for url in image_urls.split(",")]
+        if image_urls is not None:
+            payload["product"]["imageUrls"] = _parse_image_urls(image_urls)
+
+        if video_id is not None:
+            payload["product"]["videoIds"] = [video_id]
 
         if aspects:
             payload["product"]["aspects"] = json.loads(aspects)
@@ -297,6 +309,7 @@ def inventory_update(
     quantity: Optional[int] = typer.Option(None, "--quantity", "-q", help="New available quantity"),
     description: Optional[str] = typer.Option(None, "--description", "-d", help="New product description"),
     image_urls: Optional[str] = typer.Option(None, "--images", help="New comma-separated list of image URLs"),
+    video_id: Optional[str] = typer.Option(None, "--video-id", help="Media API video ID to attach to this SKU (replaces any existing video)"),
     aspects: Optional[str] = typer.Option(None, "--aspects", help="New item specifics as JSON object"),
     weight: Optional[float] = typer.Option(None, "--weight", "-w", help="Package weight in pounds"),
     length: Optional[float] = typer.Option(None, "--length", help="Package length in inches"),
@@ -310,10 +323,14 @@ def inventory_update(
 
     Fetches the current item and merges with provided updates.
 
+    --video-id attaches an already-uploaded Media API video to this SKU without
+    re-uploading it; create videos with `ebay seller videos create`.
+
     Examples:
         ebay inventory update SKU123 --quantity 20
         ebay inventory update SKU123 --title "Updated Title" --quantity 15
         ebay inventory update SKU123 --from-json updates.json
+        ebay inventory update SKU123 --video-id 1a2b3c4d
     """
     try:
         client = get_client()
@@ -345,7 +362,9 @@ def inventory_update(
         if description:
             payload["product"]["description"] = description
         if image_urls:
-            payload["product"]["imageUrls"] = [url.strip() for url in image_urls.split(",")]
+            payload["product"]["imageUrls"] = _parse_image_urls(image_urls)
+        if video_id is not None:
+            payload["product"]["videoIds"] = [video_id]
         if aspects:
             payload["product"]["aspects"] = json.loads(aspects)
         if condition:
@@ -380,16 +399,39 @@ def inventory_update(
                     dims["height"] = height
                 dims["unit"] = "INCH"
 
-        result = client.create_or_update_inventory_item(sku, payload)
+        client.create_or_update_inventory_item(sku, payload)
         print_success(f"Inventory item '{sku}' updated successfully.")
 
+        item = None
+        if image_urls is not None or video_id is not None:
+            item = client.get_inventory_item(sku)
+
+        if image_urls is not None:
+            expected_image_urls = _parse_image_urls(image_urls)
+            actual_image_urls = item.get("product", {}).get("imageUrls", [])
+            if actual_image_urls != expected_image_urls:
+                raise ClientError(
+                    f"Inventory item '{sku}' image update was not applied: "
+                    f"expected {len(expected_image_urls)} image URL(s), "
+                    f"got {len(actual_image_urls)}."
+                )
+
+        if video_id is not None:
+            actual_video_ids = item.get("product", {}).get("videoIds", [])
+            if actual_video_ids != [video_id]:
+                raise ClientError(
+                    f"Inventory item '{sku}' video update was not applied: "
+                    f"expected videoIds ['{video_id}'], got {actual_video_ids}."
+                )
+
         if table:
-            product = payload.get("product", {})
-            ship_avail = payload.get("availability", {}).get("shipToLocationAvailability", {})
+            result = item or payload
+            product = result.get("product", {})
+            ship_avail = result.get("availability", {}).get("shipToLocationAvailability", {})
             summary = [{
                 "sku": sku,
                 "title": product.get("title", ""),
-                "condition": payload.get("condition", ""),
+                "condition": result.get("condition", ""),
                 "quantity": ship_avail.get("quantity", ""),
             }]
             print_table(
@@ -399,7 +441,7 @@ def inventory_update(
             )
         else:
             # Return the updated item for verification
-            item = client.get_inventory_item(sku)
+            item = item or client.get_inventory_item(sku)
             print_json(item)
 
     except Exception as e:

@@ -43,8 +43,7 @@ before any submodule import on **every** entry path — Python guarantees the
 package `__init__` runs before `<pkg>.main` / `<pkg>.commands.*`, so it is the only
 hook that also protects a bare `import <pkg>.main` (used by tests, diagnostics, and
 `python -m`), which a console-script wrapper cannot cover. A warning filter that
-must precede a dependency import, or a stale-bytecode purge for an editable,
-Dropbox-synced install, qualifies. Annotate that single statement with an inline
+must precede a dependency import qualifies. Annotate that single statement with an inline
 `# lean-cli-allow: <reason>` marker so it passes the lean check and the exception
 is self-documenting and auditable:
 
@@ -206,14 +205,10 @@ Aliases only work in interactive shells and fail in automation contexts.
 
 ### Setup via uv
 
-CLI tools are installed via `uv tool install`, which automatically creates the symlink:
+CLI tools are installed via `uv tool install`, which automatically creates the symlink. Use the repo-owned install script, not a bare `uv tool install` call — it pins the interpreter to the system `python3` so the venv doesn't drift onto a uv-managed Python:
 
 ```bash
-# Install a CLI tool (creates venv + symlink automatically)
-uv tool install -e <cli-tools-root>/toolname --force --refresh
-
-# Or use the install script
-<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh toolname
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh toolname
 
 # Verify it works
 which toolname  # Should show ~/.local/bin/toolname
@@ -222,7 +217,7 @@ toolname --version
 
 ### How It Works
 
-`uv tool install -e <path>` does three things:
+`uv tool install -e <path>` (what the install script runs under the hood) does three things:
 1. Creates an isolated venv at `~/.local/share/uv/tools/<package-name>`
 2. Installs the package in editable mode (source changes take effect immediately)
 3. Creates a symlink at `~/.local/bin/<cli-name>` pointing to the venv's entry point

@@ -1,2 +1,0 @@
-"""LegoScout prospector.
-"""

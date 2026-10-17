@@ -94,6 +94,25 @@ def test_single_credential_type_help_does_not_register_credential_type_option():
     assert "No such option" in invalid.output
 
 
+def test_browser_auth_app_seeds_shared_chromium_profile():
+    config = MagicMock()
+    config.CREDENTIAL_TYPES = [CredentialType.BROWSER_SESSION]
+    config.OAUTH_AUTH_URL = ""
+    config.OAUTH_TOKEN_URL = ""
+    config.seed_shared_chromium_profile.return_value = Path("/tmp/shared-chromium-profile")
+    app = create_auth_app(
+        lambda profile=None: config,
+        tool_name="bricklink",
+        include_profiles=False,
+    )
+
+    result = CliRunner().invoke(app, ["seed-shared-chromium-profile"])
+
+    assert result.exit_code == 0, result.output
+    config.seed_shared_chromium_profile.assert_called_once_with()
+    assert "Seeded shared Chromium profile at /tmp/shared-chromium-profile" in result.output
+
+
 def test_auth_login_prints_setup_instructions_and_prompts_for_non_secret_config_first():
     class AuthConfig:
         CREDENTIAL_TYPES = [CredentialType.USERNAME_PASSWORD]
@@ -430,7 +449,7 @@ def test_auth_status_reports_missing_profile_secret_as_unauthenticated(tmp_path,
         assert secret_name == "tool-api-key"
         return config_module.subprocess.CompletedProcess(
             [],
-            1,
+            44,
             stdout="",
             stderr="missing",
         )
@@ -497,6 +516,69 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
     assert "ACTIVE=true" in content
     assert "API_KEY='secret://tool-api-key'" in content
     assert "API_KEY=" in content
+
+
+def test_login_bootstrap_keeps_declared_root_config_field_out_of_profile_env(tmp_path, monkeypatch):
+    """agent-issues #436: a tool-declared ``ROOT_CONFIG_FIELDS`` name must land
+    in the tool's root config ``.env``, never in the profile ``.env`` that the
+    login bootstrap creates.
+
+    ``create_profile`` resolves root config field names from the subject it is
+    handed, and ``_bootstrap_profile_if_missing`` hands it a ``ProfileStore``.
+    While ``ProfileStore`` declared none, airtable's ``BASE_ID`` was written
+    into ``authentication_profiles/default/.env`` and the next ``Config(...)``
+    construction raised "Authentication profile .env files contain
+    non-authentication configuration fields" — which failed ``airtable auth
+    login`` and every CourseCraft login delegated to it.
+    """
+    from cli_tools_shared.config import (
+        BaseConfig,
+        config_env_path_for_tool,
+        get_profiles_base_dir,
+    )
+
+    # BaseConfig mirrors instance config values into os.environ and never
+    # removes them, so claim the names this test seeds: monkeypatch restores
+    # the real environment afterwards, and an empty value keeps BaseConfig
+    # from treating the leaked value as already-set.
+    for field_name in ("BASE_ID", "BASE_URL", "PERSONAL_ACCESS_TOKEN"):
+        monkeypatch.setenv(field_name, "")
+
+    class _Cfg(BaseConfig):
+        CREDENTIAL_TYPES = [CredentialType.PERSONAL_ACCESS_TOKEN]
+        ROOT_CONFIG_FIELDS = ("BASE_ID",)
+
+    tool_dir = tmp_path / "tool"
+    tool_dir.mkdir()
+    (tool_dir / ".env.example").write_text(
+        "ACTIVE=true\n"
+        "PERSONAL_ACCESS_TOKEN=\n"
+        "BASE_URL=https://api.example.com\n"
+        "BASE_ID=\n"
+    )
+
+    def get_config(profile=None):
+        return _Cfg(tool_dir=tool_dir, profile=profile)
+
+    app = create_auth_app(get_config, tool_name="tool")
+    result = CliRunner().invoke(app, ["login"], input="test-token\n")
+
+    assert result.exit_code == 0, result.output
+
+    profile_body = (get_profiles_base_dir("tool") / "default" / ".env").read_text()
+    assert "ACTIVE=true" in profile_body
+    assert "PERSONAL_ACCESS_TOKEN=" in profile_body
+    assert "BASE_ID" not in profile_body
+    assert "BASE_URL" not in profile_body
+
+    root_body = config_env_path_for_tool("tool").read_text()
+    assert "BASE_ID=" in root_body
+    assert "BASE_URL=https://api.example.com" in root_body
+
+    # The reported failure itself: with the profile on disk, building the
+    # config must not raise the non-authentication-fields ConfigError.
+    config = _Cfg(tool_dir=tool_dir)
+    assert config.env_file_path == get_profiles_base_dir("tool") / "default" / ".env"
 
 
 def test_oauth_login_skips_redirect_uri_prompt_when_not_required(tmp_path, monkeypatch):
@@ -946,13 +1028,9 @@ def test_force_custom_login_handler_preserves_profile_credentials(tmp_path, monk
             "ACCESS_TOKEN=old-access-token\n",
         )
     )
-    cookies = (
-        default_dir
-        / "browser-data"
-        / "chromium-profile"
-        / "Default"
-        / "Cookies"
-    )
+    shared_profile = tmp_path / "shared-chromium-profile"
+    monkeypatch.setenv("CLI_TOOLS_SHARED_CHROME_PROFILE", str(shared_profile))
+    cookies = shared_profile / "Default" / "Cookies"
     cookies.parent.mkdir(parents=True, exist_ok=True)
     cookies.write_text("sqlite-stub")
 
@@ -1900,9 +1978,11 @@ def test_auth_status_canonical_shape_with_browser_session(tmp_path, monkeypatch)
     _seed_profile(
         base_profiles_dir, "default", active=True, env_body="API_KEY=key-abc-def\n"
     )
-    # Seed the persistent Chromium profile's cookie database so the real
+    # Seed the official shared Chromium profile's cookie database so the real
     # ``BaseConfig.has_saved_session()`` reports True.
-    cookies = base_profiles_dir / "default" / "browser-data" / "chromium-profile" / "Default" / "Cookies"
+    shared_profile = tmp_path / "shared-chromium-profile"
+    monkeypatch.setenv("CLI_TOOLS_SHARED_CHROME_PROFILE", str(shared_profile))
+    cookies = shared_profile / "Default" / "Cookies"
     cookies.parent.mkdir(parents=True, exist_ok=True)
     cookies.write_text("sqlite-stub")
 
@@ -1967,14 +2047,9 @@ def test_auth_status_dual_auth_browser_session_is_not_overridden_by_api_test(tmp
         active=True,
         env_body="CLIENT_ID=\nCLIENT_SECRET=\nACCESS_TOKEN=\nREFRESH_TOKEN=\n",
     )
-    cookies = (
-        base_profiles_dir
-        / "default"
-        / "browser-data"
-        / "chromium-profile"
-        / "Default"
-        / "Cookies"
-    )
+    shared_profile = tmp_path / "shared-chromium-profile"
+    monkeypatch.setenv("CLI_TOOLS_SHARED_CHROME_PROFILE", str(shared_profile))
+    cookies = shared_profile / "Default" / "Cookies"
     cookies.parent.mkdir(parents=True, exist_ok=True)
     cookies.write_text("sqlite-stub")
 

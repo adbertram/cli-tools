@@ -22,6 +22,11 @@ from .config import get_config
 LIST_COLUMNS = ["id", "name", "price", "status", "created"]
 # Validated present on every searchFacetQuery item (see README "Data source").
 SEARCH_COLUMNS = ["id", "name", "price", "status", "categoryTitle"]
+# Item detail reads are serialized through one browser page and each read can
+# consume the full 45-second capture timeout. Bound one invocation so callers
+# cannot start a batch that produces no JSON until an impractically long run
+# finishes.
+MAX_GET_MANY_ITEMS = 25
 
 # Source-CLI Sort Standard -> Mercari search `sortBy` URL code.
 # The Mercari search SPA translates a numeric ?sortBy= code into the
@@ -255,7 +260,10 @@ def listings_get(
 @command
 def listings_get_many(
     item_ids: List[str] = typer.Argument(
-        ..., help="Listing/item ids or URLs"
+        ..., help=f"One through {MAX_GET_MANY_ITEMS} listing/item ids or URLs"
+    ),
+    status_only: bool = typer.Option(
+        False, "--status-only", help="Read published availability without checkout pricing"
     ),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     properties: Optional[str] = typer.Option(
@@ -263,9 +271,15 @@ def listings_get_many(
     ),
 ):
     """Get many listings through one public Mercari browser session."""
+    if len(item_ids) > MAX_GET_MANY_ITEMS:
+        raise ClientError(
+            f"get-many accepts at most {MAX_GET_MANY_ITEMS} item IDs; "
+            f"received {len(item_ids)}."
+        )
+    print_info(f"Reading {len(item_ids)} Mercari item details.")
     client = get_client()
     try:
-        rows = client.get_items(item_ids)
+        rows = client.get_items(item_ids, status_only=status_only)
     finally:
         client.close()
 

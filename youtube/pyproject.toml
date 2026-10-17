@@ -16,6 +16,7 @@ dependencies = [
     "google-api-python-client>=2.100.0",
     "google-auth-oauthlib>=1.0.0",
     "google-auth-httplib2>=0.1.0",
+    "yt-dlp>=2026.8.19",
 ]
 
 [project.scripts]
@@ -32,3 +33,8 @@ include = ["youtube_cli*"]
 
 [tool.uv.sources]
 cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }
+
+[tool.pytest.ini_options]
+markers = [
+    "e2e: live YouTube Data API tests; skipped unless YOUTUBE_E2E=1",
+]

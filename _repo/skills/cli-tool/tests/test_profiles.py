@@ -156,7 +156,7 @@ def test_env_example_has_active_profile_marker(cli_name, cli_dir, cli_executable
     )
 
 
-def test_profiles_dir_gitignored(cli_tools_root):
+def test_profiles_dir_gitignored(cli_tools_root, cli_repo_policy):
     """Repo root .gitignore ignores authentication_profiles/ for every CLI."""
     gitignore = cli_tools_root / ".gitignore"
     assert gitignore.exists(), (
@@ -171,7 +171,7 @@ def test_profiles_dir_gitignored(cli_tools_root):
     )
 
 
-def test_env_star_gitignored(cli_tools_root):
+def test_env_star_gitignored(cli_tools_root, cli_repo_policy):
     """Repo root .gitignore ignores .env.* while preserving .env.example."""
     gitignore = cli_tools_root / ".gitignore"
     assert gitignore.exists(), (

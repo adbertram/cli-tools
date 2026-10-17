@@ -5,8 +5,9 @@ import subprocess
 from pathlib import Path
 from typing import Optional
 
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, config_for, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
+from .errors import command_error
 
 
 class Config(BaseConfig):
@@ -80,7 +81,8 @@ class Config(BaseConfig):
             )
             if result.returncode == 0:
                 return {"api_test": "passed"}
-            return {"api_test": f"failed: {result.stderr.strip() or result.stdout.strip()}"}
+            message = command_error(self.cli_command, result.returncode, result.stderr or "")
+            return {"api_test": f"failed: {message}"}
         except Exception as e:
             return {"api_test": f"failed: {e}"}
 
@@ -91,7 +93,4 @@ _configs = {}
 
 def get_config(profile=None) -> Config:
     """Get or create a Config instance for the given profile."""
-    key = profile or "__default__"
-    if key not in _configs:
-        _configs[key] = Config(profile=profile)
-    return _configs[key]
+    return config_for(Config, profile, _configs)

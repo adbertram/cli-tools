@@ -1,8 +1,8 @@
 {
   "tool": "cryptocom",
   "description": "Crypto.com Exchange API CLI",
-  "discovered_at": "2026-08-23T16:08:57Z",
-  "total_commands": 30,
+  "discovered_at": "2026-09-08T23:49:06Z",
+  "total_commands": 34,
   "global_options": [
     {
       "name": "--version",
@@ -59,6 +59,128 @@
               "required": false,
               "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
               "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "fee-rate": {
+          "help": "Get actual account fee rates in basis points (1 bps = 0.0001).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "fills": {
+          "help": "Read one private trade-fill page; negative fees mean a balance deduction.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--instrument-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Instrument name",
+              "short": "-i"
+            },
+            {
+              "name": "--start-time",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Inclusive start timestamp in milliseconds or nanoseconds"
+            },
+            {
+              "name": "--end-time",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Exclusive end timestamp in milliseconds or nanoseconds"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=100]  Maximum rows in one venue page; no automatic pagination",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter returned page: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "instrument-fee-rate": {
+          "help": "Get actual instrument fee rates in basis points (1 bps = 0.0001).",
+          "arguments": [
+            {
+              "name": "instrument_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Instrument name, for example SOL_USD"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -876,6 +998,12 @@
               "help": "Optional client order ID"
             },
             {
+              "name": "--spot-margin",
+              "type": "TEXT",
+              "required": false,
+              "help": "Execution mode: SPOT or MARGIN"
+            },
+            {
               "name": "--table",
               "type": "bool",
               "required": false,
@@ -903,12 +1031,18 @@
           "arguments": [
             {
               "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID (alias of 'orders get')"
+              "type": "ORDER_ID",
+              "required": false,
+              "help": "Order ID; exclusive with --client-oid"
             }
           ],
           "options": [
+            {
+              "name": "--client-oid",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client order ID; exclusive with ORDER_ID"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -937,12 +1071,79 @@
           "arguments": [
             {
               "name": "order_id",
-              "type": "TEXT",
-              "required": true,
-              "help": "Order ID"
+              "type": "ORDER_ID",
+              "required": false,
+              "help": "Order ID; exclusive with --client-oid"
             }
           ],
           "options": [
+            {
+              "name": "--client-oid",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client order ID; exclusive with ORDER_ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "history": {
+          "help": "Read one terminal order-history page; a full page is not complete history.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--instrument-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "Instrument name",
+              "short": "-i"
+            },
+            {
+              "name": "--start-time",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Start timestamp in milliseconds or nanoseconds"
+            },
+            {
+              "name": "--end-time",
+              "type": "INTEGER",
+              "required": false,
+              "help": "End timestamp in milliseconds or nanoseconds"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=100]  Maximum rows in one venue page; no automatic pagination",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter returned page: field:op:value",
+              "short": "-f"
+            },
             {
               "name": "--table",
               "type": "bool",

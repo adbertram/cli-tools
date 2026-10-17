@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from cli_test_utils import get_pkg_dir
 import pytest
 
 FORBIDDEN_REEXPORT_FILES = ["filters.py", "output.py"]
@@ -42,7 +43,7 @@ def test_no_pure_reexport_module(cli_name, cli_dir, command_filter, filename):
     """Pure re-export modules add zero value — delete the file and import from cli_tools_shared directly."""
     if command_filter:
         pytest.skip("Skipping (command filter active)")
-    path = cli_dir / f"{cli_name.replace('-', '_')}_cli" / filename
+    path = get_pkg_dir(cli_dir, cli_name) / filename
     if not path.exists():
         return
     if _is_pure_reexport(path):

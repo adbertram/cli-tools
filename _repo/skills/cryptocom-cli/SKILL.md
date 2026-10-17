@@ -24,6 +24,11 @@ cryptocom <command-group> <action> [arguments] [options]
 | `cryptocom book get BTCUSD-PERP --depth 10` | Get an order book snapshot |
 | `cryptocom trades list BTCUSD-PERP --limit 10` | List recent public trades |
 | `cryptocom candlesticks list BTCUSD-PERP --timeframe 1m --limit 10` | List OHLCV candles |
+| `cryptocom orders details --client-oid CLIENT_ORDER_ID` | Reconcile an order by persisted client ID |
+| `cryptocom orders history --limit 100` | Read one terminal order-history page |
+| `cryptocom account fee-rate` | Get account fee rates in basis points |
+| `cryptocom account instrument-fee-rate SOL_USD` | Get effective instrument fee rates in basis points |
+| `cryptocom account fills --limit 100` | Read one private trade-fill page |
 | `cryptocom account balance` | Get authenticated account balances |
 | `cryptocom account positions` | List positive non-USD spot holdings with quantity and market value |
 | `cryptocom account open-orders --instrument-name BTCUSD-PERP` | List authenticated open orders |
@@ -37,7 +42,8 @@ This file contains complete command syntax, all arguments, all options, and usag
 </principle>
 
 <principle name="Command Groups">
-- **account**: authenticated balances, positive non-USD spot positions, and open orders
+- **account**: authenticated balances, positive non-USD spot positions, open orders, fee rates, and private fills
+- **orders**: create, cancel, open-order list, details by venue/client ID, and terminal history
 - **book**: order book instrument discovery and snapshots
 - **candlesticks**: OHLCV candle lists and recent candle lookup
 - **instruments**: Exchange instrument discovery and metadata
@@ -49,6 +55,9 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="Authentication">
 Public market-data commands use `no_auth`. Private `account` commands require `cryptocom auth login` with Exchange `API_KEY` and `API_SECRET`; use `cryptocom auth profiles` for sandbox or alternate profile workflows.
+</principle>
+<principle name="Reconciliation">
+Persist client IDs before submitting orders. Create/cancel transport calls never retry automatically. Lookup accepts exactly one venue ID or client ID. History/fills are single pages with at most 100 rows; use explicit time windows and never infer completeness from a full page or filtered page. Fee rates use basis points (divide by 10,000); private fill fees preserve negative balance deductions. A cancellation acknowledgement is not proof of terminal order status.
 </principle>
 </principles>
 

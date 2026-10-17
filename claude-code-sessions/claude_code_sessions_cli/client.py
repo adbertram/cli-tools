@@ -263,6 +263,7 @@ class ClaudeCodeSessionsClient:
         filters: Optional[List[str]] = None,
         date_bounds: Optional[tuple] = None,
         min_tool_calls: Optional[int] = None,
+        session_ids: Optional[List[str]] = None,
     ) -> List[SessionSummary]:
         """
         List sessions for a project, or across all projects when project is None.
@@ -276,6 +277,8 @@ class ClaudeCodeSessionsClient:
                 last_activity falls outside this local-tz window are dropped.
             min_tool_calls: Optional minimum tool_call_count. Sessions with
                 fewer (or None/missing) are dropped.
+            session_ids: When given, only the transcripts named by these ids
+                are opened; every other session file is left unparsed.
 
         Returns:
             List of SessionSummary models sorted by last_activity desc.
@@ -286,6 +289,7 @@ class ClaudeCodeSessionsClient:
                 since=since,
                 date_bounds=date_bounds,
                 min_tool_calls=min_tool_calls,
+                session_ids=session_ids,
             )
 
         project_dir = self._get_project_dir(project)
@@ -297,6 +301,7 @@ class ClaudeCodeSessionsClient:
             since=since,
             date_bounds=date_bounds,
             min_tool_calls=min_tool_calls,
+            session_ids=session_ids,
         )
 
         # Sort by last activity (most recent first)
@@ -310,6 +315,7 @@ class ClaudeCodeSessionsClient:
         since: Optional[str] = None,
         date_bounds: Optional[tuple] = None,
         min_tool_calls: Optional[int] = None,
+        session_ids: Optional[List[str]] = None,
     ) -> List[SessionSummary]:
         """
         List sessions across every project under projects_dir.
@@ -331,11 +337,26 @@ class ClaudeCodeSessionsClient:
                     since=since,
                     date_bounds=date_bounds,
                     min_tool_calls=min_tool_calls,
+                    session_ids=session_ids,
                 )
             )
 
         merged.sort(key=lambda s: s.last_activity or '', reverse=True)
         return merged[:limit]
+
+    def _session_files(self, project_dir: Path, session_ids: Optional[List[str]]) -> List[Path]:
+        """Transcript files in one project dir; only the named ids when given.
+
+        A session lives in exactly one project dir, so the named file is
+        absent from every other project dir and simply contributes nothing.
+        """
+        if session_ids is None:
+            return list(project_dir.glob('*.jsonl'))
+        return [
+            path
+            for path in (project_dir / f"{session_id}.jsonl" for session_id in session_ids)
+            if path.is_file()
+        ]
 
     def _collect_sessions_from_dir(
         self,
@@ -344,13 +365,14 @@ class ClaudeCodeSessionsClient:
         since: Optional[str] = None,
         date_bounds: Optional[tuple] = None,
         min_tool_calls: Optional[int] = None,
+        session_ids: Optional[List[str]] = None,
     ) -> List[SessionSummary]:
         """Collect SessionSummary entries from one project dir, applying filters."""
         cutoff_time = parse_since(since) if since else None
 
         sessions: List[SessionSummary] = []
 
-        for session_file in project_dir.glob('*.jsonl'):
+        for session_file in self._session_files(project_dir, session_ids):
             # Skip if file is too old based on mtime
             if cutoff_time:
                 mtime = datetime.fromtimestamp(session_file.stat().st_mtime)

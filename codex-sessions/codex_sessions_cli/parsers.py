@@ -61,12 +61,23 @@ def parse_cli_output(output: str, format: OutputFormat = OutputFormat.AUTO) -> A
     return [{"name": line} for line in text.splitlines() if line.strip()]
 
 
-def iter_rollout_paths(codex_home: Path) -> Iterable[Path]:
-    """Yield Codex rollout JSONL files from active and archived session roots."""
+def iter_rollout_paths(codex_home: Path, session_ids: Optional[Iterable[str]] = None) -> Iterable[Path]:
+    """Yield Codex rollout JSONL files from active and archived session roots.
+
+    With session_ids, yield only the files named ``rollout-<timestamp>-<id>.jsonl``
+    for those ids: a directory walk that never opens a file, so an exact id
+    lookup does not parse every rollout on disk. An id with no file yields nothing.
+    """
+    patterns = (
+        [f"{ROLLOUT_PREFIX}*{ROLLOUT_SUFFIX}"]
+        if session_ids is None
+        else [f"{ROLLOUT_PREFIX}*-{session_id}{ROLLOUT_SUFFIX}" for session_id in session_ids]
+    )
     for subdir in SESSION_SUBDIRS:
         root = codex_home / subdir
         if root.exists():
-            yield from sorted(root.rglob(f"{ROLLOUT_PREFIX}*{ROLLOUT_SUFFIX}"))
+            for pattern in patterns:
+                yield from sorted(root.rglob(pattern))
 
 
 def _read_first_nonempty_line(path: Path) -> Optional[str]:

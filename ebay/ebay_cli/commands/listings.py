@@ -46,10 +46,12 @@ from typing import Optional, Any, List
 import typer
 
 from ..client import get_client, ClientError
+from ..models.image import MAX_IMAGES_PER_LISTING
 from ..models import (
     Listing,
     ListingFormat,
     ListingStatus,
+    OfferStatus,
     Image,
     is_valid_sku,
     listing_from_offer,
@@ -77,6 +79,14 @@ from cli_tools_shared.filters import validate_filters, apply_filters, FilterVali
 from ..properties import validate_and_filter_properties, PropertyValidationError
 from ..storage import TemplateStorage, DraftStorage
 from ..template_validation import validate_template_data
+from ..video import (
+    VIDEO_EXTENSIONS,
+    PreparedVideo,
+    default_title_for,
+    prepare_video_for_upload,
+    upload_prepared_video,
+    video_prep_message,
+)
 
 app = typer.Typer(help="Manage eBay listings (drafts and active)")
 drafts_app = typer.Typer(help="Manage Seller Hub drafts", no_args_is_help=True)
@@ -95,11 +105,11 @@ TRADING_LISTING_FORMATS = {
     "FixedPriceItem": ListingFormat.FIXED_PRICE,
 }
 FEED_WAIT_TIMEOUT_SECONDS = 300.0
+# Each listing image upload is tried this many times before the create aborts.
+IMAGE_UPLOAD_ATTEMPTS = 2
 
-# Maximum images per listing (eBay limit)
-MAX_IMAGES = 12
-
-# Supported image extensions for --image-folder scanning
+# Supported image extensions for --image-folder scanning. A video extension is
+# never part of this set: album exports put photos and videos in one folder.
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 # eBay XML namespace for Trading API parsing
@@ -266,24 +276,36 @@ def _parse_seller_list_xml(xml_content: str) -> tuple[list[dict], int, int]:
 # =============================================================================
 
 
-def _scan_folder_for_images(folder_path: str) -> list[str]:
-    """Scan a folder for image files."""
+def _media_files_in_folder(folder_path: str, extensions: set[str]) -> list[str]:
+    """Return the absolute paths of files in a folder matching ``extensions``."""
     folder = Path(folder_path)
     if not folder.exists():
         raise FileNotFoundError(f"Folder not found: {folder_path}")
     if not folder.is_dir():
         raise NotADirectoryError(f"Not a directory: {folder_path}")
 
-    image_files = []
-    for file in folder.iterdir():
-        if file.is_file() and file.suffix.lower() in IMAGE_EXTENSIONS:
-            image_files.append(str(file.absolute()))
-
-    image_files.sort()
-    return image_files
+    return sorted(
+        str(file.absolute())
+        for file in folder.iterdir()
+        if file.is_file() and file.suffix.lower() in extensions
+    )
 
 
-def _export_photos_from_album(album_name: str, limit: int = MAX_IMAGES) -> tuple[list[str], str]:
+def _scan_folder_for_images(folder_path: str) -> list[str]:
+    """Scan a folder for image files. Videos are never returned as images."""
+    return _media_files_in_folder(folder_path, IMAGE_EXTENSIONS)
+
+
+def _scan_folder_for_video(folder_path: str) -> Optional[str]:
+    """Return the first video file in a folder, or None when none exists."""
+    video_files = _media_files_in_folder(folder_path, VIDEO_EXTENSIONS)
+    return video_files[0] if video_files else None
+
+
+def _export_photos_from_album(
+    album_name: str,
+    limit: int = MAX_IMAGES_PER_LISTING,
+) -> tuple[list[str], str]:
     """Export photos from macOS Photos app album to temp directory."""
     temp_dir = tempfile.mkdtemp(prefix="ebay_photos_")
 
@@ -341,34 +363,42 @@ def _upload_images_for_listing(
     if not sources:
         return uploaded_urls, errors
 
-    if len(sources) > MAX_IMAGES:
-        print_warning(f"Only first {MAX_IMAGES} images will be used (eBay limit). {len(sources)} provided.")
-        sources = sources[:MAX_IMAGES]
+    if len(sources) > MAX_IMAGES_PER_LISTING:
+        print_warning(
+            f"Only first {MAX_IMAGES_PER_LISTING} images will be used (eBay limit). "
+            f"{len(sources)} provided."
+        )
+        sources = sources[:MAX_IMAGES_PER_LISTING]
 
     for source_value, source_type in sources:
-        try:
-            if source_type == "file":
-                if not Path(source_value).exists():
-                    errors.append({"source": source_value, "error": "File not found"})
-                    print_warning(f"Image file not found: {source_value}")
-                    continue
-                result = client.upload_image_from_file(source_value)
-            else:
-                result = client.upload_image_from_url(source_value)
+        if source_type == "file" and not Path(source_value).exists():
+            errors.append({"source": source_value, "error": "File not found"})
+            print_warning(f"Image file not found: {source_value}")
+            continue
+        upload = client.upload_image_from_file if source_type == "file" else client.upload_image_from_url
+        # One retry: a single Media API write timeout must not drop an image.
+        for attempt in range(1, IMAGE_UPLOAD_ATTEMPTS + 1):
+            try:
+                result = upload(source_value)
+                break
+            except Exception as e:
+                print_warning(
+                    f"Failed to upload {source_value} (attempt {attempt}/{IMAGE_UPLOAD_ATTEMPTS}): {e}"
+                )
+                last_error = e
+        else:
+            errors.append({"source": source_value, "error": str(last_error)})
+            continue
 
-            storage.add_image(
-                image_id=result["image_id"],
-                image_url=result["imageUrl"],
-                expiration_date=result["expirationDate"],
-                source=source_type,
-                original=source_value
-            )
-            uploaded_urls.append(result["imageUrl"])
-            print_info(f"Uploaded image: {source_value}")
-
-        except Exception as e:
-            errors.append({"source": source_value, "error": str(e)})
-            print_warning(f"Failed to upload {source_value}: {e}")
+        storage.add_image(
+            image_id=result["image_id"],
+            image_url=result["imageUrl"],
+            expiration_date=result["expirationDate"],
+            source=source_type,
+            original=source_value
+        )
+        uploaded_urls.append(result["imageUrl"])
+        print_info(f"Uploaded image: {source_value}")
 
     if uploaded_urls:
         try:
@@ -377,7 +407,7 @@ def _upload_images_for_listing(
             existing_urls = product.get("imageUrls", [])
 
             combined_urls = uploaded_urls + [u for u in existing_urls if u not in uploaded_urls]
-            combined_urls = combined_urls[:MAX_IMAGES]
+            combined_urls = combined_urls[:MAX_IMAGES_PER_LISTING]
 
             update_payload = current_item.copy()
             for field in ["sku", "locale", "groupIds", "inventoryItemGroupKeys"]:
@@ -394,6 +424,51 @@ def _upload_images_for_listing(
             print_warning(f"Failed to update inventory item images: {e}")
 
     return uploaded_urls, errors
+
+
+def _attach_video_to_product(
+    client,
+    product: dict,
+    video: Optional[str],
+    video_folder: Optional[str],
+) -> Optional[PreparedVideo]:
+    """Upload a listing video and record its ID on the inventory item product.
+
+    eBay keeps video IDs on the inventory item (``product.videoIds``), never on
+    the offer. Returns the ``PreparedVideo`` so the caller can clean up any
+    temporary transcode output in its ``finally`` block.
+    """
+    video_path = video
+    if not video_path and video_folder:
+        video_path = _scan_folder_for_video(video_folder)
+        if not video_path:
+            print_warning(f"No video found in folder: {video_folder}")
+
+    if not video_path:
+        return None
+
+    prepared = prepare_video_for_upload(video_path)
+    print_info(video_prep_message(prepared))
+
+    video_id = upload_prepared_video(
+        client,
+        prepared,
+        title=default_title_for(video_path),
+    )
+    product["videoIds"] = [video_id]
+    print_success(f"Uploaded video: {video_id}")
+
+    print_warning(
+        "eBay videos expire 30 days after upload; a video attached to an "
+        "unpublished draft will no longer be available if the listing is "
+        "published after that window."
+    )
+    print_warning(
+        "eBay videos are only viewable in eBay's iOS and Android apps, "
+        "not on desktop web."
+    )
+
+    return prepared
 
 
 # =============================================================================
@@ -891,6 +966,37 @@ def _get_merged_listings(client, limit: int = 100, status_filter: Optional[str] 
     return listings[:limit]
 
 
+def _reject_cross_api_sku_collision(
+    sku: str,
+    offer_listing: Listing,
+    active_items: list[dict],
+) -> None:
+    """Refuse a SKU that names both an Inventory API offer and another listing.
+
+    The multiple-offers guard in ``_get_listing_by_sku`` only catches collisions
+    inside the Inventory API's own results. A SKU whose custom label also carries
+    a legacy Trading API active listing is a second record: ``update`` would
+    write to the Inventory offer and report success while the live listing kept
+    its old values (agent-issues #226). A published offer and its own listing
+    share the item ID, so only differing item IDs count as a collision.
+    """
+    offer_item_id = offer_listing.item_id or ""
+    colliding_item_ids = sorted(
+        str(item.get("item_id") or "<missing item_id>")
+        for item in active_items
+        if item.get("sku") == sku and (item.get("item_id") or "") != offer_item_id
+    )
+    if not colliding_item_ids:
+        return
+
+    raise ClientError(
+        f"SKU {sku} resolves to different records: Inventory API offer "
+        f"{offer_listing.offer_id or '<missing offerId>'} "
+        f"(item {offer_item_id or 'unpublished'}) and Trading API active listing "
+        f"{', '.join(colliding_item_ids)}"
+    )
+
+
 def _get_listing_by_sku(client, sku: str) -> Optional[Listing]:
     """Get a single listing by SKU, merging data from all APIs."""
     inventory_item = None
@@ -925,9 +1031,13 @@ def _get_listing_by_sku(client, sku: str) -> Optional[Listing]:
         if listing is None:
             return None
 
+        # One Trading API read serves both the cross-API collision guard and,
+        # for a published offer, the merge of its own listing instance.
+        active_items = _fetch_all_active_listings(client, 500)
+        _reject_cross_api_sku_collision(sku, listing, active_items)
+
         # If published, get additional data for this exact listing instance.
         if listing.is_active and listing.item_id:
-            active_items = _fetch_all_active_listings(client, 500)
             for item in active_items:
                 if item.get("item_id") == listing.item_id:
                     trading_listing = listing_from_trading_api(item)
@@ -981,7 +1091,7 @@ def _generate_preview_html(listing: Listing) -> str:
         main_image = listing.images[0].url
         thumbnail_html = "".join([
             f'<img src="{img.url}" class="thumbnail" onclick="document.getElementById(\'mainImage\').src=\'{img.url}\'" alt="Thumbnail {i+1}">'
-            for i, img in enumerate(listing.images[:12])
+            for i, img in enumerate(listing.images[:MAX_IMAGES_PER_LISTING])
         ])
         gallery_html = f'''
         <div class="image-gallery">
@@ -1398,12 +1508,14 @@ def listings_create(
     condition_description: Optional[str] = typer.Option(None, "--condition-description", help="Condition description text (overrides template default)"),
     condition_descriptors: Optional[str] = typer.Option(None, "--condition-descriptors", help="Condition descriptors JSON for trading cards (e.g., '[{\"name\":\"40001\",\"values\":[\"400010\"]}]')"),
     format_type: Optional[str] = typer.Option(None, "--format", "-f", help="FIXED_PRICE or AUCTION"),
-    weight: Optional[float] = typer.Option(None, "--weight", "-w", help="Package weight in pounds"),
+    weight: Optional[float] = typer.Option(None, "--weight", "-w", help="Package weight in pounds; also sets the Unit Quantity aspect when the aspects include Unit Type"),
     dimensions: Optional[str] = typer.Option(None, "--dimensions", help="Package dimensions as LxWxH in inches (e.g., 12x10x8)"),
     image: Optional[str] = typer.Option(None, "--image", "-i", help="Local image file path(s), comma-separated"),
     image_folder: Optional[str] = typer.Option(None, "--image-folder", help="Folder to scan for images"),
     image_url: Optional[str] = typer.Option(None, "--image-url", help="Remote image URL(s), comma-separated"),
     photos_album: Optional[str] = typer.Option(None, "--photos-album", help="macOS Photos app album name"),
+    video: Optional[str] = typer.Option(None, "--video", help="Local video file to attach (.mov, .mp4, .m4v)"),
+    video_folder: Optional[str] = typer.Option(None, "--video-folder", help="Folder to scan for the first video file"),
     aspects: Optional[str] = typer.Option(None, "--aspects", help="Item specifics as JSON (e.g., '{\"Sport\": [\"Football\"]}'"),
     fulfillment_policy_id: Optional[str] = typer.Option(None, "--fulfillment-policy", help="Fulfillment policy ID"),
     payment_policy_id: Optional[str] = typer.Option(None, "--payment-policy", help="Payment policy ID"),
@@ -1419,11 +1531,18 @@ def listings_create(
 
     Draft creation uses `ebay seller listings drafts create`.
 
+    A video attached with --video or --video-folder is uploaded to the Media API
+    and referenced from the inventory item's videoIds, which is how a video
+    reaches a listing. eBay videos expire 30 days after upload and are only
+    viewable in eBay's iOS and Android apps.
+
     Examples:
         ebay seller listings create --sku SKU123 --template vintage-camera --publish --price 149.99
         ebay seller listings create --sku SKU123 --title "Item" --price 99 --category 175673 --publish
+        ebay seller listings create --sku SKU123 --template lego-bulk-auction --video ./clip.mov --publish --price 149.99
     """
     photos_temp_dir = None
+    prepared_video = None
 
     if not publish:
         print_error("This command no longer creates drafts without --publish.")
@@ -1750,10 +1869,17 @@ def listings_create(
                 print_info('Example: --aspects \'{"Sport": ["Football"], "Card Condition": ["Ungraded"]}\'')
                 raise typer.Exit(1)
 
-        # Add weight to Unit Quantity item specific if provided
-        if weight is not None and "aspects" in product:
+        # Unit Quantity = --weight only for listings sold by weight, i.e. when the
+        # aspects (template or --aspects) opt in with a Unit Type. Package weight
+        # is meaningless as a unit count for anything else (cards, sleeves, sets).
+        if weight is not None and "Unit Type" in product.get("aspects", {}):
             weight_str = str(int(weight)) if weight == int(weight) else str(weight)
             product["aspects"]["Unit Quantity"] = [weight_str]
+
+        # Attach a listing video. eBay keeps video IDs on the inventory item
+        # (product.videoIds), never on the offer, so the video must exist before
+        # the inventory item is written below.
+        prepared_video = _attach_video_to_product(client, product, video, video_folder)
 
         if product:
             inventory_payload["product"] = product
@@ -1863,7 +1989,13 @@ def listings_create(
             if uploaded_urls:
                 print_success(f"Uploaded {len(uploaded_urls)} image(s).")
             if image_errors:
-                print_warning(f"{len(image_errors)} image(s) failed to upload.")
+                # Never create or publish an offer with a missing image.
+                print_error(
+                    f"{len(image_errors)} image(s) failed to upload; no offer was created or published:"
+                )
+                for image_error in image_errors:
+                    print_error(f"  - {image_error['source']}: {image_error['error']}")
+                raise typer.Exit(1)
 
         # Build offer payload
         if from_json:
@@ -2012,6 +2144,109 @@ def listings_create(
     finally:
         if photos_temp_dir and Path(photos_temp_dir).exists():
             shutil.rmtree(photos_temp_dir, ignore_errors=True)
+        if prepared_video:
+            prepared_video.cleanup()
+
+
+# =============================================================================
+# Helper Functions: Legacy Trading API Listing Updates
+# =============================================================================
+
+LEGACY_REVISE_OPTIONS = "--title, --description, --price, --quantity and --best-offer"
+
+
+def _parse_revise_fixed_price_item_xml(xml_response: str) -> dict[str, str]:
+    """Validate a ReviseFixedPriceItem response.
+
+    eBay rejects a revision with Ack=Failure and per-error codes; that has to
+    surface instead of being reported as a successful update.
+    """
+    try:
+        root = ET.fromstring(xml_response)
+    except ET.ParseError as error:
+        raise ClientError(f"Invalid ReviseFixedPriceItem XML: {error}") from error
+
+    ack = _get_text(root, "Ack")
+    if ack not in {"Success", "Warning"}:
+        messages = []
+        for error_element in root.findall("ebay:Errors", NS):
+            code = _get_text(error_element, "ErrorCode").strip()
+            message = (
+                _get_text(error_element, "LongMessage")
+                or _get_text(error_element, "ShortMessage")
+            ).strip()
+            if message:
+                messages.append(f"{code}: {message}" if code else message)
+        detail = "; ".join(messages) or f"Ack={ack or 'missing'}"
+        raise ClientError(f"ReviseFixedPriceItem failed: {detail}")
+
+    return {"item_id": _get_text(root, "ItemID"), "ack": ack}
+
+
+def _revise_legacy_listing(
+    client,
+    listing: Listing,
+    *,
+    title: Optional[str],
+    description: Optional[str],
+    price: Optional[str],
+    quantity: Optional[int],
+    best_offer: Optional[bool],
+    currency: Optional[str],
+    unsupported_options: list[str],
+) -> bool:
+    """Revise a legacy Trading API listing, which has no Inventory API offer.
+
+    Such listings were read-only through this CLI before (agent-issues #226):
+    they carry no inventory item and no offer for the Inventory paths to write,
+    so ReviseFixedPriceItem is their only write path.
+
+    Returns:
+        True when a revision was sent, False when nothing was requested.
+    """
+    if unsupported_options:
+        raise ClientError(
+            f"Legacy Trading API listing {listing.sku} supports "
+            f"{LEGACY_REVISE_OPTIONS} only; unsupported: "
+            f"{', '.join(unsupported_options)}"
+        )
+
+    if not listing.item_id:
+        raise ClientError(
+            f"Cannot revise legacy Trading API listing {listing.sku}: the Trading "
+            "API returned no item ID for this SKU"
+        )
+
+    if listing.format != ListingFormat.FIXED_PRICE:
+        raise ClientError(
+            f"Cannot revise legacy Trading API listing {listing.sku} "
+            f"(item {listing.item_id}): ReviseFixedPriceItem covers fixed-price "
+            f"listings only, and this one is {listing.format.value}"
+        )
+
+    if currency and not price:
+        raise ClientError(
+            f"--currency requires --price for legacy Trading API listing {listing.sku}"
+        )
+
+    revision: dict[str, Any] = {
+        "title": title,
+        "description": description,
+        "start_price": price,
+        "currency": currency or (listing.currency if price else None),
+        "quantity": quantity,
+        "best_offer_enabled": best_offer,
+    }
+    if all(value is None for value in revision.values()):
+        print_warning("No updates provided.")
+        return False
+
+    print_info(f"Revising legacy Trading API listing {listing.item_id}...")
+    _parse_revise_fixed_price_item_xml(
+        client.revise_fixed_price_item(listing.item_id, **revision)
+    )
+    print_success(f"Listing updated: {listing.sku}")
+    return True
 
 
 @app.command("update")
@@ -2030,17 +2265,26 @@ def listings_update(
     return_policy_id: Optional[str] = typer.Option(None, "--return-policy", help="Update return policy"),
     location_key: Optional[str] = typer.Option(None, "--location", help="Update location"),
     from_json: Optional[str] = typer.Option(None, "--from-json", help="Updates from JSON file"),
+    best_offer: Optional[bool] = typer.Option(
+        None,
+        "--best-offer/--no-best-offer",
+        help="Enable or disable Best Offer (legacy Trading API listings only)",
+    ),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as table"),
 ):
     """
     Update an existing listing.
 
-    Updates both the inventory item and offer as needed.
+    Inventory API listings are updated through their inventory item and offer.
+    A legacy Trading API listing (no offer ID) is revised through the Trading
+    API instead, which covers --title, --description, --price, --quantity and
+    --best-offer.
 
     Examples:
         ebay listings update SKU123 --price 39.99
         ebay listings update SKU123 --quantity 5
         ebay listings update SKU123 --title "New Title" --price 29.99
+        ebay listings update SKU123 --best-offer
     """
     try:
         client = get_client()
@@ -2052,103 +2296,133 @@ def listings_update(
             raise typer.Exit(1)
 
         if not listing.offer_id:
-            print_error(f"Cannot update legacy listing (no offer ID): {sku}")
-            raise typer.Exit(1)
+            # Legacy Trading API listing: no inventory item or offer to write.
+            if not _revise_legacy_listing(
+                client,
+                listing,
+                title=title,
+                description=description,
+                price=price,
+                quantity=quantity,
+                best_offer=best_offer,
+                currency=currency,
+                unsupported_options=[
+                    flag
+                    for flag, value in (
+                        ("--category", category_id),
+                        ("--condition", condition),
+                        ("--fulfillment-policy", fulfillment_policy_id),
+                        ("--payment-policy", payment_policy_id),
+                        ("--return-policy", return_policy_id),
+                        ("--location", location_key),
+                        ("--from-json", from_json),
+                    )
+                    if value is not None
+                ],
+            ):
+                return
+        else:
+            if best_offer is not None:
+                raise ClientError(
+                    f"Best Offer is not supported for Inventory API listing {listing.sku} "
+                    f"(offer {listing.offer_id}); --best-offer applies to legacy Trading API "
+                    "listings only"
+                )
 
-        # Track if we need to update inventory item or offer
-        update_inventory = False
-        update_offer = False
+            # Track if we need to update inventory item or offer
+            update_inventory = False
+            update_offer = False
 
-        # Update inventory item
-        try:
-            current_inventory = client.get_inventory_item(sku)
-        except Exception:
-            current_inventory = {}
+            # Update inventory item
+            try:
+                current_inventory = client.get_inventory_item(sku)
+            except Exception:
+                current_inventory = {}
 
-        inventory_payload = current_inventory.copy()
-        for field in ["sku", "locale", "groupIds", "inventoryItemGroupKeys"]:
-            inventory_payload.pop(field, None)
+            inventory_payload = current_inventory.copy()
+            for field in ["sku", "locale", "groupIds", "inventoryItemGroupKeys"]:
+                inventory_payload.pop(field, None)
 
-        if title or description:
-            if "product" not in inventory_payload:
-                inventory_payload["product"] = {}
-            if title:
-                inventory_payload["product"]["title"] = title
+            if title or description:
+                if "product" not in inventory_payload:
+                    inventory_payload["product"] = {}
+                if title:
+                    inventory_payload["product"]["title"] = title
+                    update_inventory = True
+                if description:
+                    inventory_payload["product"]["description"] = description
+                    update_inventory = True
+
+            if condition:
+                # Validate condition against category before updating
+                effective_category = category_id or listing.category_id
+                if effective_category:
+                    _validate_condition_for_category(client, condition, effective_category)
+                inventory_payload["condition"] = condition.upper()
                 update_inventory = True
-            if description:
-                inventory_payload["product"]["description"] = description
-                update_inventory = True
 
-        if condition:
-            # Validate condition against category before updating
-            effective_category = category_id or listing.category_id
-            if effective_category:
-                _validate_condition_for_category(client, condition, effective_category)
-            inventory_payload["condition"] = condition.upper()
-            update_inventory = True
+            if update_inventory:
+                print_info("Updating inventory item...")
+                client.create_or_update_inventory_item(sku, inventory_payload)
 
-        if update_inventory:
-            print_info("Updating inventory item...")
-            client.create_or_update_inventory_item(sku, inventory_payload)
+            # Update offer
+            current_offer = client.get_offer(listing.offer_id)
+            offer_payload = current_offer.copy()
+            for field in ["offerId", "status", "listing", "sku", "marketplaceId", "format"]:
+                offer_payload.pop(field, None)
 
-        # Update offer
-        current_offer = client.get_offer(listing.offer_id)
-        offer_payload = current_offer.copy()
-        for field in ["offerId", "status", "listing", "sku", "marketplaceId", "format"]:
-            offer_payload.pop(field, None)
+            if price or currency:
+                if "pricingSummary" not in offer_payload:
+                    offer_payload["pricingSummary"] = current_offer.get("pricingSummary", {})
+                if "price" not in offer_payload["pricingSummary"]:
+                    offer_payload["pricingSummary"]["price"] = current_offer.get("pricingSummary", {}).get("price", {})
+                if price:
+                    offer_payload["pricingSummary"]["price"]["value"] = price
+                    update_offer = True
+                if currency:
+                    offer_payload["pricingSummary"]["price"]["currency"] = currency
+                    update_offer = True
 
-        if price or currency:
-            if "pricingSummary" not in offer_payload:
-                offer_payload["pricingSummary"] = current_offer.get("pricingSummary", {})
-            if "price" not in offer_payload["pricingSummary"]:
-                offer_payload["pricingSummary"]["price"] = current_offer.get("pricingSummary", {}).get("price", {})
-            if price:
-                offer_payload["pricingSummary"]["price"]["value"] = price
-                update_offer = True
-            if currency:
-                offer_payload["pricingSummary"]["price"]["currency"] = currency
+            if quantity is not None:
+                offer_payload["availableQuantity"] = quantity
                 update_offer = True
 
-        if quantity is not None:
-            offer_payload["availableQuantity"] = quantity
-            update_offer = True
-
-        if category_id:
-            offer_payload["categoryId"] = category_id
-            update_offer = True
-
-        if fulfillment_policy_id or payment_policy_id or return_policy_id:
-            if "listingPolicies" not in offer_payload:
-                offer_payload["listingPolicies"] = current_offer.get("listingPolicies", {})
-            if fulfillment_policy_id:
-                offer_payload["listingPolicies"]["fulfillmentPolicyId"] = fulfillment_policy_id
-                update_offer = True
-            if payment_policy_id:
-                offer_payload["listingPolicies"]["paymentPolicyId"] = payment_policy_id
-                update_offer = True
-            if return_policy_id:
-                offer_payload["listingPolicies"]["returnPolicyId"] = return_policy_id
+            if category_id:
+                offer_payload["categoryId"] = category_id
                 update_offer = True
 
-        if location_key:
-            offer_payload["merchantLocationKey"] = location_key
-            update_offer = True
+            if fulfillment_policy_id or payment_policy_id or return_policy_id:
+                if "listingPolicies" not in offer_payload:
+                    offer_payload["listingPolicies"] = current_offer.get("listingPolicies", {})
+                if fulfillment_policy_id:
+                    offer_payload["listingPolicies"]["fulfillmentPolicyId"] = fulfillment_policy_id
+                    update_offer = True
+                if payment_policy_id:
+                    offer_payload["listingPolicies"]["paymentPolicyId"] = payment_policy_id
+                    update_offer = True
+                if return_policy_id:
+                    offer_payload["listingPolicies"]["returnPolicyId"] = return_policy_id
+                    update_offer = True
 
-        if from_json:
-            with open(from_json, "r") as f:
-                updates = json.load(f)
-                offer_payload.update(updates)
+            if location_key:
+                offer_payload["merchantLocationKey"] = location_key
                 update_offer = True
 
-        if update_offer:
-            print_info("Updating offer...")
-            client.update_offer(listing.offer_id, offer_payload)
+            if from_json:
+                with open(from_json, "r") as f:
+                    updates = json.load(f)
+                    offer_payload.update(updates)
+                    update_offer = True
 
-        if not update_inventory and not update_offer:
-            print_warning("No updates provided.")
-            return
+            if update_offer:
+                print_info("Updating offer...")
+                client.update_offer(listing.offer_id, offer_payload)
 
-        print_success(f"Listing updated: {sku}")
+            if not update_inventory and not update_offer:
+                print_warning("No updates provided.")
+                return
+
+            print_success(f"Listing updated: {sku}")
 
         # Fetch and display updated listing
         updated = _get_listing_by_sku(client, sku)
@@ -2347,6 +2621,13 @@ def listings_unpublish(
 
         print_info(f"Unpublishing listing: {sku}")
         client.withdraw_offer(listing.offer_id)
+        verified_offer = client.get_offer(listing.offer_id)
+        verified_status = verified_offer.get("status")
+        if verified_status != OfferStatus.UNPUBLISHED.value:
+            raise ClientError(
+                f"Offer {listing.offer_id} was not unpublished: "
+                f"expected {OfferStatus.UNPUBLISHED.value}, got {verified_status!r}"
+            )
 
         print_success(f"Listing unpublished: {sku}")
         print_info("The listing is now a draft and can be republished later.")
@@ -2355,7 +2636,7 @@ def listings_unpublish(
             summary = [{
                 "sku": sku,
                 "offer_id": listing.offer_id,
-                "status": "draft",
+                "status": verified_status,
             }]
             print_table(
                 summary,
@@ -2366,7 +2647,7 @@ def listings_unpublish(
             print_json({
                 "sku": sku,
                 "offer_id": listing.offer_id,
-                "status": "draft",
+                "status": verified_status,
             })
 
     except Exception as e:

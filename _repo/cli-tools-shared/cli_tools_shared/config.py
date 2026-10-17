@@ -5,6 +5,7 @@ import os
 import subprocess
 import shutil
 import sys
+import threading
 import time
 from contextvars import ContextVar
 from pathlib import Path
@@ -26,7 +27,7 @@ from .repo_paths import secret_manager_script
 # ==================== File Write Utilities ====================
 
 def _set_key_with_retry(env_path: str, name: str, value: str, max_retries: int = 3):
-    """Wrap set_key with retry for Windows PermissionError (Dropbox file locks)."""
+    """Wrap set_key with retry for transient Windows PermissionError (file locks)."""
     path = Path(env_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.touch(exist_ok=True)
@@ -89,6 +90,67 @@ def get_runtime_profile_resolution() -> tuple[Optional[str], Optional[str]]:
     return _RUNTIME_PROFILE_NAME.get(), _RUNTIME_PROFILE_AUTH_TYPE.get()
 
 
+def config_for(config_cls, profile: Optional[str], cache: dict):
+    """Return the one ``config_cls`` instance for the resolved profile.
+
+    A CLI's ``get_config(profile=None)`` delegates here with its module-level
+    ``_configs`` dict. The key is the resolved profile: the explicit name, else
+    the runtime profile the command registry set for this command, else
+    ``"_default"``. The registry builds the config with the resolved profile
+    name for its credential check and the API client then asks with no
+    profile; both calls land on the same instance, so one invocation builds
+    one config and reads each profile secret once.
+    """
+    key = profile or get_runtime_profile_resolution()[0] or "_default"
+    if key not in cache:
+        cache[key] = config_cls(profile=profile)
+    return cache[key]
+
+
+def config_getter(config_cls):
+    """Return a ``get_config(profile=None)`` for ``config_cls``.
+
+    The CLI's ``config.py`` ends with ``get_config = config_getter(Config)``.
+    The result builds one config per resolved profile (see ``config_for``) and
+    carries ``config_cls`` so the shared command layers can read the class
+    directly, plus ``cache_clear()`` to drop the built configs.
+    """
+    cache: dict = {}
+
+    def get_config(profile: Optional[str] = None):
+        return config_for(config_cls, profile, cache)
+
+    get_config.config_cls = config_cls
+    get_config.cache_clear = cache.clear
+    return get_config
+
+
+def config_class_of(get_config_fn):
+    """Return the Config class behind a CLI's ``get_config`` function.
+
+    A ``config_getter`` result exposes it as ``config_cls``. Older CLIs wrote
+    ``get_config`` by hand around ``config_for``; for those the class is found
+    on the function's ``__wrapped__``/return annotation, its module-level
+    ``Config``, or its closure. Returns ``None`` when none applies.
+    """
+    config_cls = getattr(get_config_fn, "config_cls", None)
+    if config_cls is not None:
+        return config_cls
+    get_config_fn = getattr(get_config_fn, "__wrapped__", get_config_fn)
+    annotations = getattr(get_config_fn, "__annotations__", {}) or {}
+    config_cls = annotations.get("return")
+    if config_cls is not None:
+        return config_cls
+    config_cls = getattr(get_config_fn, "__globals__", {}).get("Config")
+    if config_cls is not None:
+        return config_cls
+    for cell in getattr(get_config_fn, "__closure__", ()) or ():
+        value = cell.cell_contents
+        if isinstance(value, type) and hasattr(value, "CREDENTIAL_TYPES"):
+            return value
+    return None
+
+
 def read_profile_active(env_path: Path) -> Optional[bool]:
     """Read ACTIVE from an env file without loading into os.environ."""
     try:
@@ -124,11 +186,34 @@ def profile_name_from_path(env_path: Path) -> str:
 
 def get_tool_data_dir(tool_name: str) -> Path:
     """Get the platform-appropriate root user-data directory for a tool."""
+    return get_cli_tools_data_root() / tool_name
+
+
+def get_cli_tools_data_root() -> Path:
+    """Platform root for all cli-tools runtime data (``…/cli-tools``)."""
     if os.name == "nt":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     else:
         base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "cli-tools" / tool_name
+    return base / "cli-tools"
+
+
+def default_shared_chromium_profile_dir() -> Path:
+    """Default shared Chromium user-data-dir for browser CLIs.
+
+    Override the path with ``CLI_TOOLS_SHARED_CHROME_PROFILE`` (absolute or
+    ``~``-relative). Chrome allows only one process on a given user-data-dir
+    at a time.
+    """
+    override = os.environ.get("CLI_TOOLS_SHARED_CHROME_PROFILE", "").strip()
+    if override:
+        return Path(override).expanduser().resolve()
+    return get_cli_tools_data_root() / "_shared" / "chromium-profile"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 
 def config_env_path_for_tool(tool_name: str) -> Path:
@@ -173,6 +258,11 @@ _AUTH_METADATA_FIELDS = {"ACTIVE"}
 _AUTH_FIELD_PREFIXES = ("AUTH_", "OAUTH_")
 _AUTH_FIELD_NAMES = {"AUTHORIZATION_CODE", "REDIRECT_URI"}
 _SECRET_PLACEHOLDER_PREFIX = "secret://"
+# macOS `security find-generic-password` exits 44 when the item is not found
+# (errSecItemNotFound). Any other non-zero exit means the secret manager itself
+# failed (for example a permission error), and that failure must be surfaced
+# with its stderr instead of being mislabeled as a missing secret.
+_SECRET_NOT_FOUND_EXIT_CODE = 44
 _DEFAULT_ROOT_CONFIG_FIELDS = {
     "BASE_URL",
     "CACHE_ENABLED",
@@ -183,6 +273,20 @@ _DEFAULT_ROOT_CONFIG_FIELDS = {
     "CLI_COMMAND",
     "CLI_PATH",
 }
+
+
+def root_config_field_names_for(config_or_cls) -> set[str]:
+    """Return every non-authentication root config field name a tool declares.
+
+    The shared defaults always apply; a tool adds its own names through
+    ``ROOT_CONFIG_FIELDS`` (for example airtable's ``BASE_ID``). Any code that
+    splits ``.env.example`` between root config and a profile must use this, or
+    a tool-declared name lands in the profile ``.env`` and
+    :meth:`BaseConfig._validate_profile_env_files` rejects the profile.
+    """
+    fields = set(_DEFAULT_ROOT_CONFIG_FIELDS)
+    fields.update(getattr(config_or_cls, "ROOT_CONFIG_FIELDS", ()) or ())
+    return fields
 
 
 def get_profile_auth_settings(config_or_cls) -> Optional[tuple[str, dict]]:
@@ -262,36 +366,75 @@ def _strip_secret_output(value: str) -> str:
 
 
 def read_cli_tool_secret(secret_name: str) -> Optional[str]:
-    """Read a raw reusable CLI-tool secret from the central secret manager."""
+    """Read a raw reusable CLI-tool secret from the central secret manager.
+
+    Returns ``None`` only when the secret does not exist. Raises
+    :class:`ConfigError` — preserving the secret manager's stderr — when the
+    secret manager fails for any other reason, so a permission error is not
+    mislabeled as a missing secret.
+    """
     result = _run_secret_manager("get", secret_name)
-    if result.returncode != 0:
+    if result.returncode == 0:
+        return _strip_secret_output(result.stdout)
+    if result.returncode == _SECRET_NOT_FOUND_EXIT_CODE:
         return None
-    return _strip_secret_output(result.stdout)
+    stderr = (result.stderr or "").strip()
+    detail = f": {stderr}" if stderr else ""
+    raise ConfigError(
+        f"Secret manager failed reading secret '{secret_name}'{detail}"
+    )
+
+
+# Per-process memo of resolved profile secrets, keyed by
+# (secret_name, str(profile_path)). One CLI invocation builds its config more
+# than once (the command credential check, then the API client), and each build
+# would otherwise spawn the secret manager again for the same value. Only
+# successful reads are stored; a missing secret raises on every lookup. Writes
+# and deletes through this module evict every entry for that secret name once
+# the secret manager has changed it. `_secret_memo_lock` is held across a read
+# and its memoization and across a write and its eviction, so a read that
+# overlaps a write can never memoize the pre-write value after the eviction.
+_resolved_secret_cache: dict[tuple[str, str], str] = {}
+_secret_memo_lock = threading.Lock()
+
+
+def _forget_secret_value(secret_name: str) -> None:
+    for key in [key for key in _resolved_secret_cache if key[0] == secret_name]:
+        del _resolved_secret_cache[key]
 
 
 def _get_secret_value(secret_name: str, profile_path: Path) -> str:
-    value = read_cli_tool_secret(secret_name)
-    if value is None:
-        raise ConfigError(
-            f"Missing secret '{secret_name}' referenced by {profile_path}."
-        )
-    return value
+    key = (secret_name, str(profile_path))
+    with _secret_memo_lock:
+        if key in _resolved_secret_cache:
+            return _resolved_secret_cache[key]
+        value = read_cli_tool_secret(secret_name)
+        if value is None:
+            raise ConfigError(
+                f"Missing secret '{secret_name}' referenced by {profile_path}."
+            )
+        _resolved_secret_cache[key] = value
+        return value
 
 
 def _set_secret_value(secret_name: str, value: str, profile_path: Path) -> None:
-    result = _run_secret_manager("set", secret_name, secret_value=value)
-    if result.returncode != 0:
-        raise ConfigError(
-            f"Failed to store secret '{secret_name}' for {profile_path}."
-        )
+    with _secret_memo_lock:
+        result = _run_secret_manager("set", secret_name, secret_value=value)
+        if result.returncode != 0:
+            raise ConfigError(
+                f"Failed to store secret '{secret_name}' for {profile_path}."
+            )
+        _forget_secret_value(secret_name)
 
 
 def _delete_secret_value(secret_name: str, profile_path: Path) -> None:
-    result = _run_secret_manager("delete", secret_name)
-    if result.returncode != 0:
-        raise ConfigError(
-            f"Failed to delete secret '{secret_name}' for {profile_path}."
-        )
+    with _secret_memo_lock:
+        result = _run_secret_manager("delete", secret_name)
+        if result.returncode != 0:
+            raise ConfigError(
+                f"Failed to delete secret '{secret_name}' for {profile_path}."
+            )
+        _forget_secret_value(secret_name)
 
 
 def _secret_exists(secret_name: str) -> bool:
@@ -309,6 +452,23 @@ def _secret_placeholder(secret_name: str) -> str:
 
 def _normalize_secret_name_part(value: str) -> str:
     return value.lower().replace("_", "-")
+
+
+def _secret_name_for_profile_field(
+    tool_name: str,
+    field_name: str,
+    profile_name: str,
+) -> str:
+    """Build the canonical secret-manager name for one profile field."""
+    tool_part = _normalize_secret_name_part(tool_name)
+    field_part = _normalize_secret_name_part(field_name)
+    prefix = f"{tool_part}-"
+    if field_part.startswith(prefix):
+        field_part = field_part[len(prefix) :]
+    profile_part = _normalize_secret_name_part(profile_name)
+    if profile_part == "default":
+        return f"{tool_part}-{field_part}"
+    return f"{tool_part}-{profile_part}-{field_part}"
 
 
 def auth_profile_secret_placeholders(tool_name: str) -> list[tuple[Path, str, str]]:
@@ -812,6 +972,9 @@ class BaseConfig:
 
     CREDENTIAL_TYPES: list = None           # List of CredentialType values (AND)
     DEFAULT_BASE_URL: str = ""
+    # Public runtime data namespace. Defaults to the technical source directory
+    # name, but tools with a distinct command identity may override it.
+    RUNTIME_DATA_NAME: str = ""
 
     # OAuth 2.0 configuration (set by subclasses that use OAuth)
     OAUTH_AUTH_URL: str = ""              # Authorization endpoint
@@ -824,6 +987,7 @@ class BaseConfig:
     OAUTH_EXTRA_AUTH_PARAMS: dict = {}   # Extra params for auth URL (e.g. audience)
     OAUTH_TOKEN_EXPIRES: bool = True   # False for OAuth 1.0a/static token credentials
     OAUTH_STATIC_REQUIRED_FIELDS: tuple = ("CLIENT_ID", "CLIENT_SECRET", "ACCESS_TOKEN")
+    PORTABLE_BROWSER_SESSION: bool = False
     BROWSER_SESSION_REQUIRES_API_TEST: bool = False
 
     # Extra credential prompts (set by subclasses that need additional fields prompted during login)
@@ -864,9 +1028,7 @@ class BaseConfig:
         return fields
 
     def _root_config_field_names(self) -> set[str]:
-        fields = set(_DEFAULT_ROOT_CONFIG_FIELDS)
-        fields.update(getattr(self, "ROOT_CONFIG_FIELDS", ()) or ())
-        return fields
+        return root_config_field_names_for(self)
 
     def _sensitive_auth_field_names(self) -> set[str]:
         fields = set(combined_sensitive_fields(self.CREDENTIAL_TYPES, config=self))
@@ -907,15 +1069,11 @@ class BaseConfig:
         override = overrides.get(name)
         if override:
             return override
-        tool_name = _normalize_secret_name_part(self._tool_name)
-        field_name = _normalize_secret_name_part(name)
-        prefix = f"{tool_name}-"
-        if field_name.startswith(prefix):
-            field_name = field_name[len(prefix) :]
-        profile_name = _normalize_secret_name_part(profile_name_from_path(env_path))
-        if profile_name == "default":
-            return f"{tool_name}-{field_name}"
-        return f"{tool_name}-{profile_name}-{field_name}"
+        return _secret_name_for_profile_field(
+            self._tool_name,
+            name,
+            profile_name_from_path(env_path),
+        )
 
     def _secret_name_for_field(self, name: str) -> str:
         return self._secret_name_for_field_in_profile(name, self.env_file_path)
@@ -961,7 +1119,7 @@ class BaseConfig:
                 "Subclass must set CREDENTIAL_TYPES (list of CredentialType values)."
             )
         self.tool_dir = tool_dir
-        self._tool_name = tool_dir.name
+        self._tool_name = self.RUNTIME_DATA_NAME or tool_dir.name
         self.profile = profile
         self.profile_auth_type = profile_auth_type
         self.config_env_file_path = config_env_path_for_tool(self._tool_name)
@@ -1306,6 +1464,18 @@ class BaseConfig:
 
     # ==================== Profile Data Directories ====================
 
+    def browser_session_origins(self) -> tuple[str, ...]:
+        """Return explicitly approved origins for portable session state."""
+        raise ConfigError("Portable browser session origins are not configured")
+
+    def browser_session_cookie_domains(self) -> tuple[str, ...]:
+        """Return explicitly approved cookie domains for portable sessions."""
+        raise ConfigError("Portable browser session cookie domains are not configured")
+
+    def browser_session_identity(self, browser) -> dict[str, str]:
+        """Read verified identity through the owning service's public reader."""
+        raise ConfigError("Portable browser session identity is not configured")
+
     def get_profiles_dir(self) -> Path:
         """Get the authentication_profiles directory for runtime data."""
         return get_profiles_base_dir(self._tool_name)
@@ -1328,6 +1498,24 @@ class BaseConfig:
         browser_dir.mkdir(parents=True, exist_ok=True)
         return browser_dir
 
+    def uses_shared_chromium_profile(self) -> bool:
+        """Return True when this config should use the shared Chrome profile.
+
+        Shared by default for browser-session tools on the ``default``
+        authentication profile so Google/SSO login is once across CLIs.
+
+        Isolated when:
+        - ``CLI_TOOLS_ISOLATE_CHROME_PROFILE`` is truthy, or
+        - the active auth profile name is not ``default`` (multi-account
+          tools such as google/target named profiles), or
+        - this config does not declare ``CredentialType.BROWSER_SESSION``.
+        """
+        if _env_flag("CLI_TOOLS_ISOLATE_CHROME_PROFILE"):
+            return False
+        if CredentialType.BROWSER_SESSION not in (self.CREDENTIAL_TYPES or []):
+            return False
+        return self.get_active_profile_name() == "default"
+
     def get_persistent_profile_dir(self) -> Path:
         """Get the persistent Chromium user-data-dir for the active profile.
 
@@ -1335,8 +1523,62 @@ class BaseConfig:
         cookies (``Default/Cookies`` SQLite), localStorage, IndexedDB,
         service workers, and cache there. Single source of truth for
         browser session state.
+
+        Browser-session tools on the ``default`` auth profile share
+        ``~/.local/share/cli-tools/_shared/chromium-profile`` (override with
+        ``CLI_TOOLS_SHARED_CHROME_PROFILE``). Named auth profiles stay
+        per-tool under ``…/browser-data/chromium-profile``. Chrome allows
+        only one process on a given user-data-dir at a time.
         """
+        if self.uses_shared_chromium_profile():
+            path = default_shared_chromium_profile_dir()
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+        return self.get_legacy_chromium_profile_dir()
+
+    def get_legacy_chromium_profile_dir(self) -> Path:
+        """Return this tool's pre-shared default Chromium profile path."""
         return self.get_browser_data_dir() / "chromium-profile"
+
+    def shared_chromium_profile_seed_guidance(
+        self,
+        cli_name: Optional[str] = None,
+    ) -> Optional[str]:
+        """Return a seed command when this tool can restore an unseeded share."""
+        from .shared_chromium_profile import chromium_profile_has_cookies
+
+        if not self.uses_shared_chromium_profile():
+            return None
+        shared = default_shared_chromium_profile_dir()
+        legacy = self.get_legacy_chromium_profile_dir()
+        try:
+            legacy_is_shared = legacy.resolve() == shared.resolve()
+        except OSError:
+            legacy_is_shared = False
+        if legacy_is_shared or chromium_profile_has_cookies(shared):
+            return None
+        if shared.exists() and any(shared.iterdir()):
+            return None
+        if not chromium_profile_has_cookies(legacy):
+            return None
+        return (
+            "shared Chromium profile not seeded; run "
+            f"'{cli_name or self._tool_name} auth seed-shared-chromium-profile'"
+        )
+
+    def seed_shared_chromium_profile(self) -> Path:
+        """Seed the shared profile from this tool's legacy default profile."""
+        if not self.uses_shared_chromium_profile():
+            raise ConfigError(
+                "Shared Chromium profile seeding requires the default browser "
+                "authentication profile with shared-profile isolation disabled."
+            )
+        from .shared_chromium_profile import seed_shared_chromium_profile
+
+        return seed_shared_chromium_profile(
+            self.get_legacy_chromium_profile_dir(),
+            default_shared_chromium_profile_dir(),
+        )
 
     def has_saved_session(self) -> bool:
         """Return True when the persistent Chromium profile has a session.
@@ -1351,10 +1593,52 @@ class BaseConfig:
         return (self.get_persistent_profile_dir() / "Default" / "Cookies").exists()
 
     def clear_session(self):
-        """Clear saved session data for the active profile."""
+        """Clear tool-local browser-data for the active profile.
+
+        When using the shared Chromium profile, tool-local files under
+        ``browser-data/`` are removed but the shared user-data-dir is left
+        intact so logging out of one CLI does not wipe Google/SSO cookies
+        for every other browser CLI. Call
+        :meth:`clear_shared_chromium_profile` to wipe the shared profile.
+
+        Non-shared (isolated) profiles keep the previous behavior: the entire
+        ``browser-data/`` directory is removed.
+        """
         browser_dir = self.get_profile_data_dir() / "browser-data"
-        if browser_dir.exists():
+        if not browser_dir.exists():
+            return
+        if not self.uses_shared_chromium_profile():
             shutil.rmtree(browser_dir)
+            return
+        shared = default_shared_chromium_profile_dir().resolve()
+        for child in list(browser_dir.iterdir()):
+            try:
+                if child.resolve() == shared:
+                    continue
+            except OSError:
+                pass
+            if child.is_symlink() or child.is_file():
+                child.unlink(missing_ok=True)
+            elif child.is_dir():
+                shutil.rmtree(child)
+        # Drop empty browser-data after removing only local files.
+        try:
+            if browser_dir.exists() and not any(browser_dir.iterdir()):
+                browser_dir.rmdir()
+        except OSError:
+            pass
+
+    def clear_shared_chromium_profile(self) -> Path:
+        """Delete the shared Chromium user-data-dir (all browser CLIs).
+
+        Returns the path that was cleared (or would have been). Prefer this
+        over :meth:`clear_session` when you intentionally want to reset the
+        shared Google/SSO login.
+        """
+        path = default_shared_chromium_profile_dir()
+        if path.exists():
+            shutil.rmtree(path)
+        return path
 
     def clear_all(self):
         """Clear credentials and session data."""

@@ -3,9 +3,12 @@ import base64
 import mimetypes
 import os
 import random
+import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Dict, List, Optional, Any
+from urllib.parse import quote
 
 import requests
 
@@ -34,24 +37,107 @@ SELECT_CHOICES_UPDATE_MESSAGE = (
     "the public API exposes no endpoint for this."
 )
 
+# Airtable's create-field endpoint rejects the documented write type "lookup"
+# with HTTP 422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE, but accepts the schema-read
+# type "multipleLookupValues" and returns 201 with options.isValid true
+# (measured 2026-09-11). Only the "lookup" spelling is blocked here, and the
+# message names the type that works.
 LOOKUP_CREATE_TYPE_MESSAGE = (
-    "Airtable lookup field creation is not a reliable production schema path "
-    "through `fields create`. Airtable returns lookup fields from schema reads "
-    "as type 'multipleLookupValues', and its documented create-field write "
-    "type 'lookup' was rejected for the live CourseCraft base with HTTP 422: "
-    "Creating lookup fields is not supported at this time. Do not pass "
-    "'multipleLookupValues' or 'lookup' to `fields create`; recordLinkFieldId "
-    "and fieldIdInLinkedTable options do not make lookup creation reliable. "
-    "Create lookup fields in Airtable's web UI, then verify with "
-    "`airtable fields list` or `airtable fields get`. Rollup creation is also "
-    "not a reliable production schema path; rollup options include "
-    "recordLinkFieldId, fieldIdInLinkedTable, and formula."
+    "Airtable rejects the create-field type 'lookup' with HTTP 422 "
+    "UNSUPPORTED_FIELD_TYPE_FOR_CREATE: Creating lookup fields is not "
+    "supported at this time. Use the schema-read type "
+    "'multipleLookupValues' instead; it is the working create type for "
+    "lookup fields. Example:\n"
+    "  airtable fields create <table> '<name>' multipleLookupValues "
+    "--options '{\"recordLinkFieldId\":\"fld...\",\"fieldIdInLinkedTable\":\"fld...\"}'"
 )
 
 UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES = {
-    "multipleLookupValues": LOOKUP_CREATE_TYPE_MESSAGE,
     "lookup": LOOKUP_CREATE_TYPE_MESSAGE,
 }
+
+# Airtable's create-field schema rejects a checkbox without complete options:
+# omitting options fails with "options is missing", and an empty object fails
+# with "options.icon is required" / "options.color is required". Both values are
+# Airtable's own defaults for the type, so the CLI fills them in instead of
+# forwarding a payload the API always refuses.
+CHECKBOX_FIELD_TYPE = "checkbox"
+CHECKBOX_DEFAULT_OPTIONS = {"icon": "check", "color": "greenBright"}
+
+
+def checkbox_create_options(options: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return complete Airtable checkbox options, filling in missing defaults.
+
+    Airtable requires both ``icon`` and ``color`` for a checkbox, so a bare
+    create or a partial payload is completed from ``CHECKBOX_DEFAULT_OPTIONS``
+    (Airtable's own defaults for the type). Caller-supplied keys win.
+    """
+    return {**CHECKBOX_DEFAULT_OPTIONS, **(options or {})}
+
+
+# Airtable exposes no delete-field endpoint (DELETE /v0/meta/bases/{base}/
+# tables/{table}/fields/{id} returns 404), and PATCH on a field accepts only
+# name and description, so a lookup's recordLinkFieldId/fieldIdInLinkedTable
+# cannot be repointed (422). A created field is permanent through the API.
+FIELD_CREATE_PERMANENCE_NOTE = (
+    "Airtable has no delete-field API endpoint, and field updates accept only "
+    "name and description. This field cannot be removed or repointed through "
+    "the API; removing it requires the Airtable web UI."
+)
+
+
+# An Airtable record ID is always "rec" plus alphanumeric characters. Every
+# get/update/replace/delete/upload call interpolates the caller-supplied
+# record_id directly into the REST path, so a value like
+# "recABC.../../../OtherTable/recXYZ..." reaches Airtable, which normalizes
+# the ".." segments server-side and reads or writes a record in a different
+# table than the one requested. Reject anything that isn't a plain record ID
+# before it ever reaches the endpoint builder.
+RECORD_ID_RE = re.compile(r"^rec[A-Za-z0-9]+$")
+
+
+def _validate_record_id(record_id: str) -> str:
+    """Reject a record ID that isn't a plain 'rec...' token (e.g. path traversal)."""
+    if not record_id or not RECORD_ID_RE.match(record_id):
+        raise ClientError(
+            f"Invalid record ID: {record_id!r}. "
+            "Record IDs must match 'rec' followed by alphanumeric characters."
+        )
+    return record_id
+
+
+def _retry_after_seconds(value: Optional[str]) -> Optional[float]:
+    """Seconds to wait from a Retry-After header, or None when it is absent or invalid.
+
+    RFC 9110 allows delay-seconds ("120") or an HTTP-date; a date in the past
+    means retry now. A value that is neither is an invalid field, which HTTP
+    recipients ignore, so the caller uses its own backoff.
+    """
+    if value is None:
+        return None
+    value = value.strip()
+    if value.isdigit():
+        return float(value)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+
+
+class PartialDeleteError(ClientError):
+    """A batch delete stopped at a failed chunk.
+
+    ``deleted`` holds the ``{"id", "deleted"}`` rows Airtable confirmed for the
+    chunks that completed before the failure, so callers can report exactly
+    which records are already gone.
+    """
+
+    def __init__(self, message: str, deleted: List[Dict[str, Any]]):
+        super().__init__(message)
+        self.deleted = deleted
 
 
 class AirtableClient:
@@ -66,6 +152,10 @@ class AirtableClient:
 
     # Retryable HTTP status codes
     RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+    # Airtable batch write endpoints (including delete-multiple-records) accept
+    # at most 10 records per request.
+    DELETE_BATCH_SIZE = 10
 
     # Attachment uploads use a separate content host, not the standard API host.
     CONTENT_BASE_URL = "https://content.airtable.com/v0"
@@ -124,6 +214,12 @@ class AirtableClient:
         """
         url = f"{self.base_url}{endpoint}"
         max_attempts = self.MAX_RETRIES if retry else 1
+        # A DELETE the server may already have applied (5xx, timeout, lost
+        # connection) is never re-sent: the repeat would answer 404 and hide
+        # that the delete succeeded. Only 429, which Airtable rejects before
+        # processing, is retried for DELETE.
+        may_have_applied = method.upper() == "DELETE"
+        retryable_statuses = {429} if may_have_applied else self.RETRYABLE_STATUS_CODES
 
         for attempt in range(max_attempts):
             try:
@@ -137,12 +233,10 @@ class AirtableClient:
                 )
 
                 # Check for retryable status codes
-                if retry and response.status_code in self.RETRYABLE_STATUS_CODES:
+                if retry and response.status_code in retryable_statuses:
                     if attempt < max_attempts - 1:
-                        # Honor Retry-After header if present
-                        if "Retry-After" in response.headers:
-                            delay = int(response.headers["Retry-After"])
-                        else:
+                        delay = _retry_after_seconds(response.headers.get("Retry-After"))
+                        if delay is None:
                             delay = min(
                                 self.BASE_DELAY * (2 ** attempt) + random.uniform(0, self.JITTER),
                                 self.MAX_DELAY,
@@ -167,17 +261,26 @@ class AirtableClient:
                 if response.status_code == 204:
                     return {}
 
-                return response.json()
+                try:
+                    return response.json()
+                except ValueError as e:
+                    raise ClientError(
+                        f"API returned a non-JSON body ({response.status_code}): {e}"
+                    ) from e
 
             except (requests.ConnectionError, requests.Timeout) as e:
-                if attempt < max_attempts - 1:
+                if not may_have_applied and attempt < max_attempts - 1:
                     delay = min(
                         self.BASE_DELAY * (2 ** attempt) + random.uniform(0, self.JITTER),
                         self.MAX_DELAY,
                     )
                     time.sleep(delay)
                     continue
-                raise ClientError(f"Connection error: {e}")
+                raise ClientError(f"Connection error: {e}") from e
+            except requests.RequestException as e:
+                # Not retried: the server may already have acted on the request
+                # (e.g. a body cut off mid-stream after a DELETE succeeded).
+                raise ClientError(f"Request failed: {type(e).__name__}: {e}") from e
 
         raise ClientError("Max retries exceeded")
 
@@ -344,7 +447,8 @@ class AirtableClient:
 
     def get_record(self, base_id: str, table_id: str, record_id: str) -> Dict:
         """Get a specific record by ID."""
-        endpoint = f"/{base_id}/{table_id}/{record_id}"
+        _validate_record_id(record_id)
+        endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         return self._make_request("GET", endpoint)
 
     def update_record(
@@ -356,7 +460,8 @@ class AirtableClient:
         typecast: bool = False,
     ) -> Dict:
         """Update a record (PATCH - only updates specified fields)."""
-        endpoint = f"/{base_id}/{table_id}/{record_id}"
+        _validate_record_id(record_id)
+        endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         data = {"fields": fields}
         if typecast:
             data["typecast"] = True
@@ -371,7 +476,8 @@ class AirtableClient:
         typecast: bool = False,
     ) -> Dict:
         """Replace a record (PUT - clears unspecified fields)."""
-        endpoint = f"/{base_id}/{table_id}/{record_id}"
+        _validate_record_id(record_id)
+        endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         data = {"fields": fields}
         if typecast:
             data["typecast"] = True
@@ -393,8 +499,51 @@ class AirtableClient:
 
     def delete_record(self, base_id: str, table_id: str, record_id: str) -> Dict:
         """Delete a record."""
-        endpoint = f"/{base_id}/{table_id}/{record_id}"
+        _validate_record_id(record_id)
+        endpoint = f"/{base_id}/{table_id}/{quote(record_id, safe='')}"
         return self._make_request("DELETE", endpoint)
+
+    def delete_records(
+        self, base_id: str, table_id: str, record_ids: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Delete records in chunks of 10, one DELETE request per chunk.
+
+        Uses DELETE /{baseId}/{tableIdOrName}?records[]=recA&records[]=recB and
+        returns the combined ``{"id", "deleted"}`` rows from every chunk. Every
+        ID is validated before any request is sent. If a chunk fails or the run
+        is interrupted, no later chunk is attempted and ``PartialDeleteError``
+        carries the rows already deleted by earlier chunks. A chunk is never
+        re-sent after a 5xx, timeout, or lost connection (see ``_make_request``).
+        """
+        for record_id in record_ids:
+            _validate_record_id(record_id)
+
+        endpoint = f"/{base_id}/{table_id}"
+        size = self.DELETE_BATCH_SIZE
+        chunks = [record_ids[i:i + size] for i in range(0, len(record_ids), size)]
+        deleted: List[Dict[str, Any]] = []
+
+        for index, chunk in enumerate(chunks, start=1):
+            # Any exception, including Ctrl-C and SIGTERM-driven exits: once an
+            # earlier chunk has deleted records, the caller must still learn
+            # which ones.
+            try:
+                result = self._make_request("DELETE", endpoint, params={"records[]": chunk})
+                rows = result["records"]
+            except BaseException as exc:
+                reason = str(exc) if isinstance(exc, ClientError) else f"{type(exc).__name__}: {exc}"
+                done = [row["id"] for row in deleted]
+                not_attempted = [rid for later in chunks[index:] for rid in later]
+                raise PartialDeleteError(
+                    f"Chunk {index} of {len(chunks)} failed for "
+                    f"{', '.join(chunk)}: {reason}. "
+                    f"Deleted in completed chunks ({len(done)}): {', '.join(done) or 'none'}. "
+                    f"Not attempted ({len(not_attempted)}): {', '.join(not_attempted) or 'none'}.",
+                    deleted,
+                ) from exc
+            deleted.extend(rows)
+
+        return deleted
 
     def upload_attachment(
         self,
@@ -429,6 +578,8 @@ class AirtableClient:
                 base64 limit, has an undetectable content type, or the API
                 request fails.
         """
+        _validate_record_id(record_id)
+
         if not os.path.isfile(file_path):
             raise ClientError(f"Attachment file not found: {file_path}")
 
@@ -457,7 +608,10 @@ class AirtableClient:
             )
 
         filename = os.path.basename(file_path)
-        url = f"{self.CONTENT_BASE_URL}/{base_id}/{record_id}/{field_name}/uploadAttachment"
+        url = (
+            f"{self.CONTENT_BASE_URL}/{base_id}/{quote(record_id, safe='')}/"
+            f"{quote(field_name, safe='')}/uploadAttachment"
+        )
         payload = {
             "contentType": resolved_content_type,
             "filename": filename,
@@ -501,6 +655,8 @@ class AirtableClient:
         """Create a field in an Airtable table."""
         if field_type in UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES:
             raise ClientError(UNSUPPORTED_FIELD_CREATE_TYPE_MESSAGES[field_type])
+        if field_type == CHECKBOX_FIELD_TYPE:
+            options = checkbox_create_options(options)
 
         resolved_table_id = self._resolve_table_id(base_id, table_id)
         endpoint = f"/meta/bases/{base_id}/tables/{resolved_table_id}/fields"

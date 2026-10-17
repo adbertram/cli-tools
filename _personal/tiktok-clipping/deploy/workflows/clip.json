@@ -1,0 +1,472 @@
+{
+  "name": "TikTok clipping - discover and publish",
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "manual-start",
+      "name": "Manual start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "prepare-work",
+      "name": "Prepare work",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "parameters": {
+        "command": "=/usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs prepare --native-text --kind clip --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id '{{ $workflow.id }}'",
+        "executeOnce": true
+      }
+    },
+    {
+      "id": "read-coordinator-result",
+      "name": "Read coordinator result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw=$input.first().json.stdout; if(typeof raw!==\"string\" || raw.length>1048576) throw new Error(\"Invalid coordinator envelope\"); const d=JSON.parse(raw); if (!d || typeof d!==\"object\" || Array.isArray(d)) throw new Error(\"Invalid coordinator result\"); return [{json:d}];"
+      }
+    },
+    {
+      "id": "require-leased-job",
+      "name": "Require leased job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d=$input.first().json;\nif(typeof d.ready!==\"boolean\") throw new Error(\"Missing readiness state\");\nif(!d.ready) return [];\nconst e=d.text;\nif(!e || e.schema_version!==1 || e.kind!==\"clip\" || e.job_id!==d.job_id || !/^[a-f0-9]{32}$/.test(e.job_id) || !/^[a-f0-9]{32}$/.test(e.attempt_id) || typeof d.task!==\"string\" || d.task.length>8192 || !Number.isFinite(e.model_deadline) || !Number.isFinite(e.expires_at) || e.expires_at<=Date.now()/1000 || e.model_deadline>=e.expires_at || !Number.isSafeInteger(d.max_payload_bytes) || d.max_payload_bytes<1024) throw new Error(\"Invalid original text attempt\");\nconst task=JSON.parse(d.task);\nif(Object.keys(task).length!==Object.keys(e).length || Object.keys(e).some(key=>JSON.stringify(task[key])!==JSON.stringify(e[key]))) throw new Error(\"Text task identity changed\");\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "deepseek-analysis",
+      "name": "DeepSeek analysis",
+      "type": "n8n-nodes-agent-harnesses.deepSeekHarness",
+      "typeVersion": 1,
+      "position": [
+        960,
+        0
+      ],
+      "parameters": {
+        "prompt": "={{$json.task}}",
+        "profile": "headless",
+        "options": {
+          "workingDirectory": "/opt/cli-tools/_personal/tiktok-clipping",
+          "patches": "={{$json.text.overlay_path}}",
+          "timeout": "={{Math.max(1,Math.ceil($json.text.model_deadline-Date.now()/1000))}}"
+        }
+      },
+      "credentials": {
+        "deepSeekHarnessApi": {
+          "id": "SCgsQg91RETeYSdk",
+          "name": "DeepSeek Harness (adam-server)"
+        }
+      },
+      "continueOnFail": true,
+      "retryOnFail": false
+    },
+    {
+      "id": "encode-proposal",
+      "name": "Encode proposal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const job=$(\"Require leased job\").first().json;\nconst native=$input.first().json;\nif(!native || typeof native!==\"object\" || Array.isArray(native)) throw new Error(\"Invalid native text response\");\nconst failed=Object.prototype.hasOwnProperty.call(native,\"error\");\nlet receipt_json=typeof native.result===\"string\"?native.result:(failed && typeof native.stdout===\"string\"?native.stdout:null);\nconst native_failure=failed?{timed_out:native.timedOut===true,exit_code:Number.isInteger(native.exitCode)&&native.exitCode>=-255&&native.exitCode<=255?native.exitCode:null}:null;\nconst payload={envelope:job.text,receipt_json,native_failure};\n// If string escaping exceeds the transport budget, the coordinator reads the\n// fsynced original result.json instead. No usage or JSON is truncated.\nif(Buffer.byteLength(JSON.stringify(payload),\"utf8\")>job.max_payload_bytes) payload.receipt_json=null;\nconst raw=JSON.stringify(payload);\nif(Buffer.byteLength(raw,\"utf8\")>job.max_payload_bytes) throw new Error(\"Text transport budget exceeded\");\nconst stdinB64=Buffer.from(raw,\"utf8\").toString(\"base64\");\nif(!/^[A-Za-z0-9+/=]+$/.test(stdinB64)) throw new Error(\"Invalid transport encoding\");\nreturn [{json:{stdinB64}}];"
+      }
+    },
+    {
+      "id": "validate-and-execute",
+      "name": "Validate and execute",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        0
+      ],
+      "parameters": {
+        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' WHISPER_CPP_MODEL='/Users/adam/.local/share/cli-tools/whisper/models/ggml-small.en.bin' /Users/adam/.local/bin/tiktok-clipping jobs apply-text --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id '{{ $workflow.id }}'",
+        "executeOnce": true
+      }
+    },
+    {
+      "id": "read-render-result",
+      "name": "Read render result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw=$input.first().json.stdout; if(typeof raw!==\"string\" || raw.length>1048576) throw new Error(\"Invalid rendered envelope\"); return [{json:JSON.parse(raw)}];"
+      }
+    },
+    {
+      "id": "require-visual-review",
+      "name": "Require visual review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input=$input.first().json; const direct=Object.prototype.hasOwnProperty.call(input,\"visual\"); if(direct && input.action_result) throw new Error(\"Ambiguous visual envelope\"); const d=direct?input:input.action_result; if(!d || d.state!==\"visual_pending\") { if(direct || input.state===\"visual_pending\") throw new Error(\"Missing visual envelope\"); return []; } const e=d.visual; if(!e || e.schema_version!==1 || !/^[a-f0-9]{32}$/.test(e.job_id) || !/^[a-f0-9]{32}$/.test(e.attempt_id) || !Number.isFinite(e.expires_at) || e.expires_at<=Date.now()/1000) throw new Error(\"Invalid visual lease\"); const task=JSON.stringify(e); if(task.length>8192) throw new Error(\"Visual task too large\"); return [{json:{visual:e,task}}];"
+      }
+    },
+    {
+      "id": "deepseek-visual",
+      "name": "DeepSeek visual review",
+      "type": "n8n-nodes-agent-harnesses.deepSeekHarness",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        0
+      ],
+      "parameters": {
+        "prompt": "={{$json.task}}",
+        "profile": "headless",
+        "options": {
+          "workingDirectory": "/opt/cli-tools/_personal/tiktok-clipping",
+          "patches": "={{$json.visual.overlay_path}}",
+          "timeout": "={{Math.max(1,Math.min(120,Math.floor($json.visual.model_deadline-Date.now()/1000)))}}"
+        }
+      },
+      "credentials": {
+        "deepSeekHarnessApi": {
+          "id": "SCgsQg91RETeYSdk",
+          "name": "DeepSeek Harness (adam-server)"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "encode-visual-result",
+      "name": "Encode visual receipt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const native=$input.first().json;\nconst e=$(\"Require visual review\").first().json.visual;\nif(!native || typeof native!==\"object\" || Array.isArray(native)) throw new Error(\"Invalid native visual response\");\nconst failed=Object.prototype.hasOwnProperty.call(native,\"error\");\nlet result=typeof native.result===\"string\"?native.result:null;\nif(result===null && failed && typeof native.stdout===\"string\") {\n try { const candidate=JSON.parse(native.stdout); if(candidate && candidate.envelope) result=native.stdout; } catch {}\n}\nif(result===null) {\n const timedOut=failed && native.timedOut===true;\n result=JSON.stringify({envelope:e,outcome:timedOut?\"timeout\":\"failed\",decision:null,usage_observed:false,usage:null,\n  model:{provider:\"deepseek-official\",model:\"deepseek-flash\"},observed_at:new Date().toISOString(),\n  failure:{category:timedOut?\"timeout\":\"model_failed\",code:timedOut?\"native_timeout\":\"native_receipt_missing\",status:null,retry_after_ms:null}});\n}\nif(Buffer.byteLength(result,\"utf8\")>262144) throw new Error(\"Visual receipt transport exceeded\");\nconst receipt=JSON.parse(result);\nif(JSON.stringify(receipt.envelope)!==JSON.stringify(e)) throw new Error(\"Native visual envelope changed\");\n// Keep original UTF-8 bytes: strict coordinator parsing owns authorization.\nconst stdinB64=Buffer.from(result,\"utf8\").toString(\"base64\");\nif(!/^[A-Za-z0-9+/=]+$/.test(stdinB64)) throw new Error(\"Invalid visual transport\");\nreturn [{json:{stdinB64}}];"
+      }
+    },
+    {
+      "id": "validate-visual-receipt",
+      "name": "Validate visual receipt",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2640,
+        0
+      ],
+      "parameters": {
+        "command": "=printf '%s' '{{ $json.stdinB64 }}' | /usr/bin/base64 -D | /usr/bin/env PATH='/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/bin:/bin' /Users/adam/.local/bin/tiktok-clipping jobs apply-visual --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json --n8n-execution-id '{{ $execution.id }}' --n8n-workflow-id {{$workflow.id}}",
+        "executeOnce": true
+      }
+    },
+    {
+      "id": "read-operational-health",
+      "name": "Read operational health",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        500
+      ],
+      "parameters": {
+        "command": "PATH=/opt/homebrew/opt/ffmpeg-full/bin:/Users/adam/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin /Users/adam/.local/bin/tiktok-clipping status get --config /opt/cli-tools/_personal/tiktok-clipping/deploy/config.json </dev/null"
+      }
+    },
+    {
+      "id": "check-operational-health",
+      "name": "Check operational health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const raw=$input.first().json.stdout;\nif(typeof raw!==\"string\" || Buffer.byteLength(raw,\"utf8\")>1048576) throw new Error(\"Invalid operational health output\");\nconst d=JSON.parse(raw), h=d.health;\nif(!h || typeof h.actionable!==\"boolean\" || !Array.isArray(h.issues)) throw new Error(\"Missing operational health contract\");\nif(h.actionable) throw new Error(\"CLIPPING_OPERATIONAL_FAILURE \"+JSON.stringify({state:h.state,issues:h.issues.slice(0,20)}));\nreturn [{json:{state:d.state,health:h}}];"
+      }
+    },
+    {
+      "id": "complete-idle-work",
+      "name": "Complete idle work",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d=$input.first().json;\nif(typeof d.ready!==\"boolean\") throw new Error(\"Missing readiness state\");\nconst action=d.action_result || d;\nreturn !d.ready && action.state!==\"visual_pending\" ? [{json:d}] : [];"
+      }
+    },
+    {
+      "id": "complete-render-work",
+      "name": "Complete render work",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d=$input.first().json;\nreturn d.state!==\"visual_pending\" ? [{json:d}] : [];"
+      }
+    }
+  ],
+  "connections": {
+    "Schedule": {
+      "main": [
+        [
+          {
+            "node": "Prepare work",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual start": {
+      "main": [
+        [
+          {
+            "node": "Prepare work",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare work": {
+      "main": [
+        [
+          {
+            "node": "Read coordinator result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read coordinator result": {
+      "main": [
+        [
+          {
+            "node": "Require leased job",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Require visual review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Complete idle work",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Require leased job": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek analysis": {
+      "main": [
+        [
+          {
+            "node": "Encode proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encode proposal": {
+      "main": [
+        [
+          {
+            "node": "Validate and execute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and execute": {
+      "main": [
+        [
+          {
+            "node": "Read render result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read render result": {
+      "main": [
+        [
+          {
+            "node": "Require visual review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Complete render work",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Require visual review": {
+      "main": [
+        [
+          {
+            "node": "DeepSeek visual review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DeepSeek visual review": {
+      "main": [
+        [
+          {
+            "node": "Encode visual receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encode visual receipt": {
+      "main": [
+        [
+          {
+            "node": "Validate visual receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read operational health": {
+      "main": [
+        [
+          {
+            "node": "Check operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete idle work": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete render work": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate visual receipt": {
+      "main": [
+        [
+          {
+            "node": "Read operational health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 2400,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "timezone": "America/Chicago",
+    "errorWorkflow": "F79g2nlj6f1glf8u",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "active": false
+}

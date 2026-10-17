@@ -9,9 +9,12 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 ## Installation
 
 ```bash
-uv tool install -e <cli-tools-root>/cryptocom --force --refresh
+<cli-tools-root>/_repo/skills/cli-tool/scripts/install-cli-tool.sh --force-refresh cryptocom
 ```
 
+The installer pins the tool venv to the system `python3` and installs the tool
+first, which creates the venv and the `~/.local/bin` launcher, then overlays the
+repo-local editable `cli-tools-shared` dependency into that venv.
 The `cryptocom` command is installed into `~/.local/bin`.
 
 ## Quick Start
@@ -117,6 +120,9 @@ cryptocom candlesticks get BTCUSD-PERP 1776197280000 --timeframe 1m
 ### Account
 
 ```bash
+cryptocom account fee-rate
+cryptocom account instrument-fee-rate SOL_USD
+cryptocom account fills --instrument-name SOL_USD --start-time 1771761038000 --end-time 1771847438000 --limit 100
 cryptocom account balance
 cryptocom account balance --table
 cryptocom account balance --filter "instrument_name:eq:USD"
@@ -137,10 +143,14 @@ cryptocom account open-orders --properties "order_id,instrument_name,side,quanti
 Authenticated trading order commands (signed private endpoints):
 
 ```bash
-cryptocom orders create --symbol SOL_USD --side buy --price 96.50 --quantity 0.1
+cryptocom orders create --symbol SOL_USD --side buy --price 96.50 --quantity 0.1 --spot-margin SPOT
 cryptocom orders create --symbol BTC_USD --side buy --price 96.50 --quantity 0.1 --type LIMIT --tif IOC
 cryptocom orders create --symbol BTC_USD --side sell --quantity 0.01 --type MARKET
+cryptocom orders get ORDER_ID
+cryptocom orders get --client-oid CLIENT_ORDER_ID
 cryptocom orders details ORDER_ID
+cryptocom orders details --client-oid CLIENT_ORDER_ID
+cryptocom orders history --instrument-name SOL_USD --start-time 1771761038000 --end-time 1771847438000 --limit 100
 cryptocom orders cancel ORDER_ID
 cryptocom orders list
 cryptocom orders list --instrument-name BTC_USD
@@ -151,8 +161,21 @@ cryptocom orders list --properties "order_id,instrument_name,side,quantity,limit
 
 `--tif` accepts `GTC`, `IOC`, `FOK` aliases plus the full names
 `GOOD_TILL_CANCEL`, `IMMEDIATE_OR_CANCEL`, `FILL_OR_KILL`. `--price` is required
-for LIMIT orders and rejected for MARKET orders. stdout carries only the API
+for LIMIT orders and rejected for MARKET orders. `--quantity` and `--price` must
+be positive finite decimal numbers: `Infinity`, `-Infinity` and `NaN` are
+rejected before any request is signed. stdout carries only the API
 result (for example `{"order_id": ...}`); messages go to stderr.
+
+`--spot-margin` accepts `SPOT` or `MARGIN` (case-insensitive). Use `SPOT` to
+make the execution mode explicit and prevent a spot order from borrowing.
+
+Order lookup requires exactly one positional order ID or `--client-oid`; client-ID lookup also supports terminal orders. Create and cancel requests are attempted once, without automatic transport retries. Persist the client order ID before submission and reconcile ambiguous outcomes before another mutation. A cancel acknowledgement alone does not prove cancellation.
+
+`account fee-rate` and `account instrument-fee-rate` preserve the venue fee fields in basis points; divide by 10,000 for a fractional rate. `account fills` preserves private executed trades, including `trade_id`, `client_oid`, `fees`, and `fee_instrument_name`; negative fees deduct from the balance.
+
+`orders history` and `account fills` return a single venue page, capped at 100 rows, with raw fields and exact decimal strings. They do not claim complete history or paginate automatically. Use explicit `--start-time` and `--end-time` windows and nanosecond timestamps for recovery; the fills end time is exclusive. A full page requires further recovery reads before claiming completeness. `--filter` and `--properties` operate only on the returned page.
+
+Official contracts: [order detail](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-order-detail), [order history](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-order-history), [private fills](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-trades), [account fees](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-fee-rate), [instrument fees](https://exchange-developer.crypto.com/exchange/v1/docs/api/rest/private-get-instrument-fee-rate).
 
 ### Cache
 
@@ -202,18 +225,33 @@ cryptocom trades list BTCUSD-PERP --limit 5 --properties "p,q,s,t"
 | `--type` | | `orders create` | Order type: MARKET or LIMIT |
 | `--tif` | | `orders create` | Time in force: GTC, IOC, FOK |
 | `--client-oid` | | `orders create` | Optional client order ID |
+| `--spot-margin` | | `orders create` | Execution mode: SPOT or MARGIN |
 | `--version` | `-v` | Root command | Show version and exit |
 
 ## Configuration
 
-Credentials are stored in profile-aware `.env` files.
+Non-authentication configuration is stored in `~/.local/share/cli-tools/cryptocom/.env`. CLI-managed runtime auth state is stored in the active profile at `~/.local/share/cli-tools/cryptocom/authentication_profiles/<profile>/.env`. The source repo only carries `.env.example`.
+
+Reusable CLI credentials that agents or scripts need to store/retrieve are governed by the user-level `cli-tool` skill's `references/secrets.md`.
+
+Do not put reusable credentials in any `.env` file. Store and retrieve them through `<cli-tools-root>/_repo/_secret-manager/secrets.sh`. `.env` files are limited to non-secret config and CLI-managed runtime auth state.
+
+Root config variables:
+
+```bash
+# API base URL (optional - defaults to production)
+BASE_URL=https://api.crypto.com/exchange/v1
+```
+
+Authentication profile variables (CLI-managed runtime auth state):
 
 ```bash
 ACTIVE=true
-API_KEY=your_exchange_api_key
-API_SECRET=your_exchange_api_secret
-BASE_URL=https://api.crypto.com/exchange/v1
+API_KEY=secret://cryptocom-api-key
+API_SECRET=secret://cryptocom-api-secret
 ```
+
+`API_KEY` and `API_SECRET` are sensitive credential fields. `auth login` writes the entered values to the CLI-tools secret manager and leaves only those `secret://` references in the profile `.env`; a plain-text value in either field is rejected when the profile loads. A named profile uses `secret://cryptocom-<profile>-api-key` and `secret://cryptocom-<profile>-api-secret`. To rotate a stored credential, run `<cli-tools-root>/_repo/_secret-manager/secrets.sh set cryptocom-api-key` (or `... set cryptocom-<profile>-api-key` for a named profile). `cryptocom auth login --force` clears only ephemeral auth state and cannot replace an already-stored secret, so it does not rotate a credential.
 
 Sandbox profile example:
 
@@ -222,7 +260,7 @@ cryptocom auth profiles create sandbox
 cryptocom auth profiles select sandbox
 ```
 
-Then set `BASE_URL=https://uat-api.3ona.co/exchange/v1` in that profile.
+`BASE_URL` is a root config variable, not a profile setting. Point the CLI at the UAT sandbox by setting `BASE_URL=https://uat-api.3ona.co/exchange/v1` in `~/.local/share/cli-tools/cryptocom/.env`, and restore `https://api.crypto.com/exchange/v1` before trading against production. A profile `.env` that carries `BASE_URL` is rejected when the profile loads.
 
 ## Exit Codes
 
@@ -252,8 +290,9 @@ Models preserve extra API response fields so JSON output does not discard fields
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.11+
+- `typer`
+- `python-dotenv`
 - `requests`
 - `pydantic`
-- `typer`
 - `cli-tools-shared`

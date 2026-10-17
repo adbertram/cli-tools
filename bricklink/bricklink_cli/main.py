@@ -6,7 +6,7 @@ from cli_tools_shared.command_registry import register_commands
 from cli_tools_shared.output import command
 
 from .config import get_config
-from .commands import auth, catalog, coupon, inventory, member, messages, notification, order, refund, store
+from .commands import auth, buy, catalog, coupon, inventory, member, messages, notification, order, refund, store
 
 app = create_app(
     name="bricklink",
@@ -35,6 +35,7 @@ COMMAND_GROUPS = (
     (order, "order", "Manage orders"),
     (inventory, "inventory", "Manage store inventory"),
     (catalog, "catalog", "Browse catalog data"),
+    (buy, "buy", "Browse for-sale lots (buyer)"),
     (member, "member", "Member information"),
     (coupon, "coupon", "Manage coupons"),
     (store, "store", "Manage store settings"),

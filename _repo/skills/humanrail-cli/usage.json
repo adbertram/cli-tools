@@ -1,8 +1,8 @@
 {
   "tool": "humanrail",
   "description": "CLI interface for humanrail",
-  "discovered_at": "2026-09-02T22:13:53Z",
-  "total_commands": 14,
+  "discovered_at": "2026-09-26T23:34:08Z",
+  "total_commands": 15,
   "global_options": [],
   "commands": {
     "auth": {
@@ -206,6 +206,19 @@
               "options": []
             }
           }
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",

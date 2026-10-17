@@ -1,0 +1,36 @@
+{
+  "target": "ata_clipper",
+  "n8n_base_url": "http://100.117.198.37:5678",
+  "workflows": {
+    "clip": "iok4Q6LnQuJ4xMvg",
+    "metrics": "iaxAgwwMFnZ9ZmFa",
+    "learn": "sftryxebi3TPw1Ti",
+    "maintain": "cJwOXa8mzdYR6Nz7"
+  },
+  "active": false,
+  "runtime_config": "/opt/cli-tools/_personal/tiktok-clipping/deploy/config.json",
+  "runtime_state": "/Users/adam/.local/share/tiktok-clipping",
+  "native_deepseek_credential_id": "SCgsQg91RETeYSdk",
+  "readiness": "inactive_prepared_configuration_pending_integrated_cycle",
+  "verification_executions": {
+    "restricted_analysis": "65466",
+    "clip_unconfigured": "65477",
+    "metrics_unconfigured": "65478",
+    "learn_unconfigured": "65479",
+    "maintain_unconfigured": "65480",
+    "isolated_native_bridge": "65484"
+  },
+  "account_id": "7692213003349443597",
+  "profile": "clipper",
+  "error_workflow": "F79g2nlj6f1glf8u",
+  "prepared_contract": {
+    "native_text": true,
+    "visual_schema": 3,
+    "monitoring_enabled": false,
+    "outcome_objectives": [
+      "received_usd_14d",
+      "views_24h"
+    ],
+    "budget_day_timezone": "UTC"
+  }
+}

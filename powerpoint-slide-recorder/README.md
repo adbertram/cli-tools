@@ -11,6 +11,7 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 - macOS
 - Microsoft PowerPoint
 - `ffmpeg` and `ffprobe`
+- `swift` (Xcode or the Command Line Tools) and the Screen Recording permission for the process that runs the recorder
 - `osascript`, `afplay`, and `open`
 
 List AVFoundation devices:
@@ -49,18 +50,26 @@ Optional options:
 - `--recording-lead-seconds 1.0`
 - `--slide-pause-seconds 0.25`
 - `--slideshow-start-seconds 2.0`
-- `--coursecraft-repo-root PATH`; see Demo Environment Prep
+- `--ronin-home PATH`; the Ronin checkout holding the demo environment automation module; see Demo Environment Prep. `--coursecraft-repo-root` is a deprecated alias for the same option
 - `--table`
 
 ## Demo Environment Prep
 
-Before capture the recorder imports the CourseCraft `DemoEnvironmentAutomation` PowerShell module to enable Do Not Disturb and clear notifications. It finds that module by locating the CourseCraft repo root — the nearest directory containing `course-pipeline.json`.
+Before capture the recorder imports the shared `DemoEnvironmentAutomation` PowerShell module to enable Do Not Disturb and clear notifications. That module has exactly one home: `prep/DemoEnvironmentAutomation/` inside Ronin's checkout, so the recorder resolves the Ronin checkout — never a CourseCraft repo.
 
-Pass `--coursecraft-repo-root /path/to/CourseCraft` to name that root explicitly. When the option is omitted the recorder searches upward from the current working directory, so the command only works from inside the CourseCraft repo tree; otherwise it fails before recording with `CourseCraft repo root not found from: <cwd>`.
+Resolution order, first hit wins:
+
+1. `$RONIN_HOME`, when it is set and holds `prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1`. The recording host exports it, so remote runs need no flag.
+2. `--ronin-home /path/to/ronin`, the explicit checkout root. `--coursecraft-repo-root` is still accepted as a deprecated alias for the same value, so existing callers keep working.
+3. A search upward from the current working directory for a checkout that holds `prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1`, so a run started anywhere inside the Ronin checkout needs no flag.
+
+When none of the three finds the module the command fails before recording with `Demo environment automation module not found: prep/DemoEnvironmentAutomation/DemoEnvironmentAutomation.psd1 ... Set RONIN_HOME to the Ronin checkout, pass --ronin-home RONIN_HOME, or run the command from inside the Ronin checkout.`
 
 ## Resolution Guard
 
-The recorder probes the selected AVFoundation `--video-input` before launching PowerPoint. The capture source must have the same aspect ratio as the final MP4 resolution and must be at least as large as the requested output size. Matching larger sources are scaled down during the final mux. Mismatched or smaller sources fail before recording so the final MP4 is not letterboxed, cropped, or upscaled.
+The recording itself captures the whole main display, through the bundled ScreenCaptureKit helper `powerpoint_slide_recorder_cli/screen_capture.swift` (run with `swift`; it needs the Screen Recording permission). Its content filter excludes nothing: any ScreenCaptureKit filter, even one that drops only the screen-recording indicator, reports the slide show as idle during a build animation, so each fade-in freezes at its first frame until the next click. The one element the capture itself causes, the macOS screen-recording indicator, is reported by the helper as `indicatorRect=x,y,w,h` and painted out by the final mux (`delogo`); anything else on screen is caught by the screen-intrusion gate after recording. The cursor is never captured. The helper writes `firstFrameEpochMs=<ms>` on stderr, and the final mux trims the raw video from that first frame to the moment the narration starts.
+
+The recorder probes the selected AVFoundation `--video-input` before launching PowerPoint, and the capture is recorded at that probed size. The capture source must have the same aspect ratio as the final MP4 resolution and must be at least as large as the requested output size. Matching larger sources are scaled down during the final mux. Mismatched or smaller sources fail before recording so the final MP4 is not letterboxed, cropped, or upscaled.
 
 The default `--resolution` is `1920x1080`. A high-resolution non-16:9 source such as `4112x2658` is still rejected because scaling it directly to 1920x1080 would keep or distort the bars from the full-screen PowerPoint capture. The source has to be 16:9, such as `1920x1080`, `2560x1440`, or `3840x2160`.
 
@@ -76,7 +85,13 @@ Every item requires `slide`, `transcript_path`, and `audio_path`. Slide numbers 
 
 Each transcript is required. Each cue marker sends Space at the estimated cue boundary.
 
+An item may also carry `cue_offsets_seconds`: a list of numbers, one per cue marker in that item's transcript, each the time in seconds from the start of that item's audio file at which Space is sent. When the key is present those times are used as given and the item's timing-plan entry records `"cue_timing_method": "explicit"`. When it is absent the cue times are estimated from the transcript's word ratio (`"cue_timing_method": "word-ratio"`). Items can mix the two.
+
+The list must have exactly one entry per cue marker (an empty list for a transcript with no cue markers), every entry must be a number that is at least 0 and less than the item's audio duration, and entries must be strictly ascending. Anything else fails with an error naming the slide; there is no fallback to the estimate.
+
 Before any capture starts, the recorder measures each slide's click steps from the **live** slide show: it opens the deck, plays the requested slide range with manual advance, presses Space through the whole range, and reads the running show's slide index after every press. A press that leaves the index unchanged consumed a click step; a press that moves it to the next slide consumed the advance. The recording then fails before capture when a transcript's cue-marker count does not match the click steps that slide actually consumes.
+
+A press that lands while a click build is still playing is absorbed: PowerPoint finishes the build instead of starting the next step. So every press, in the probe and in the recording, waits for the slide's builds to finish. Each slide's settle window is its longest main-sequence click step read from the slide's and its layout's `<p:timing>` (the latest effect end in the step, following After Previous chains, With Previous groups, `repeatCount`, and `autoRev`) plus 0.2 s, and never less than 0.7 s. A probe press on a slide waits the longer of that slide's and the next slide's window before reading the index. In the recording, a terminal next-click after-effect is followed by the slide's window, and when the narration ends before the slide's last cue build has finished, silence is added so the after-effect or slide advance press lands after it. Each slide's window is recorded as `click_settle_seconds` in `timing-plan.json`.
 
 The count is measured rather than read from the deck's OOXML because they are not the same number. On layout-inherited paragraph builds — the Pluralsight template — PowerPoint expands the layout's build template against each slide's own content at show time, so a slide that authors 4 `clickEffect` nodes can consume 8 presses in the running show (and vice versa). Only the live measurement can agree with the recording drive.
 
@@ -93,7 +108,8 @@ During the recording, every press is preceded by an equality check between the r
     {
       "slide": 2,
       "transcript_path": "/path/to/transcripts/002.txt",
-      "audio_path": "/path/to/audio/002.mp3"
+      "audio_path": "/path/to/audio/002.mp3",
+      "cue_offsets_seconds": [3.42, 7.9]
     }
   ]
 }

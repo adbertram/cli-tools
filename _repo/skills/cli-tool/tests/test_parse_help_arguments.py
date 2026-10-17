@@ -50,7 +50,7 @@ def test_parse_help_arguments_unknown_angle_metavar_is_not_help_text():
     assert arguments == [
         {
             "name": "item_id",
-            "type": "UUID",
+            "type": "uuid",
             "required": True,
             "help": "Item ID",
         }

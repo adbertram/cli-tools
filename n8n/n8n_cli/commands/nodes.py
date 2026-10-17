@@ -4,7 +4,7 @@ import typer
 from typing import Optional, List
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 from ..package_inventory import list_server_packages, node_belongs_to_package, package_map
 from .test import test_node
@@ -64,6 +64,7 @@ def _package_for_node(node_name: str, packages_by_name: dict) -> Optional[dict]:
 
 
 @app.command("list")
+@command
 def nodes_list(
     node_type: Optional[NodeType] = typer.Option(None, "--type", help="Node source: 'default', 'community' (third-party), or 'custom' (generated)"),
     include_tools: bool = typer.Option(False, "--include-tools", help="Include auto-generated AI tool variants"),
@@ -159,6 +160,7 @@ def nodes_list(
 
 
 @app.command("get")
+@command
 def nodes_get(
     name: str = typer.Argument(..., help="Package name, CLI tool name, or built-in node name"),
     node_type: Optional[NodeType] = typer.Option(None, "--type", help="Node source: 'default' (built-in) or 'community'"),

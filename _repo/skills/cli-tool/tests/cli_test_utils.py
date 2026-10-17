@@ -5,6 +5,7 @@ import subprocess
 import sys
 import json
 import re
+import tomllib
 from functools import cache
 from pathlib import Path
 from typing import Any, List, Dict, Optional, Tuple
@@ -13,6 +14,7 @@ _DISCOVER_NESTED_COMMANDS_CACHE: Dict[
     Tuple[str, str, int, int, Tuple[str, ...], int],
     Tuple[str, ...],
 ] = {}
+CLI_TEST_EXECUTABLE_ENV = "CLI_TOOL_TEST_EXECUTABLE"
 
 
 def _clean_path() -> Dict[str, str]:
@@ -59,7 +61,7 @@ def run_cli_command(
     """Execute CLI command with timeout and capture output.
 
     Retries once on timeout: CLI startup can stall for tens of seconds under
-    bursty host contention (Dropbox sync, parallel agent sessions), and a
+    bursty host contention (parallel agent sessions), and a
     single stall is not a CLI hang. A second consecutive timeout raises
     TimeoutExpired so genuine hangs still fail loudly.
     """
@@ -131,6 +133,13 @@ def run_live_cli_command(
     return run_cli_command(cli_executable, args, timeout=timeout, check=check)
 
 
+_ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _strip_ansi(text: str) -> str:
+    return _ANSI_ESCAPE_RE.sub("", text)
+
+
 def parse_help_commands(help_text: str) -> List[str]:
     """Extract command names from Rich CLI help output.
 
@@ -161,7 +170,7 @@ def parse_help_commands(help_text: str) -> List[str]:
     but the ``│`` may be preceded by other chars in some terminals, so measure
     from the ``│`` rather than from column 0).
     """
-    pattern = r'^│(\s+)([a-z][a-z0-9_-]*)\s+'
+    pattern = r'^\s*│(\s+)([a-z][a-z0-9_-]*)\s+'
     commands = []
     in_commands_section = False
     # Command-name column for the current Commands section, learned from its
@@ -171,6 +180,7 @@ def parse_help_commands(help_text: str) -> List[str]:
     command_column = None
 
     for line in help_text.split('\n'):
+        line = _strip_ansi(line)
         # Detect Commands section header
         if 'Commands' in line and '─' in line:
             in_commands_section = True
@@ -233,13 +243,27 @@ _HELP_METAVAR_TYPES = {
     "path": "PATH",
     "str": "TEXT",
     "int": "INTEGER",
+    "integer": "INTEGER",
     "float": "FLOAT",
 }
 
 
 def _normalize_help_metavar(metavar: str) -> str:
-    """Return the canonical usage.json type for a Typer angle metavar."""
-    return _HELP_METAVAR_TYPES.get(metavar, metavar.upper())
+    """Return the canonical usage.json type for a Typer angle metavar.
+
+    Typer renders a constrained numeric parameter's metavar as ``<int
+    range>``/``<float range>``, and some installed Typer versions spell the
+    same metavar in caps (``<INTEGER RANGE>``), so the metavar is matched
+    case-insensitively after an optional trailing ``range`` word is dropped.
+    Metavars with no canonical mapping are returned verbatim, so choice
+    metavars such as ``<1:1|16:9>`` keep their original spelling.
+    """
+    key = metavar.strip().lower()
+    if key.endswith(" range"):
+        key = key.removesuffix(" range").strip()
+    if key in _HELP_METAVAR_TYPES:
+        return _HELP_METAVAR_TYPES[key]
+    return metavar
 
 
 _ARGUMENT_START_RE = re.compile(
@@ -429,13 +453,19 @@ def parse_help_options(section_text: str) -> List[Dict]:
                 short_flag = secondary_match.group(2)
             rest = secondary_match.group(3).strip()
 
-        metavar_match = re.match(r"^<([^<>\s]+)>\s+(.*)", rest)
-        type_match = re.match(r"^([A-Z][A-Z_0-9]+)\s+(.*)", rest)
+        metavar_match = re.match(r"^<([^<>]+)>\s+(.*)", rest)
+        # A constrained numeric parameter whose metavar is not angle-wrapped
+        # renders as "<TYPE> RANGE [<constraint>]" -- the live facebook
+        # ("INTEGER RANGE [1<=x<=50]") and google ("INTEGER RANGE [x>=1]")
+        # CLIs both do -- so the RANGE token belongs to the metavar, not to
+        # the help text. Drop it only when a bracketed constraint follows, so
+        # help text that legitimately opens with the word RANGE survives.
+        type_match = re.match(r"^([A-Z][A-Z_0-9]+)(?:\s+RANGE(?=\s*\[))?\s+(.*)", rest)
         if metavar_match:
             opt_type = _normalize_help_metavar(metavar_match.group(1))
             help_text = metavar_match.group(2).strip()
         elif type_match:
-            opt_type = type_match.group(1)
+            opt_type = _normalize_help_metavar(type_match.group(1))
             help_text = type_match.group(2).strip()
         else:
             opt_type = "bool"
@@ -842,13 +872,29 @@ def discover_list_commands(
 
 
 def get_uv_tool_venv_dir(cli_dir: Path, cli_name: str) -> Optional[Path]:
-    """Get the uv tool venv path by reading package name from pyproject.toml.
+    """Get the selected CLI environment path.
 
-    uv tool install stores venvs at ~/.local/share/uv/tools/<package-name>.
+    An explicit test executable takes precedence when it belongs to a project
+    virtual environment. This lets a worktree test run use that worktree's
+    `.venv` instead of the shared uv tool environment. Otherwise, uv tool
+    install stores venvs at ~/.local/share/uv/tools/<package-name>.
     The package name comes from pyproject.toml [project].name field.
     Falls back to {cli_name}-cli if pyproject.toml can't be read.
     """
     import tomllib
+
+    cli_executable_override = os.environ.get(CLI_TEST_EXECUTABLE_ENV)
+    if cli_executable_override is not None:
+        executable = Path(cli_executable_override).expanduser()
+        venv_bin = executable.parent
+        venv_dir = venv_bin.parent
+        if (
+            venv_bin.name == "bin"
+            and (venv_dir / "pyvenv.cfg").is_file()
+            and (venv_bin / "python").is_file()
+        ):
+            return venv_dir
+        return None
 
     pkg_name = f"{cli_name}-cli"
     pyproject = cli_dir / "pyproject.toml"
@@ -873,7 +919,7 @@ def get_config_auth_metadata(cli_dir: Path, cli_name: str) -> Optional[Dict[str,
     uv_venv = get_uv_tool_venv_dir(cli_dir, cli_name)
     if uv_venv is None:
         return None
-    cli_pkg = cli_name.replace("-", "_") + "_cli"
+    cli_pkg = get_pkg_dir(cli_dir, cli_name).name
     result = subprocess.run(
         [
             str(uv_venv / "bin" / "python"),
@@ -907,8 +953,18 @@ def get_config_auth_metadata(cli_dir: Path, cli_name: str) -> Optional[Dict[str,
 
 
 def get_pkg_dir(cli_dir: Path, cli_name: str) -> Path:
-    """Get the CLI package directory from the CLI repo path and CLI name."""
+    """Resolve the package declared by the console entry point.
+
+    Scaffold fixtures without script metadata retain the standard package spelling.
+    Project-owned tools may declare a different package, such as `coursecraft`.
+    """
     pkg_name = cli_name.replace("-", "_") + "_cli"
+    project = cli_dir / "pyproject.toml"
+    if project.is_file():
+        data = tomllib.loads(project.read_text())
+        entry = data.get("project", {}).get("scripts", {}).get(cli_name)
+        if entry:
+            pkg_name = entry.split(":", 1)[0].split(".", 1)[0]
     return cli_dir / pkg_name
 
 

@@ -26,11 +26,13 @@ airtable <command-group> <action> [arguments] [options]
 | Create a record | `airtable records create "Table" "Field=Value"` |
 | Update a record | `airtable records update "Table" recXXX "Field=Value"` |
 | Delete a record | `airtable records delete "Table" recXXX` |
+| Delete several records (10 per request) | `airtable records delete-many "Table" recA recB --yes` |
 | List tables in a base | `airtable tables list --base appXXX` |
 | Create a table | `airtable tables create "Table Name" --base appXXX` |
 | Update a table | `airtable tables update tblXXX --name "New Name"` |
 | List fields in a table | `airtable fields list "Table Name"` |
 | Create a field | `airtable fields create "Table Name" "Field Name" singleLineText` |
+| Create a checkbox field | `airtable fields create "Table Name" "Field Name" checkbox --options '{"icon":"check","color":"greenBright"}'` |
 | Update a field | `airtable fields update "Table Name" fldXXX --name "New Name"` |
 | Check auth status | `airtable auth status` |
 | List profiles | `airtable auth profiles list` |
@@ -55,7 +57,7 @@ For named-base work, resolve the base ID in the same sequential shell flow that 
 - **bases** -- Discover the bases the active Personal Access Token can access (list, get). `bases list` follows the Metadata API `offset` pagination to return every accessible base; `bases get <id-or-name>` resolves one base to its id/name/permissionLevel. Airtable exposes no single-base detail endpoint, so `get` resolves from the full listing.
 - **tables** -- Airtable table schema operations (list, create, update). Note: Airtable's public Meta API does not expose a delete-table endpoint.
 - **fields** -- Airtable field schema operations (list, create, update). Airtable's public Web/Meta API does not support deleting fields.
-- **records** -- CRUD operations on Airtable records (list, get, create, update, delete)
+- **records** -- CRUD operations on Airtable records (list, get, create, update, delete, delete-many). `delete-many` sends one request per 10 IDs; on a failed request it stops, prints the already-deleted rows to stdout, names the failed, deleted, and not-attempted IDs on stderr, and exits 1.
 </principle>
 
 <principle name="Confirmation In Non-Interactive Contexts">
@@ -63,7 +65,7 @@ For named-base work, resolve the base ID in the same sequential shell flow that 
 Bash tools, pipes, CI). Without a TTY they cannot show an interactive
 confirmation prompt, so they fail fast with a clear refusal
 (`Refusing to delete ... Re-run with --yes in non-interactive contexts.`) and a
-non-zero exit instead of hanging. Always pass `--yes` for `records delete` (and
+non-zero exit instead of hanging. Always pass `--yes` for `records delete` and `records delete-many` (and
 `auth profiles delete` uses `--force`/`-F`) from any agent or script.
 
 ```bash
@@ -111,22 +113,42 @@ airtable auth profiles delete <name> --force
 
 **CLI behavior:** `airtable fields delete` is intentionally guarded and returns a clear unsupported-operation error before making any API request.
 
-### 3. Lookup field creation is not a reliable production schema path through fields create
+### 3. Lookup fields are created with `multipleLookupValues`, not `lookup`
 
-**Symptom:** `airtable fields create tbl... "Lookup" multipleLookupValues --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` returns `Error: API request failed (422): {'type': 'UNSUPPORTED_FIELD_TYPE_FOR_CREATE'}`. `airtable fields create Clips "Module Status" lookup --base app... --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` returns `Error: API request failed (422): Invalid options for Clips.Module Status: Creating lookup fields is not supported at this time`.
+**Symptom:** `airtable fields create Clips "Module Status" lookup --base app... --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'` is refused before the request with a message naming `multipleLookupValues`. Sending `lookup` to Airtable directly returns `422 UNSUPPORTED_FIELD_TYPE_FOR_CREATE` — "Creating lookup fields is not supported at this time".
 
-**Cause:** Airtable schema reads expose lookup fields as `multipleLookupValues`, while current Airtable docs list create-field variant type `lookup`; both have been rejected by the public create-field API for live CourseCraft-style schema work. Do not copy a lookup field's returned `type` from `fields list` into `fields create`, and do not treat documented `lookup` create examples as a reliable production schema-migration path.
+**Cause:** Airtable's create-field endpoint accepts the same type name it returns from schema reads, `multipleLookupValues`. The `lookup` spelling in its docs is not accepted by the create-field API.
 
-**Correct path:** Create lookup fields in Airtable's web UI, then verify with `airtable fields list <table> --filter 'name:eq:<field name>'` or `airtable fields get <table> <field>`.
+**Correct path:** Use the type that `fields list` reports:
 
-**CLI behavior:** `airtable fields create ... multipleLookupValues ...` and `airtable fields create ... lookup ...` are guarded and return a clear unsupported-operation error before making any API request.
+```bash
+airtable fields create Clips "Module Status" multipleLookupValues --base app... \
+  --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld..."}'
+```
 
-### 4. Rollup field creation is not reliable through fields create
+Measured live against base `app9uzzru5KZOImYQ` on 2026-09-11: `multipleLookupValues` returned 201 with `options.isValid: true`; `rollup` with a `formula` returned 201 with `options.isValid: true`; only `lookup` returned 422.
 
-**Symptom:** `airtable fields create Clips "Module Status" rollup --base app... --options '{"recordLinkFieldId":"fld...","fieldIdInLinkedTable":"fld...","formula":"ARRAYJOIN(values)"}'` returns `Error: API request failed (422): {'type': 'UNSUPPORTED_FIELD_TYPE_FOR_CREATE'}`.
+**CLI behavior:** `airtable fields create ... multipleLookupValues ...` and `airtable fields create ... rollup ...` forward the request normally. Only `airtable fields create ... lookup ...` is guarded, and the refusal names `multipleLookupValues` as the working type.
 
-**Cause:** Airtable documents a rollup create payload, and the CLI can forward it, but Airtable's public create-field API has rejected rollup creation for a live CourseCraft base. Do not treat a rollup create example or schema-read field type as a reliable production schema-migration path.
+### 4. A created field can never be removed or repointed through the API
 
-**Correct path:** Create or change rollup fields in Airtable's web UI, then verify with `airtable fields list <table> --filter 'name:eq:<field name>'` or `airtable fields get <table> <field>`. Use `airtable fields create ... rollup` only in a disposable base when the task is specifically to test Airtable API support.
+**Symptom:** A field created with wrong options (for example a lookup pointing at the wrong `fieldIdInLinkedTable`) cannot be deleted or corrected by API. `DELETE /v0/meta/bases/{base}/tables/{table}/fields/{id}` returns 404, and `PATCH .../fields/{id}` with `recordLinkFieldId` or `fieldIdInLinkedTable` returns 422.
 
-**CLI behavior:** `airtable fields create ... rollup ...` is not guarded today; it forwards the request and can return Airtable's 422 unsupported-field-type response.
+**Cause:** Airtable exposes no delete-field endpoint, and the update-field endpoint accepts only `name` and `description`. Verified in the same live pass on 2026-09-11.
+
+**Correct path:** Verify the `--options` payload before creating — field IDs resolved from `airtable fields list <linked table>` — because the only way to remove a mistake is Airtable's web UI. `airtable fields create` prints this warning on every successful create, and `airtable fields delete` refuses before making a request.
+
+### 5. Checkbox fields need `options.icon` and `options.color`, which the CLI now supplies
+
+**Symptom:** `airtable fields create "Demos" "Unpaced Action Video Recorded" checkbox --base app... --description "..."` failed with 422 `Invalid options for Demos.Unpaced Action Video Recorded: Failed schema validation: Unpaced Action Video Recorded.options is missing`, and the `--options '{}'` workaround failed with `... options.icon is required`.
+
+**Cause:** Airtable's create-field schema requires both `icon` and `color` on a checkbox. The CLI sent no `options` object at all when `--options` was absent, and forwarded an empty object unchanged when it was empty.
+
+**Correct path:** the bare and empty-options forms now work: `fields create` fills in Airtable's defaults `{"icon":"check","color":"greenBright"}` whenever a checkbox create receives no `options`, an empty object, or an object missing either key. Explicit `--options` values win, so `--options '{"icon":"star","color":"red"}'` still creates that exact checkbox:
+
+```bash
+airtable fields create "Demos" "Unpaced Action Video Recorded" checkbox \
+  --base app... --description "Marks that the first, unpaced action-video take has been recorded."
+```
+
+**Scope:** only checkbox creation is defaulted. Other field types still forward `--options` exactly as given, and a checkbox created with the wrong icon or color cannot be corrected later over the API — see issue 4 above.

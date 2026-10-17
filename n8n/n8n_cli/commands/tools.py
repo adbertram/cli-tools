@@ -3,13 +3,14 @@ import typer
 from typing import Optional, List
 
 from ..client import get_client
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 
 app = typer.Typer(help="List and inspect available CLI tools for node conversion", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def tools_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -54,6 +55,7 @@ def tools_list(
 
 
 @app.command("get")
+@command
 def tools_get(
     name: str = typer.Argument(..., help="CLI tool name to inspect"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

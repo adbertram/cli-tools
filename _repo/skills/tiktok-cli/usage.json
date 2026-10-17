@@ -1,8 +1,8 @@
 {
   "tool": "tiktok",
   "description": "TikTok transcript downloader using yt-dlp",
-  "discovered_at": "2026-09-03T13:38:02Z",
-  "total_commands": 14,
+  "discovered_at": "2026-10-16T12:09:21Z",
+  "total_commands": 39,
   "global_options": [
     {
       "name": "--version",
@@ -13,15 +13,166 @@
     }
   ],
   "commands": {
+    "account": {
+      "help": "Read verified current account identity",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "bio": {
+          "help": "Read the exact owned profile bio from its editor.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "check": {
+          "help": "Report each recent post's For You eligibility, restriction reason, and appeal state. Read-only. Unreadable values stay null. TikTok web has no Account check page, so account standing is always null; per-post penalties are real.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle",
+              "short": "-u"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless the current numeric account ID matches exactly"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Most recent posts to check",
+              "short": "-l",
+              "default": "20"
+            },
+            {
+              "name": "--video-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Also check this post ID, even if Studio no longer lists it (repeatable)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display posts as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get the authenticated account ID and username from TikTok's account endpoint. Numeric account IDs remain strings to preserve 64-bit precision. Optional expected-identity guards fail before returning data if the session differs.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless the current username matches this handle"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless the current numeric account ID matches exactly"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "set-bio": {
+          "help": "Save one exact bio only when its previous value matches; require --yes.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--value",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--expected-bio",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage tiktok authentication",
-      "usage_instructions": "Use `tiktok auth` to inspect the shared auth/profile surface for this wrapper. The tool does not store TikTok credentials itself; these commands report whether the upstream yt-dlp dependency is available and manage local profiles.",
       "arguments": [],
       "options": [],
       "commands": {
         "login": {
-          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Use `tiktok auth login` to initialize or refresh the default shared auth/profile record for this wrapper. Key options: --profile/-p, --force/-F, --credential-type/-c.",
+          "help": "Configure authentication, optionally using a manual browser login. With --manual, finish login in the opened Chrome window and press Enter here. Without a terminal, close that window within five minutes instead. The shared engine verifies live authentication and persists the session.",
           "arguments": [],
           "options": [
             {
@@ -43,14 +194,20 @@
               "name": "--credential-type",
               "type": "TEXT",
               "required": false,
-              "help": "Authenticate only this credential type (e.g., 'custom', 'browser_session')",
+              "help": "Authenticate only 'custom' or 'browser_session'",
               "short": "-c"
+            },
+            {
+              "name": "--manual",
+              "type": "bool",
+              "required": false,
+              "help": "Open plain visible Chrome for manual login in an isolated named browser_session profile; never submit stored credentials",
+              "takes_value": false
             }
           ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
-          "usage_instructions": "Use `tiktok auth logout` to clear stored auth/profile data for this wrapper. Key options: --profile/-p.",
           "arguments": [],
           "options": [
             {
@@ -64,13 +221,11 @@
         },
         "profiles": {
           "help": "Manage authentication profiles",
-          "usage_instructions": "Use `tiktok auth profiles` to manage shared auth profiles for this wrapper. Consult the leaf commands in this group for the exact action.",
           "arguments": [],
           "options": [],
           "commands": {
             "create": {
               "help": "Create a new profile from .env.example template.",
-              "usage_instructions": "Use `tiktok auth profiles create` to create a new shared auth profile from the template. Required argument: NAME.",
               "arguments": [
                 {
                   "name": "name",
@@ -79,11 +234,23 @@
                   "help": "Profile name (e.g., staging, production)"
                 }
               ],
-              "options": []
+              "options": [
+                {
+                  "name": "--auth-type",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Authentication type for this profile. Valid values: custom, browser_session"
+                },
+                {
+                  "name": "--auth-param",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values"
+                }
+              ]
             },
             "delete": {
               "help": "Delete a profile and its data.",
-              "usage_instructions": "Use `tiktok auth profiles delete` to remove one shared auth profile and its stored data. Required argument: NAME. Key options: --force/-F.",
               "arguments": [
                 {
                   "name": "name",
@@ -105,7 +272,6 @@
             },
             "get": {
               "help": "Get details for a specific profile.",
-              "usage_instructions": "Use `tiktok auth profiles get` when you need to inspect one shared auth profile. Required argument: NAME. Key options: --table/-t.",
               "arguments": [
                 {
                   "name": "name",
@@ -127,7 +293,6 @@
             },
             "list": {
               "help": "List all profiles and show their auth types and active state.",
-              "usage_instructions": "Use `tiktok auth profiles list` to list available shared auth profiles and show which one is default. Key options: --table/-t, --limit/-l, --filter/-f, --properties/-p.",
               "arguments": [],
               "options": [
                 {
@@ -230,9 +395,113 @@
             }
           }
         },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
+        },
+        "session-export": {
+          "help": "Export scoped cookies/localStorage after live exact-account checks.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named browser-session profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact expected service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username"
+            },
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "New private CLI runtime bundle file"
+            }
+          ]
+        },
+        "session-import": {
+          "help": "Restore, verify, close, and exclusively publish an absent profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "New inactive named browser-session profile"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact expected service account ID"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username"
+            },
+            {
+              "name": "--stdin",
+              "type": "bool",
+              "required": false,
+              "help": "Read a private bounded session bundle from stdin",
+              "takes_value": false
+            }
+          ]
+        },
+        "session-import-recover": {
+          "help": "Recover owned closed transfer state or finalize it after exact actor proof.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit named profile with an unfinished transfer journal"
+            },
+            {
+              "name": "--finalize",
+              "type": "bool",
+              "required": false,
+              "help": "Verify and publish already restored inactive owned state",
+              "takes_value": false
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Required exact actor for finalization"
+            },
+            {
+              "name": "--expected-username",
+              "type": "TEXT",
+              "required": false,
+              "help": "Expected service username for finalization"
+            }
+          ]
+        },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
-          "usage_instructions": "Use `tiktok auth status` to run live readiness checks for the upstream yt-dlp dependency across profiles. Key options: --profile/-p, --table/-t.",
           "arguments": [],
           "options": [
             {
@@ -254,7 +523,6 @@
         },
         "test": {
           "help": "Test authentication by verifying credentials work across profiles.",
-          "usage_instructions": "Use `tiktok auth test` to verify the upstream yt-dlp dependency is installed and callable across profiles. Key options: --table/-t, --verbose/-v, --profile/-p.",
           "arguments": [],
           "options": [
             {
@@ -297,7 +565,7 @@
       ],
       "commands": {
         "get": {
-          "help": "Get one saved video's details by id or URL.",
+          "help": "",
           "arguments": [
             {
               "name": "item",
@@ -331,7 +599,7 @@
           ]
         },
         "list": {
-          "help": "List all of the logged-in account's saved (favorited) TikTok videos.",
+          "help": "",
           "arguments": [],
           "options": [
             {
@@ -354,7 +622,7 @@
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., author:eq:someuser)",
+              "help": "Filter: field:op:value",
               "short": "-f"
             },
             {
@@ -374,9 +642,383 @@
         }
       }
     },
+    "studio": {
+      "help": "Prepare, check, publish, and reconcile owned Studio drafts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "check": {
+          "help": "Read Studio's own pre-post verdict for a file; never posts. Uploads the file as a private draft, waits for Studio's automatic Content check lite and music copyright check, returns their verdicts, and removes that draft. Each run uses one of the account's daily checks. `verdict` is `pass`, `restricted`, or null when Studio gave none; see `status`.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "file",
+              "required": true,
+              "help": "Exact local MP4 to check before posting"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--timeout",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[30<=x<=900]  Seconds to wait for Studio's checks",
+              "default": "900"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display the verdict as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "inventory": {
+          "help": "Read exact owned post IDs in one Studio scan; unresolved IDs stay unknown.",
+          "arguments": [
+            {
+              "name": "manifest",
+              "type": "PATH",
+              "required": true,
+              "help": "Regular JSON file containing 1-1000 unique string video IDs"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--continuation",
+              "type": "PATH",
+              "required": false,
+              "help": "Prior result's continuation JSON file"
+            },
+            {
+              "name": "--max-pages",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=20]  Page budget, including fresh head",
+              "default": "20"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display freshly observed matched records as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "post": {
+          "help": "Prepare and publish in one process so the owned editor stays open. Same policy and request rules as `prepare` and `publish`. A failed prepare is retried once on a fresh publisher (never when another operation owns the profile). Read `studio status <request-id>` for the journal on error.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "file",
+              "required": true,
+              "help": "Exact local MP4 to upload and post"
+            }
+          ],
+          "options": [
+            {
+              "name": "--policy",
+              "type": "file",
+              "required": true,
+              "help": "Explicit version 1 Studio policy JSON"
+            },
+            {
+              "name": "--request-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical UUID binding this operation"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Explicitly authorize the single public Post action",
+              "takes_value": false
+            },
+            {
+              "name": "--dispatch-deadline",
+              "type": "FLOAT",
+              "required": false,
+              "help": "Epoch seconds after which Post must not dispatch"
+            },
+            {
+              "name": "--refuse-if-exists",
+              "type": "PATH",
+              "required": false,
+              "help": "Abort before Post if this path exists at dispatch time"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "prepare": {
+          "help": "Upload privately, verify disclosure controls, and retain the owned draft. Policy fields: schema_version=1, profile, account_id (string), username, caption, audience=Everyone, timing=now, disclosure=branded_content, music_rights_confirmed=true. Caption is used verbatim.",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "file",
+              "required": true,
+              "help": "Exact local MP4 to upload privately"
+            }
+          ],
+          "options": [
+            {
+              "name": "--policy",
+              "type": "file",
+              "required": true,
+              "help": "Explicit version 1 Studio policy JSON"
+            },
+            {
+              "name": "--request-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Canonical UUID binding this operation"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "publish": {
+          "help": "Reverify and publish one exact owned draft; never retry unknown outcomes.",
+          "arguments": [
+            {
+              "name": "request_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Prepared operation UUID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Explicitly authorize the single public Post action",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "reconcile": {
+          "help": "Read exact receipt post ID in verified Studio; never guess by caption.",
+          "arguments": [
+            {
+              "name": "request_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Operation UUID to reconcile through verified Studio"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Read the profile's operation journal without remote browser actions.",
+          "arguments": [
+            {
+              "name": "request_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Operation UUID to read locally"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display operation as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "watch": {
+          "help": "Read watch time in seconds, completion fraction, and timed retention fractions. Read-only. Provider delays, processing, and absent measurements remain null. Uses one bounded insight request and verifies both post and account identity.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact owned post ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display watch metrics as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "watch-batch": {
+          "help": "Read watch metrics for many owned posts in one browser session. Same per-post read as `watch`, through one page, with the account identity verified once before and once after the batch. A post that fails lands in `errors` keyed by its ID; the rest still return in `records`.",
+          "arguments": [
+            {
+              "name": "manifest",
+              "type": "PATH",
+              "required": true,
+              "help": "Regular JSON file containing 1-1000 unique string post IDs"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact session owner handle"
+            },
+            {
+              "name": "--account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display one row per read post",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "transcripts": {
       "help": "Download TikTok video transcripts",
-      "usage_instructions": "Use `tiktok transcripts` for TikTok transcript download operations. Consult the leaf commands in this group for the exact action.",
       "arguments": [],
       "options": [
         {
@@ -388,8 +1030,7 @@
       ],
       "commands": {
         "download": {
-          "help": "Download transcripts for one or more TikTok videos.",
-          "usage_instructions": "Use `tiktok transcripts download` to fetch one or more TikTok transcripts through yt-dlp. Required argument: URLS. Key options: --output-dir/-o, --format/-f, --lang/-l, --manual-sub, --table/-t.",
+          "help": "",
           "arguments": [
             {
               "name": "urls",
@@ -403,7 +1044,7 @@
               "name": "--output-dir",
               "type": "TEXT",
               "required": false,
-              "help": "Output directory for transcripts",
+              "help": "Output directory",
               "short": "-o",
               "default": "."
             },
@@ -411,7 +1052,7 @@
               "name": "--format",
               "type": "TEXT",
               "required": false,
-              "help": "Subtitle format (srt, vtt, txt)",
+              "help": "Subtitle format",
               "short": "-f",
               "default": "srt"
             },
@@ -427,17 +1068,10 @@
               "name": "--auto-sub",
               "type": "bool",
               "required": false,
-              "help": "Download auto-generated subtitles",
+              "help": "",
               "takes_value": false,
               "secondary": "--no-auto-sub",
               "default": "auto-sub"
-            },
-            {
-              "name": "--manual-sub",
-              "type": "bool",
-              "required": false,
-              "help": "Prefer manual subtitles over auto-generated",
-              "takes_value": false
             },
             {
               "name": "--table",
@@ -446,6 +1080,406 @@
               "help": "Display results as a table",
               "short": "-t",
               "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "videos": {
+      "help": "Publish, inspect, list, delete, and set privacy of TikTok videos",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "delete": {
+          "help": "Permanently delete one of your TikTok videos.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "TikTok video id to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Confirm permanent deletion",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one of a profile's posted videos by id.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "TikTok video id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "TikTok username whose posts to read (private posts need that account's session)",
+              "short": "-u"
+            },
+            {
+              "name": "--studio",
+              "type": "bool",
+              "required": false,
+              "help": "Read Studio content for this verified session owner",
+              "takes_value": false
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact numeric owner ID required with --studio"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display result as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List posted videos; --studio uses verified own-account Studio content.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "TikTok username whose posts to read (private posts need that account's session)",
+              "short": "-u"
+            },
+            {
+              "name": "--studio",
+              "type": "bool",
+              "required": false,
+              "help": "Read Studio content for this verified session owner",
+              "takes_value": false
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact numeric owner ID required with --studio"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display results as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum number of results",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "metrics": {
+          "help": "Read actual per-post Studio counts; missing metrics remain null. Views, likes, comments, shares and favorites are cumulative observed counts. This command does not estimate revenue or substitute account analytics.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Own TikTok video ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Verified session owner's TikTok handle",
+              "short": "-u"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Fail unless the numeric session owner ID matches exactly"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "privacy": {
+          "help": "Set who can watch one own post; fails unless a Studio readback confirms it.",
+          "arguments": [
+            {
+              "name": "video_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Own TikTok video ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": true,
+              "help": "Who can watch: public, friends, or private"
+            },
+            {
+              "name": "--username",
+              "type": "TEXT",
+              "required": true,
+              "help": "Verified session owner's TikTok handle",
+              "short": "-u"
+            },
+            {
+              "name": "--expected-account-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact numeric session owner ID"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "publish": {
+          "help": "Publish a video through the Content Posting API (Direct Post).",
+          "arguments": [
+            {
+              "name": "file",
+              "type": "file",
+              "required": true,
+              "help": "Video file to publish"
+            }
+          ],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "TikTok post caption/title"
+            },
+            {
+              "name": "--privacy",
+              "type": "TEXT",
+              "required": false,
+              "help": "TikTok creator privacy level",
+              "default": "SELF_ONLY"
+            },
+            {
+              "name": "--disable-comment",
+              "type": "bool",
+              "required": false,
+              "help": "Disable comments",
+              "takes_value": false
+            },
+            {
+              "name": "--disable-duet",
+              "type": "bool",
+              "required": false,
+              "help": "Disable Duet",
+              "takes_value": false
+            },
+            {
+              "name": "--disable-stitch",
+              "type": "bool",
+              "required": false,
+              "help": "Disable Stitch",
+              "takes_value": false
+            },
+            {
+              "name": "--ai-generated",
+              "type": "bool",
+              "required": false,
+              "help": "Label the video as AI-generated content",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search public videos with an exact hashtag; absent measurements remain null.",
+          "arguments": [
+            {
+              "name": "hashtag",
+              "type": "TEXT",
+              "required": true,
+              "help": "One exact hashtag, with or without #"
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=300]  Maximum matching videos",
+              "short": "-l",
+              "default": "30"
+            },
+            {
+              "name": "--max-pages",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=20]   Maximum native search pages",
+              "default": "2"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display results as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "status": {
+          "help": "Fetch a Direct Post's publish status by publish_id.",
+          "arguments": [
+            {
+              "name": "publish_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "TikTok publish_id returned by publish"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to display",
+              "short": "-p"
             },
             {
               "name": "--profile",

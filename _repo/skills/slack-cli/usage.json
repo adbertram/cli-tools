@@ -1,7 +1,7 @@
 {
   "tool": "slack",
   "description": "CLI interface for Slack API",
-  "discovered_at": "2026-07-27T22:21:43Z",
+  "discovered_at": "2026-10-16T17:22:56Z",
   "total_commands": 50,
   "global_options": [
     {
@@ -46,7 +46,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -100,7 +101,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -121,7 +123,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -135,7 +138,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -176,7 +180,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -201,14 +206,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -243,7 +250,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -257,14 +265,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -328,13 +338,15 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--html",
               "type": "bool",
               "required": false,
-              "help": "Output raw HTML instead of text"
+              "help": "Output raw HTML instead of text",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -361,7 +373,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -444,7 +457,8 @@
               "name": "--private",
               "type": "bool",
               "required": false,
-              "help": "Create a private channel"
+              "help": "Create a private channel",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -471,7 +485,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -531,7 +546,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -552,14 +568,16 @@
               "name": "--include-archived",
               "type": "bool",
               "required": false,
-              "help": "Include archived channels"
+              "help": "Include archived channels",
+              "takes_value": false
             },
             {
               "name": "--unread",
               "type": "bool",
               "required": false,
               "help": "Only show channels with unread messages",
-              "short": "-u"
+              "short": "-u",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -600,7 +618,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -615,7 +634,8 @@
               "type": "bool",
               "required": false,
               "help": "Resolve user IDs to user info",
-              "short": "-r"
+              "short": "-r",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -664,7 +684,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -684,7 +705,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -699,14 +721,16 @@
               "type": "bool",
               "required": false,
               "help": "Only show DMs with unread messages",
-              "short": "-u"
+              "short": "-u",
+              "takes_value": false
             },
             {
               "name": "--include-group",
               "type": "bool",
               "required": false,
               "help": "Include group DMs (MPIMs)",
-              "short": "-g"
+              "short": "-g",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -747,7 +771,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -895,7 +920,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -915,7 +941,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--channel",
@@ -994,14 +1021,14 @@
           ]
         },
         "upload": {
-          "help": "Upload a file to Slack. Example: slack files upload document.pdf --channels C1234567890 slack files upload image.png --channels C1234567890,C9876543210 --title \"Screenshot\"",
+          "help": "Upload one or more files to Slack. Several files are shared in ONE Slack message with a single comment (Slack allows at most 10 files per message). Every path is validated before anything is uploaded. Example: slack files upload document.pdf --channels C1234567890 slack files upload image.png --channels C1234567890,C9876543210 --title \"Screenshot\" slack files upload a.pptx b.pptx c.pptx --channels C1234567890 --comment \"Decks for review\"",
           "usage_instructions": "Upload a file. FILE_PATH is required (positional). Use --channels/-c for comma-separated channel IDs to share to. Use --title/-t for file title, --comment for initial comment.",
           "arguments": [
             {
-              "name": "file_path",
+              "name": "file_paths",
               "type": "TEXT",
               "required": true,
-              "help": "Path to file to upload"
+              "help": "One or more file paths to upload (max 10, shared as ONE message)"
             }
           ],
           "options": [
@@ -1016,7 +1043,7 @@
               "name": "--title",
               "type": "TEXT",
               "required": false,
-              "help": "File title",
+              "help": "File title (single file only; multiple files use their filenames)",
               "short": "-t"
             },
             {
@@ -1103,7 +1130,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1130,7 +1158,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1184,7 +1213,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--count",
@@ -1226,7 +1256,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--count",
@@ -1320,7 +1351,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1382,7 +1414,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1409,7 +1442,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1429,13 +1463,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--dms",
               "type": "bool",
               "required": false,
               "help": "Include unread DMs",
+              "takes_value": false,
+              "secondary": "--no-dms",
               "default": "dms"
             },
             {
@@ -1443,6 +1480,8 @@
               "type": "bool",
               "required": false,
               "help": "Include unread threads",
+              "takes_value": false,
+              "secondary": "--no-threads",
               "default": "threads"
             },
             {
@@ -1450,6 +1489,8 @@
               "type": "bool",
               "required": false,
               "help": "Include channel mentions",
+              "takes_value": false,
+              "secondary": "--no-mentions",
               "default": "mentions"
             },
             {
@@ -1457,6 +1498,8 @@
               "type": "bool",
               "required": false,
               "help": "Include saved for later",
+              "takes_value": false,
+              "secondary": "--no-saved",
               "default": "saved"
             },
             {
@@ -1534,7 +1577,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1561,7 +1605,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1588,7 +1633,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1616,14 +1662,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--content",
               "type": "bool",
               "required": false,
               "help": "Fetch and include message content for saved items (slower)",
-              "short": "-c"
+              "short": "-c",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1658,7 +1706,8 @@
               "type": "bool",
               "required": false,
               "help": "Query all configured profiles",
-              "short": "-a"
+              "short": "-a",
+              "takes_value": false
             }
           ]
         },
@@ -1692,7 +1741,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1734,7 +1784,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1754,13 +1805,15 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--include-deleted",
               "type": "bool",
               "required": false,
-              "help": "Include deleted users (hidden by default)"
+              "help": "Include deleted users (hidden by default)",
+              "takes_value": false
             },
             {
               "name": "--limit",

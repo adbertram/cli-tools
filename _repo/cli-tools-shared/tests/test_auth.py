@@ -68,6 +68,11 @@ class _CredentialBrowser(_LoginUrlBrowser):
     AUTH_LOGIN_PASSWORD_SECRET = "test-browser-password"
 
 
+class _ProfileScopedCredentialBrowser(_CredentialBrowser):
+    SESSION_NAME = "browser-session"
+    AUTH_LOGIN_SECRETS_PROFILE_SCOPED = True
+
+
 class _TotpCredentialBrowser(_CredentialBrowser):
     AUTH_LOGIN_TOTP_SELECTOR = "#authcode"
     AUTH_LOGIN_TOTP_SUBMIT_SELECTOR = "#totp-submit"
@@ -346,6 +351,90 @@ def test_authenticate_without_tty_submits_configured_browser_credentials(tmp_pat
         ("#password", "test-password"),
     ]
     assert service.url == "https://example.com/dashboard"
+
+
+class _LinkedFormCredentialBrowser(_CredentialBrowser):
+    AUTH_LOGIN_FORM_LINK_SELECTOR = "a[href*='oauth/authorize']"
+
+
+def test_noninteractive_login_follows_form_link_before_submitting(tmp_path, monkeypatch):
+    """AUTH_LOGIN_FORM_LINK_SELECTOR: when LOGIN_URL lands on a page without
+    the credential form, follow the configured link to the form first, then
+    submit credentials there."""
+    browser = _LinkedFormCredentialBrowser(_TestConfig(tmp_path))
+    service = _Service()
+    service.url = "https://example.com/"  # landing page; not AUTH_URL_PATTERN
+    filled = []
+    waited_for = []
+
+    class _Control:
+        def __init__(self, selector):
+            self.selector = selector
+
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            if self.selector == "a[href*='oauth/authorize']":
+                return 1 if service.url == "https://example.com/" else 0
+            return 1
+
+        def get_attribute(self, name):
+            assert name == "href"
+            return "https://example.com/oauth/authorize?state=abc"
+
+        def is_visible(self):
+            return self.selector != "#login-error"
+
+        def is_enabled(self):
+            return True
+
+        def click(self):
+            service.url = "https://example.com/dashboard"
+
+    def _goto(url):
+        service.goto_calls.append(url)
+        # The OAuth link redirects to the real login form.
+        service.url = "https://example.com/login?return_to=x"
+
+    service.locator = lambda selector: _Control(selector)
+    service.goto = _goto
+    service.wait_for_selector = lambda selector, state=None, timeout=None: waited_for.append((selector, state))
+    service.fill = lambda selector, value: filled.append((selector, value))
+    monkeypatch.setattr(
+        "cli_tools_shared.config.read_cli_tool_secret",
+        lambda name: {
+            "test-browser-username": "user@example.com",
+            "test-browser-password": "test-password",
+        }[name],
+    )
+
+    browser._complete_noninteractive_login(service)
+
+    assert service.goto_calls == ["https://example.com/oauth/authorize?state=abc"]
+    assert waited_for == [("#username", "visible")]
+    assert filled == [("#username", "user@example.com"), ("#password", "test-password")]
+    assert service.url == "https://example.com/dashboard"
+
+
+def test_noninteractive_login_form_link_missing_fails_loudly(tmp_path, monkeypatch):
+    browser = _LinkedFormCredentialBrowser(_TestConfig(tmp_path))
+    service = _Service()
+    service.url = "https://example.com/"
+
+    class _Absent:
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            return 0
+
+    service.locator = lambda selector: _Absent()
+
+    with pytest.raises(BrowserAutomationError, match="could not find the login-form link"):
+        browser._complete_noninteractive_login(service)
 
 
 def test_generate_totp_code_matches_rfc_6238_vector():
@@ -750,8 +839,16 @@ def test_manual_login_without_tty_waits_for_browser_window_close(tmp_path, monke
         "_wait_for_manual_browser_close",
         lambda process, profile_dir: waited.append((process, Path(profile_dir))),
     )
-    monkeypatch.setattr("cli_tools_shared.auth.terminate_profile_processes", lambda _profile_dir: None)
-    monkeypatch.setattr("cli_tools_shared.auth.time.sleep", lambda _seconds: None)
+    lifecycle_lock = object()
+    lock_events = []
+    monkeypatch.setattr(
+        "cli_tools_shared.auth.acquire_profile_lifecycle_lock",
+        lambda profile_dir: lock_events.append(("acquire", Path(profile_dir))) or lifecycle_lock,
+    )
+    monkeypatch.setattr(
+        "cli_tools_shared.auth.release_profile_lifecycle_lock",
+        lambda lock: lock_events.append(("release", lock)),
+    )
     monkeypatch.setattr(browser, "is_authenticated", lambda: AuthResult(True, live_check=True))
 
     browser.authenticate(force=False)
@@ -759,6 +856,10 @@ def test_manual_login_without_tty_waits_for_browser_window_close(tmp_path, monke
     assert waited == [(proc, tmp_path / "chromium-profile")]
     assert proc.terminated is True
     assert popen_calls[0][0][0][0] == "/tmp/chrome"
+    assert lock_events == [
+        ("acquire", tmp_path / "chromium-profile"),
+        ("release", lifecycle_lock),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -843,12 +944,13 @@ def test_clear_session_invalidates_cached_service(tmp_path, monkeypatch):
     assert browser._service is None
 
 
-def test_manual_login_cleanup_uses_shared_profile_process_terminator(tmp_path, monkeypatch):
+def test_manual_login_cleanup_preserves_shared_profile_artifacts(tmp_path):
     config = _TestConfig(tmp_path)
     profile_dir = config.get_persistent_profile_dir()
     browser = _TestBrowser(config)
-    terminated_profiles = []
-    run_calls = []
+    profile_dir.mkdir()
+    singleton_lock = profile_dir / "SingletonLock"
+    singleton_lock.write_text("owned-by-another-cli")
 
     class _LoginLauncher:
         def __init__(self):
@@ -859,25 +961,10 @@ def test_manual_login_cleanup_uses_shared_profile_process_terminator(tmp_path, m
 
     launcher = _LoginLauncher()
 
-    def fake_profile_terminator(path):
-        terminated_profiles.append(Path(path))
-
-    def fake_subprocess_run(*args, **kwargs):
-        run_calls.append((args, kwargs))
-
-    monkeypatch.setattr(
-        "cli_tools_shared.auth.terminate_profile_processes",
-        fake_profile_terminator,
-        raising=False,
-    )
-    monkeypatch.setattr("cli_tools_shared.auth.subprocess.run", fake_subprocess_run)
-    monkeypatch.setattr("cli_tools_shared.auth.time.sleep", lambda _seconds: None)
-
-    browser._quit_login_chrome(launcher, profile_dir)
+    browser._quit_login_chrome(launcher)
 
     assert launcher.terminated is True
-    assert terminated_profiles == [profile_dir]
-    assert run_calls == []
+    assert singleton_lock.read_text() == "owned-by-another-cli"
 
 
 # ---------------------------------------------------------------------------
@@ -1061,6 +1148,16 @@ def test_session_name_returns_tool_dash_profile_work(tmp_path):
     assert browser._session_name() == "test-browser-work"
 
 
+def test_profile_scoped_login_secrets_use_the_cli_tool_name(tmp_path):
+    config = _ProfileConfig(tmp_path, "work")
+    config._tool_name = "service-tool"
+
+    browser = _ProfileScopedCredentialBrowser(config)
+
+    assert browser.AUTH_LOGIN_USERNAME_SECRET == "service-tool-work-username"
+    assert browser.AUTH_LOGIN_PASSWORD_SECRET == "service-tool-work-password"
+
+
 def test_session_name_raises_when_profile_is_empty(tmp_path):
     browser = _TestBrowser(_ProfileConfig(tmp_path, ""))
     # Empty profile must NOT silently default — the daemon scope key
@@ -1167,6 +1264,25 @@ def test_check_auth_failure_page_js_rejects_error_page_at_authenticated_url(tmp_
     assert browser._check_auth(_EvaluatePage("https://example.com/dashboard", True)) is False
 
 
+def test_check_auth_failure_page_js_logs_only_safe_diagnostic(tmp_path, caplog):
+    browser = _FailureContentBrowser(_TestConfig(tmp_path))
+
+    with caplog.at_level("DEBUG"):
+        assert browser._is_auth_failure_content(
+            _EvaluatePage("https://example.com/dashboard", "http_status_401")
+        ) is True
+        assert browser._is_auth_failure_content(
+            _EvaluatePage("https://example.com/dashboard", "secret token value")
+        ) is True
+        assert browser._is_auth_failure_content(
+            _EvaluatePage("https://example.com/dashboard", "a3f5c7d9e1b2")
+        ) is True
+
+    assert "diagnostic=http_status_401" in caplog.text
+    assert "secret token value" not in caplog.text
+    assert "a3f5c7d9e1b2" not in caplog.text
+
+
 def test_check_auth_failure_page_js_accepts_a_rendered_page(tmp_path):
     browser = _FailureContentBrowser(_TestConfig(tmp_path))
 
@@ -1252,3 +1368,37 @@ def test_check_auth_settled_gives_up_after_the_configured_attempts():
     assert _SettlingBrowser()._check_auth_settled(page) is False
     assert page.checks == 4
     assert page.waits == [10, 10, 10]
+
+
+def test_named_daemon_endpoints_bind_each_owner_on_alternating_calls(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from browser_harness import _ipc
+
+    touched = []
+    browsers = []
+    for name in ("whop_rewards_TEST", "tiktok_clipper_TEST"):
+        service = SimpleNamespace(session=name)
+
+        class Harness:
+            def __init__(self, owner):
+                self.owner = owner
+
+            @property
+            def h(self):
+                touched.append(("bind", self.owner))
+                return None
+
+        service._bh = Harness(name)
+        browsers.append(SimpleNamespace(_get_service=lambda service=service: service))
+
+    monkeypatch.setattr(_ipc, "pid_path", lambda session: tmp_path / (session + ".pid"))
+    monkeypatch.setattr(_ipc, "cleanup_endpoint", lambda session: touched.append(("cleanup", session)))
+    for browser in (browsers[0], browsers[1], browsers[0]):
+        name = browser._get_service().session
+        assert BrowserAutomation.daemon_endpoint_path(browser) == tmp_path / (name + ".pid")
+        BrowserAutomation.cleanup_daemon_endpoint(browser)
+    assert touched == [
+        ("bind", "whop_rewards_TEST"), ("bind", "whop_rewards_TEST"), ("cleanup", "whop_rewards_TEST"),
+        ("bind", "tiktok_clipper_TEST"), ("bind", "tiktok_clipper_TEST"), ("cleanup", "tiktok_clipper_TEST"),
+        ("bind", "whop_rewards_TEST"), ("bind", "whop_rewards_TEST"), ("cleanup", "whop_rewards_TEST"),
+    ]

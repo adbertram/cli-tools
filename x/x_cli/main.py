@@ -4,7 +4,7 @@ from cli_tools_shared import create_app, run_app
 from cli_tools_shared.cache_commands import create_cache_app
 from cli_tools_shared.command_registry import register_commands
 from .client import ClientError
-from .config import get_config
+from .config import get_cache_config, get_config
 
 app = create_app(
     name="x",
@@ -13,7 +13,7 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import auth, credits, tweet
+from .commands import analytics, auth, credits, tweet
 app.add_typer(auth.app, name="auth", help="Manage X API authentication")
 register_commands(
     app,
@@ -23,7 +23,8 @@ register_commands(
     help="Purchase X API credits",
 )
 register_commands(app, get_config, tweet, name="tweet", help="Manage tweets")
-app.add_typer(create_cache_app(get_config), name="cache")
+register_commands(app, get_config, analytics, name="analytics", help="Read post, audience, media, API usage and Ads analytics")
+app.add_typer(create_cache_app(get_cache_config), name="cache")
 
 
 def main():

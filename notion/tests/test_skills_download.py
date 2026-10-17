@@ -159,7 +159,7 @@ def test_removed_bulk_download_shape_is_rejected_before_network(monkeypatch, tmp
 
     assert result.exit_code == 2
     assert "Missing argument" in result.output
-    assert "SKILL_ID" in result.output
+    assert "skill_id" in result.output.lower()
     assert calls == []
 
 

@@ -2,7 +2,7 @@
 
 ## DESCRIPTION
 
-The `tiktok` CLI provides tikTok transcript downloader using yt-dlp, plus commands to list and look up your saved (favorited) TikTok videos.
+The `tiktok` CLI provides a TikTok transcript downloader using yt-dlp, commands to list and look up your saved (favorited) TikTok videos, and commands to publish, check, list, delete, and change who can watch your own TikTok videos.
 
 Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
@@ -53,6 +53,243 @@ tiktok favorites list --table
 tiktok favorites get "https://www.tiktok.com/@user/video/1234567890"
 ```
 
+## Own-account Studio readback
+
+Studio reads use the named browser session and verify the requested handle and
+optional exact numeric account ID before reading. The public profile mode stays
+available without `--studio`; access errors never become empty profiles.
+
+```bash
+tiktok videos list --profile clipper --username ata_clipper --studio --expected-account-id 7692213003349443597 --limit 10
+tiktok videos get 7692252984792681742 --profile clipper --username ata_clipper --studio --expected-account-id 7692213003349443597
+tiktok videos metrics 7692252984792681742 --profile clipper --username ata_clipper --expected-account-id 7692213003349443597
+```
+
+The observed Studio Manage content feed supplies cumulative views, likes,
+comments, shares, and favorites. Missing measurements remain `null`. Results
+include local `observed_at`, optional server `server_timestamp_ms`, verified
+owner ID, profile, and endpoint provenance. Richer analytics and earned revenue
+are separate; this command does not estimate them from counts.
+
+`--studio` lists by the live Views sorting control. Requests and pagination
+reuse the browser's own read request with signing/session values kept in page
+memory. Malformed, limited, cyclic, or inaccessible reads fail explicitly.
+A complete terminal feed can report `studio_video_not_found`; a bounded scan
+reports `studio_lookup_inconclusive` instead of asserting absence. The live
+account currently has one post; multiple-page behavior is covered by fixtures.
+These reads do not establish whether an attempted upload created a new post.
+
+## Account check (post restrictions)
+
+`account check` reports, for each recent post, whether TikTok restricted it,
+the stated reason, and the appeal state. It is read-only: it never appeals,
+answers the feedback prompt, or changes anything.
+
+```bash
+tiktok account check --profile clipper --username ata_clipper --expected-account-id 7692213003349443597
+tiktok account check --profile clipper --username ata_clipper --expected-account-id 7692213003349443597 --limit 5 --table
+# Also check uploads Studio accepted that may no longer exist
+tiktok account check --profile clipper --username ata_clipper --expected-account-id 7692213003349443597 --video-id 7693639883012705549
+```
+
+| Option | Description |
+|--------|-------------|
+| `--username`, `-u` | Exact session owner handle (required) |
+| `--expected-account-id` | Fail unless the session's numeric account ID matches |
+| `--limit`, `-l` | Most recent posts to check (default 20, max 1000) |
+| `--video-id` | Extra post ID to check, repeatable (max 100) |
+| `--table`, `-t` | Show posts as a table |
+
+Posts come from the Studio content feed; each one's penalty comes from
+`GET /mod/v1/getPenaltyDetails/?vid=<id>`, the call Studio's own post analytics
+page makes. Per post: `id`, `url`, `caption`, `posted_at`, `status`,
+`visibility`, `in_review`, `in_studio_feed`, `eligibility` (`restricted`,
+`no_penalty`, or `null`), `reasons` (`code` and TikTok's `title`),
+`appeal_status` (`can_submit`, `cannot_submit`, `no_penalty`, `reviewing`,
+`succeeded`, `failed`, `timeout`), `penalty_type` (`NR`: not eligible for the
+For You feed and restricted in search; `NFF`: not eligible for the For You
+feed), `penalized_at`, `penalty_issuer`, and `penalty_error`.
+
+Anything TikTok did not return stays `null`. A penalty read that fails (TikTok
+answers `status_code 4` for posts that no longer exist) leaves `eligibility`
+`null` with the reason in `penalty_error`. A `--video-id` absent from the
+complete feed has `in_studio_feed: false`; if the scan stopped early it is
+`null`. `account.standing` is always `null`: TikTok's website has no Account
+check page, so account-level standing is only visible in the phone app. Reason
+code 10 ("Reproduced account") is the one account-level penalty that shows up
+here, on the posts it affects.
+
+## Pre-post check (Content check lite)
+
+`studio check` asks TikTok Studio what it thinks of a local MP4 before anything
+is posted. It uploads the file as a private draft, waits for the two checks
+Studio runs by itself after an upload, returns their verdicts, and removes that
+draft. It never clicks Post, never flips a check switch, and never starts a
+check itself.
+
+```bash
+tiktok studio check clip.mp4 --profile clipper --username ata_clipper --account-id 7692213003349443597
+tiktok studio check clip.mp4 --profile clipper --username ata_clipper --account-id 7692213003349443597 --timeout 300 --table
+```
+
+| Option | Description |
+|--------|-------------|
+| `--username` | Exact session owner handle (required) |
+| `--account-id` | Exact numeric session owner ID (required) |
+| `--timeout` | Seconds to wait for Studio's checks, 30 to 900 (default 900, Studio's own polling window) |
+| `--table`, `-t` | Show status, verdict, issues, music verdict, and seconds as a table |
+
+The result's `status` is `completed`, `not_finished` (no answer within
+`--timeout`), `check_failed`, `limit_reached` (TikTok's daily check limit),
+`unavailable`, `switch_off` (the account's automatic content check is off), or
+`not_offered` (Studio showed no content check). `verdict` is `pass` or
+`restricted` only when `status` is `completed`; otherwise it is `null`. Each
+entry in `issues` carries TikTok's `code`, `type`, `result_code`, `text`, and
+flagged `segments` in milliseconds. `content_check` holds the raw
+`check_status`, `results`, check and video IDs, and the message Studio showed
+(`ui_state`, `ui_text`). `music_copyright.verdict` is `no_issue`,
+`copyright_violated`, or `null` when that check did not finish. `timings`,
+`provenance`, and `draft` (`posted: false`, `removed: true`) complete it.
+Anything Studio did not return stays `null`.
+
+Studio's content check has one model, "unoriginal", with two results: pass or
+not recommended. A not-recommended result is shown by Studio as "Content may be
+restricted" with the reason "Unoriginal, low-quality, and QR code content", the
+same reason `account check` reports on a restricted post. A pass is not a
+guarantee: Studio's own message says the video can still be actioned later.
+
+Observed on @ata_clipper (2026-10-06): Studio creates the check with
+`POST /tiktok/v1/creator/content/check/create` (`{"video_id", "tasks": [0]}`),
+polls `GET /tiktok/v1/creator/content/check/` every 10 seconds, and reads music
+from `GET /tiktok/copyright/music/check/v1/`. The same clip passed five times in
+about 22 seconds each. Another clip's check never finished in three tries (one
+left running for 20 minutes), so `not_finished` is a real outcome. Only pass, checking, and a failed music
+check were captured live; the restricted shape follows Studio's own code.
+
+Every run uses one of the account's daily checks and leaves the uploaded video
+on TikTok's servers unposted. The run is journaled (`studio status <request_id>`
+shows `kind: content_check` and `draft_removed`). Removal closes the run's own
+editor with Studio's Discard, deletes only its exact temporary draft row (or
+confirms Studio already dropped it), and fails if any other draft changed. If the process is killed mid-check its draft
+stays behind: the next time Studio's upload page loads, Studio offers that draft
+to continue and drops any other unlocked draft, so do not kill a running check.
+
+## Studio publishing
+
+Studio publishing uses an explicit named browser profile and a version 1 JSON
+policy. Required fields are `schema_version`, `profile`, `account_id` (string),
+`username`, `caption`, `audience="Everyone"`, `timing="now"`,
+`disclosure="branded_content"`, and `music_rights_confirmed=true`. Supply music
+rights confirmation only after checking the rights for the actual asset's audio.
+Unknown fields and omitted fields are rejected; the caption is used verbatim.
+Policy JSON must be UTF-8 and at most 64 KiB.
+
+```bash
+tiktok studio prepare clip.mp4 --policy policy.json --request-id UUID --profile clipper
+tiktok studio status UUID --profile clipper
+tiktok studio publish UUID --yes --profile clipper
+tiktok studio reconcile UUID --profile clipper
+tiktok studio post clip.mp4 --policy policy.json --request-id UUID --yes --profile clipper
+tiktok studio post clip.mp4 --policy policy.json --request-id UUID --yes --dispatch-deadline 1760450400 --refuse-if-exists /path/to/STOP --profile clipper
+```
+
+`post` runs prepare and publish in one process on one `StudioPublisher`, because
+the publisher's owned editor does not survive between processes: a separate
+`prepare` then `publish` refuses with "Studio preceding draft changed or
+disappeared". It uses the same policy rules, `--yes` guard, and request UUID as
+the two-step commands. When prepare fails, except when another operation owns the
+profile, `post` closes that publisher and calls prepare once more on a fresh one,
+which recovers the journal-bound request; a second failure exits 1. Prepare must
+end in state `prepared` before Post. Its trusted callback aborts before Post when
+`--refuse-if-exists` names a path that exists at that moment, and passes
+`--dispatch-deadline` (epoch seconds) as the SDK's `dispatch_deadline`. On any
+error, read `tiktok studio status UUID` for the journal.
+
+`prepare` stages the exact MP4 bytes under the profile's private runtime directory,
+then verifies the account, uploaded media, caption, Everyone, Now, branded content,
+and observed music consent. Files must be at most 30 GB and leave 1 GiB free after
+staging. The bounded copy rechecks free space while writing and removes only its
+owned temporary file on failure. Staged files must remain regular files with the
+bound size, hash, and file identity; symlinks are refused. The request UUID binds the asset hash, policy, and actor. Repeating a
+matching preparation returns its existing journal entry; changing that binding
+is refused. `status` reads only the local operation journal.
+
+The SDK supports `StudioPublisher(config, browser=None)`, `prepare(file, policy,
+request_id)`, `publish(request_id, *, before_public_action)`, `status(request_id)`,
+`reconcile(request_id)`, and `close()`. Keep one publisher instance for
+prepare→publish so its owned editor stays open. The mandatory trusted Python
+callback receives the request, asset hash, policy digest, actor, draft ID, and
+editor project ID immediately before Post. An unattended coordinator must inspect
+its own authoritative reservation and control state in that callback. It may
+return `{"dispatch_deadline": epoch_seconds}` from its original lease and policy
+cutoff. The SDK checks that deadline before click and in the native pre-send
+guard; it never renews authorization. Bounded CDP request/response capture
+survives renderer navigation and journals exact binding IDs, hashes, and the
+native Post response body (first 64 KiB) for diagnosis.
+
+Before the trusted callback, `publish` waits up to 900 seconds (Studio's native
+15-minute polling window) for Studio's own Content check lite and music copyright check on the open editor (the same page
+state `studio check` reads) and journals the result as `studio_checks`, including
+native content-check status, ID and UI diagnostics to distinguish an unstarted
+check from one still running. It
+requires content status `completed` with verdict `pass` and music verdict
+`no_issue` before any callback or Post action. Every other result leaves the
+request prepared and undispatched. A daily quota result immediately raises
+`studio_check_limit_reached`, even while music is pending; `studio_checks.status`
+retains `limit_reached` for coordinators. Confirmed restricted content or a music
+violation raises `studio_check_refused`. Unavailable, missing, disabled, failed,
+or unfinished checks raise `pre_action_abort`. Retrying a prepared request
+reads fresh checks; a previous pass never authorizes a later attempt.
+Clicking Post while Content check lite is still running opens TikTok's
+"Continue to post?" confirmation and sends nothing (measured 2026-10-07). If a
+click still sees no Post request, the publisher journals the page's dialogs as
+`post_click_dialogs`; when that confirmation was showing, the attempt is proven
+unsent (`post_confirmation_pending`) and stays resumable from its owned draft.
+A proven-unsent attempt whose owned draft is gone fails with category
+`unsent_draft_gone` and is never re-uploaded. On 2026-10-07 the next upload's
+editor removed the previous unsaved owned draft. Private recovery of a failed
+preparation beside other drafts deletes only the journal-owned row, by key and
+exact media binding, and refuses if any other draft changes: the native
+Continue/Discard banner names no draft, it offers the one unlocked row, so its
+Discard cannot be aimed at the owned draft (adam-server 2026-10-08, request
+ef6a6cc4).
+
+Studio prepare, publish, and `studio check` use the shared browser engine's
+headless mode by default; `HEADLESS=false` selects headed Chrome. Manual login
+remains an explicit visible flow. Before Post, the publisher journals the browser
+user agent, `navigator.webdriver`, and screen size. It refuses Post when the
+user agent reports HeadlessChrome or `navigator.webdriver` is true, leaving the
+request prepared. The shared engine supplies the installed real Chrome user
+agent in headless mode.
+
+A native private post persisted in Studio after browser restarts and over five
+minutes with `--headless=new`, the real Chrome user agent, and webdriver false
+(measured 2026-10-14). Public publication was not tested because TikTok's daily
+content-check quota blocked the public trial before Post. Content and music
+checks, including quota failures, remain required. Earlier missing posts do not
+establish that headless mode caused their disappearance.
+
+A native request guard permits only the exact creation ID, uploaded video ID,
+and one batch-zero request. The response allocates a separate `post_project_id`.
+Accepted projects are persisted before polling, even when the response has no
+item ID yet. `reconcile` reads that exact project through Studio project status,
+then verifies its exact task item ID through the existing own-post Studio reader.
+Pending, failed, unknown, and malformed results never trigger another Post. A
+successful result requires the exact returned item ID and verified Studio readback. Verified publication removes only the operation's hash-matched
+staged media, retaining its journal and receipt.
+
+This account's local drafts can become unavailable after a normal browser exit.
+Before any public dispatch, recovery can rebuild a missing private draft or
+atomically remove only its exact journal-owned orphan, then reprepare the same
+bytes and policy under the same UUID. Recovery checks native heartbeat state,
+retains an audit, and preserves unknown drafts. Session transfer moves browser
+authentication; local IndexedDB drafts and staged media stay on their source host.
+
+Caption clearing uses the existing framework-input helper's native select-all
+command, then whole-string native insertion to avoid TikTok's per-key hashtag
+autocomplete. Saved caption and controls are checked after rendering and autosave.
+Shared native-input and close repairs are tracked in agent-issues #1156 and #1154.
+
 ## Commands
 
 ### Auth
@@ -67,9 +304,36 @@ tiktok auth profiles get default
 tiktok auth test
 ```
 
-This CLI does not store TikTok credentials itself. The shared `auth` commands
-exist so the wrapper exposes the standard profile surface and can report whether
-the upstream `yt-dlp` dependency is available.
+TikTok has two profile types: `browser_session` (favorites list and the
+`videos list/get/delete/privacy` commands) and `custom` (Content Posting API publish and
+status; see below). `auth status` checks a browser session against TikTok's own
+account endpoint, so an expired session reports `authenticated: false`.
+
+For a visible login or recovery from an MFA/CAPTCHA step, explicitly opt into
+manual login in an isolated named browser profile:
+
+```bash
+tiktok auth login --profile clipping --credential-type browser_session --manual
+tiktok auth status --profile clipping
+```
+
+Finish login in the opened Chrome window, then press Enter in the terminal.
+Without an interactive terminal, close that window within five minutes instead.
+The shared engine closes only that profile's login browser, verifies live
+authentication, and saves the same profile's session. Manual mode never reads or
+submits stored login credentials. It requires an explicit non-default profile
+and `browser_session` credential type; ordinary login behavior is unchanged.
+
+Read the current account identity without exporting passport contact/session
+fields. IDs stay strings so large TikTok account IDs keep their exact digits:
+
+```bash
+tiktok account get --profile clipping
+tiktok account get --profile clipping --expected-username YOUR_HANDLE
+```
+
+Use `--expected-username` and/or `--expected-account-id` for an explicit account
+guard. A mismatched, expired, or malformed identity fails without returning data.
 
 ### Transcripts Download
 
@@ -261,3 +525,292 @@ For full list of supported languages, check yt-dlp documentation.
 ## License
 
 MIT
+
+
+## Content Posting API
+
+Use a separate custom auth profile for Direct Post. Existing favorites-list browser
+profiles remain independent. Transcript downloads and favorites get need no CLI auth.
+
+```bash
+tiktok auth profiles create posting --auth-type custom
+tiktok auth login --profile posting --credential-type custom
+
+tiktok videos publish short.mp4 --title "Caption" --privacy SELF_ONLY --profile posting
+tiktok videos status PUBLISH_ID --profile posting
+```
+
+The Direct Post API requires video.publish. TikTok can restrict unaudited apps to
+private visibility until the app passes TikTok review. `videos publish` returns the
+`publish_id`, upload status, and the posting account's `creator_username`.
+
+## Listing and Deleting Videos
+
+TikTok's official APIs cannot delete videos (no scope grants it), and a private
+(`SELF_ONLY`) Direct Post never returns a post id. `videos list`, `videos get`, and
+`videos delete` therefore use TikTok's own web API inside the logged-in
+`browser_session` profile, the same way the favorites commands do.
+
+```bash
+tiktok auth login --credential-type browser_session
+
+# List a profile's posts (your own private posts appear only for your own session)
+tiktok videos list --username yourhandle
+tiktok videos list --username yourhandle --table --limit 10
+tiktok videos list --username yourhandle --filter "caption:contains:launch" --properties id,caption
+
+# Get one post by id
+tiktok videos get 7300000000000000001 --username yourhandle
+tiktok videos get 7300000000000000001 --username yourhandle --table
+
+# Permanently delete one of your videos (refuses to run without --yes)
+tiktok videos delete 7300000000000000001 --yes
+```
+
+`videos list`/`videos get` records have this shape:
+
+```json
+{
+  "id": "7300000000000000001",
+  "url": "https://www.tiktok.com/@yourhandle/video/7300000000000000001",
+  "caption": "video description text",
+  "author": "yourhandle",
+  "created_at": 1700000000
+}
+```
+
+`videos delete` prints `{"video_id": "<id>", "deleted": true}`.
+
+## Changing Who Can Watch a Post
+
+`videos privacy` sets one own post to `public`, `friends`, or `private`. It
+verifies the session owner (`--username`, exact `--expected-account-id`), reads
+the post's current Studio `visibility`, sends the change, then re-reads that
+exact ID from Studio. It exits non-zero unless the readback shows the requested
+value. Setting the value a post already has still sends the request and reports
+`"changed": false`.
+
+```bash
+tiktok videos privacy 7696592655307787533 --to public --profile clipper \
+  --username ata_clipper --expected-account-id 7692213003349443597
+```
+
+```json
+{
+  "id": "7696592655307787533",
+  "url": "https://www.tiktok.com/@ata_clipper/video/7696592655307787533",
+  "account_id": "7692213003349443597",
+  "profile": "clipper",
+  "requested": "public",
+  "requested_visibility": 1,
+  "previous_visibility": 1,
+  "visibility": 1,
+  "changed": false,
+  "observed_at": "2026-10-14T21:52:10.462892+00:00",
+  "endpoint": "https://www.tiktok.com/api/aweme/modify/visibility/",
+  "provenance": "https://www.tiktok.com/tiktok/creator/manage/item_list/v1/"
+}
+```
+
+Endpoint evidence (captured 2026-10-14 from the live-served tiktok.com webapp
+and Studio bundles in the `clipper` session): the post page's privacy setting
+calls `POST /api/aweme/modify/visibility/` with query `aweme_id`, `type`, and
+`tt_csrf_token`, plus the `tt-csrf-token` header (`postModifyVisibility`). Its
+`type` codes are `1` public, `2` private, `3` friends, the same values Studio's
+item list reports as `visibility` (`ITEM_VISIBILITY_TYPE_PUBLIC=1`, `_PRIVATE=2`,
+`_FRIEND=3`). A live `type=1` call on a public post answered
+`{"status_code": 0}` and the Studio readback stayed `1`. The `2`/`3` codes come
+from those bundle enums only: no live post was moved off public to test them.
+
+### Videos Command Options
+
+| Command | Option | Short | Description |
+|---------|--------|-------|-------------|
+| `list`, `get` | `--username` | `-u` | Profile whose posts to read (required) |
+| `list` | `--table` | `-t` | Display results as a table |
+| `list` | `--limit` | `-l` | Maximum number of results (default `100`) |
+| `list` | `--filter` | `-f` | Filter: `field:op:value` (repeatable) |
+| `list`, `get` | `--properties` | `-p` | Comma-separated fields to display |
+| `get` | `--table` | `-t` | Display result as a table |
+| `delete` | `--yes` | `-y` | Confirm permanent deletion (required) |
+| `privacy` | `--to` | | `public`, `friends`, or `private` (required) |
+| `privacy` | `--username`, `--expected-account-id` | `-u` | Verified owner handle and exact numeric ID (both required) |
+
+## Live E2E Test
+
+`tests/test_videos_e2e.py` publishes a generated 5-second private clip, polls
+`videos status` until `PUBLISH_COMPLETE`, finds the post id with `videos list`,
+and always deletes it (and proves it is gone) in fixture teardown, pass or fail.
+It is skipped unless `TIKTOK_E2E=1` and needs `ffmpeg`, an authenticated custom
+API profile (`TIKTOK_E2E_API_PROFILE`, default `posting`), and an authenticated
+browser profile (`TIKTOK_E2E_BROWSER_PROFILE`, default `default`). It checks the
+browser profile can list videos before publishing anything.
+
+```bash
+TIKTOK_E2E=1 uv run --project tiktok --with pytest python -m pytest tiktok/tests/test_videos_e2e.py -v -s
+```
+
+## Portable named browser sessions
+
+```bash
+tiktok auth session-export --profile clipper --expected-account-id EXPECTED_NUMERIC_ID --expected-username EXPECTED_HANDLE --output PRIVATE_RUNTIME_FILE
+tiktok auth session-import --profile clipper --expected-account-id EXPECTED_NUMERIC_ID --expected-username EXPECTED_HANDLE --stdin < PRIVATE_RUNTIME_FILE
+```
+
+Export verifies exact live identity before and after collecting cookies scoped to tiktok.com, www.tiktok.com, and tiktokw.us plus localStorage from exactly https://www.tiktok.com. It accepts only a named browser_session profile. Keep bundles private inside CLI runtime storage; never place them in a repository.
+
+Import requires an absent named destination on macOS. It restores into private inactive staging, reopens for an exact live identity check, publishes exclusively, and verifies the final profile again. It never activates a profile or replaces an existing destination. Challenges and failures retain private recovery state; after the browser closes, `tiktok auth session-import-recover --profile clipper` recovers only importer-owned state. Raw Chrome profiles, keychains, reusable credentials, IndexedDB, sessionStorage, service workers, and hardware-bound state are not transferred.
+
+## Batch Studio inventory
+
+Read a set of exact owned publication IDs through one shared native Studio feed
+scan, instead of scanning independently for each post:
+
+```bash
+printf '["7692252984792681742"]\n' > owned-post-ids.json
+tiktok studio inventory owned-post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597
+```
+
+The SDK method is `get_studio_videos(username, video_ids, *, expected_account_id,
+continuation=None, max_pages=20)`. Inputs allow 1–1000 unique positive string IDs
+and at most 64 KiB of JSON. A call reads at most 20 pages of 50 items; responses
+stream within an 8 MB byte limit. The caller retains records and the returned
+`continuation`, passing it to the next call (or a regular JSON file with the CLI's
+`--continuation`). Resume needs at least two pages, including a fresh head read.
+There is no total history limit of 1000 items.
+
+A continuation binds the exact actor/profile, requested ID set, and stable
+observed request semantics: native `post_time` descending order, no conditions,
+and `is_recent_posts=false`. Fresh signing material stays in browser memory and
+does not invalidate continuation. Changed bindings or malformed pagination fail
+explicitly. The first successful native capture is frozen for that invocation.
+
+`records` contains only matched posts actually measured during this call. The
+caller keeps earlier records with their original `observed_at` and
+`server_timestamp_ms`; continuation does not refresh them. `requested_complete`
+means every requested ID has been observed during this pass, including prior
+calls, rather than every ID being freshly measured now. `provider_end` means
+this observed pass ended. `unresolved_ids` remain unknown, including at provider
+end; they never imply deletion or nonexistence. Start a new pass without a
+continuation to revisit previously missing posts. No denied public-feed fallback
+is used, and revenue/watch-time measurements are unavailable.
+
+SDK failures expose sanitized `ClientError.code`, `category`, `status`, and
+`retry_after_seconds` (also `retry_after`). HTTP 429 is `rate_limit`, HTTP 401/403
+is `auth`, transport timeouts/network failures and 5xx responses are `transient`.
+Valid numeric or HTTP-date Retry-After values retain the provider minimum,
+including delays longer than 24 hours. The actor preflight preserves this
+metadata without passport response bodies and refuses an internal retry when
+the provider minimum exceeds its local delay bound. Before any browser read,
+manifest validation reserves enough space for every found ID and the complete
+actor binding, so a request that cannot fit a 64 KiB continuation fails upfront.
+
+
+### Read watch time and retention
+
+```bash
+tiktok studio watch 7695809227801087246 --profile clipper --username ata_clipper --account-id 7692213003349443597
+```
+
+This read-only command verifies the exact session owner and post owner, then reads
+Studio's native insight API. `metrics` contains `average_watch_time_seconds`,
+`total_watch_time_seconds`, `completion_rate` (0–1), and `retention`, a list of
+`{time_seconds, retention_rate}` points (rates 0–1). It preserves measured zeros;
+processing, delayed, missing, or malformed measurements remain null with an
+`unavailable` reason and `watch_metrics_error`. Never infer a curve from average
+watch time. `observed_at`, `server_timestamp_ms`, and `provenance` identify the read.
+The insight request is bounded to 15 seconds and 2 MiB. Authentication and page
+navigation use the existing CLI browser timeouts. `--table` displays scalars and
+the number of retention points.
+
+The equivalent Python entry point is
+`TikTokWebClient.get_studio_watch_metrics(username, video_id, expected_account_id=account_id)`.
+It reuses the client's browser, including an existing Studio publishing client.
+Observed on October 12, 2026: post 7695809227801087246 returned 57 retention points,
+3.33 seconds average watch time, 340 seconds total watch time, and 0.0098 completion.
+
+### Read watch time for many posts in one session
+
+```bash
+echo '["7696592655307787533","7695809227801087246"]' > post-ids.json
+tiktok studio watch-batch post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597
+tiktok studio watch-batch post-ids.json --profile clipper --username ata_clipper --account-id 7692213003349443597 --table
+```
+
+`watch-batch` runs the same read as `watch` for 1–1000 unique positive string post
+IDs from a regular JSON file (64 KiB cap, the same reader as `studio inventory`).
+It opens one browser and one Studio page, verifies the session owner once before
+and once after the whole batch, and sends one bounded insight request per post
+from that page. Output is `{"records": [...], "errors": {"<id>": "<message>"},
+"requested": <count>}`; each record has the exact `watch` shape. A post whose read
+fails (wrong owner, failed request, malformed response) lands in `errors` and the
+batch continues. An owner change during the batch fails the whole command.
+`--table` prints one row per record: id, average and total watch time, completion,
+retention point count, and unavailable reasons.
+
+Measured on October 14, 2026: one `studio watch` per post took 7.9 seconds
+(browser launch and identity 3.9 s, page navigation 2.3 s), 63 s of a 78 s
+verify pass. The same insight request inside one already-open page took 0.60 s
+per post (14 posts in 19.5 s). Use `watch-batch` whenever reading more than one post.
+The Python entry point is
+`TikTokWebClient.get_studio_watch_metrics_many(username, video_ids, expected_account_id=account_id)`.
+
+### Search public videos by exact hashtag
+
+```bash
+tiktok videos search boxabl --profile clipper --limit 30 --max-pages 2
+tiktok videos search '#powershell' --profile clipper --filter 'views:gte:1000' --properties id,url,views,likes
+```
+
+Search uses the saved browser session and TikTok's native ranked search endpoint,
+then keeps only exact hashtags from native hashtag metadata or the caption.
+Results contain `id`, `url`, `caption`, `author` (handle), `created_at` (Unix seconds),
+`views`, `duration` (seconds), `likes`, `comments`, `shares`, and `saves`.
+Each row includes `matched_hashtags`, `observed_at` (UTC), and the `provenance` endpoint.
+Missing measurements remain null; measured zero stays zero. Views come from
+`stats.playCount`, never likes. Search is a bounded sample, not a complete hashtag
+inventory: `--limit` accepts 1–300, `--max-pages` accepts 1–20. Filters apply to the
+sample. `--table`, `--filter`, and `--properties` control output. Malformed data,
+non-advancing cursors, unavailable search, and provider errors fail explicitly.
+
+Python callers use
+`TikTokWebClient(config=Config(profile='clipper')).search_hashtag_videos(hashtag, limit=30, max_pages=2)`
+and close the client in `finally`. No publishing or account changes occur.
+The observed `/api/search/general/full/` continuation carries the first response's
+`extra.logid` as `search_id`; TikTok's page signs each in-page request.
+The initial native GET response is captured once through the shared bounded
+network observer; only later pages issue signed in-page fetches.
+Live verification on October 13, 2026 returned 19 exact `#boxabl` videos across
+two pages, including post 7696124366349782305 with 633 views and 26 likes.
+
+### Native Favorites and public profile feeds
+
+Favorites and public profile listing now capture the website's initial signed
+GET response instead of assembling a minimal request or repeating that first
+request. Later pages retain the observed native parameters. The session uses the
+installed Chrome's real user agent through the shared browser helper; an explicit
+`BROWSER_USER_AGENT` override remains supported. This keeps headed and headless
+session identity consistent across Chrome updates.
+
+Favorites verifies the current account, opens that account's native Favorites
+tab, and accepts an omitted `itemList` only when TikTok explicitly returns
+`hasMore: false` and integer `total: 0`. Missing or malformed feeds, unrelated
+profile videos, repeated pages/cursors, and incomplete bounded scans are explicit
+errors. Limits are checked before browser access. Captured request URL digests
+associate each response with its exact native request without exporting signed
+queries or headers. `favorites list` always closes its browser client.
+
+Live checks on October 14, 2026 verified zero saved posts for `clipper` in JSON
+and table output. TikTok's own public Videos tab currently returns HTTP 200 with
+an empty response for both `ata_clipper` and `joecoxtech`, in authenticated,
+anonymous, headed, and headless comparisons. The CLI preserves this as
+`tiktok_empty_response`, never an empty profile or a Studio substitute.
+
+## Owned profile bio
+
+```bash
+tiktok account bio --profile clipper --username ata_clipper --expected-account-id 7692213003349443597
+tiktok account set-bio --profile clipper --username ata_clipper --expected-account-id 7692213003349443597 --expected-bio 'previous exact bio' --value 'new exact bio' --yes
+```
+
+These commands use the measured Edit profile/Bio/Save controls. The setter verifies the exact session actor and previous bio, enforces the observed 80-character limit, dispatches Save once and reads back persisted state. If save is uncertain, read `account bio` before any further write. Preserve original whitespace when temporarily adding ownership codes.

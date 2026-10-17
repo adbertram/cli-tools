@@ -29,3 +29,6 @@ include = ["powerpoint_slide_recorder_cli*"]
 
 [tool.uv.sources]
 cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }
+
+[tool.setuptools.package-data]
+powerpoint_slide_recorder_cli = ["*.swift"]

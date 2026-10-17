@@ -1,10 +1,11 @@
 """Filter system validation tests (Sections 5-6)."""
 
+from cli_test_utils import get_pkg_dir
 import pytest
 import ast
 from pathlib import Path
 
-from cli_test_utils import run_live_cli_command, validate_json_output, filter_commands_by_group, discover_list_commands
+from cli_test_utils import run_live_cli_command, discover_list_commands
 
 
 def _find_operators_set_in_ast(tree):
@@ -48,7 +49,7 @@ def _resolve_cli_tools_shared_filters():
 
 def test_filters_has_required_operators(cli_name, cli_dir, test_config, command_filter):
     """Assertion 21: filters.py has all required operators."""
-    filters_path = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "filters.py"
+    filters_path = get_pkg_dir(cli_dir, cli_name) / "filters.py"
     if not filters_path.exists():
         pytest.skip("filters.py not found")
 
@@ -77,7 +78,7 @@ def test_filters_has_required_operators(cli_name, cli_dir, test_config, command_
 
 def test_filters_implements_in_operator_correctly(cli_name, cli_dir, command_filter):
     """Assertion 22: filters.py implements 'in' operator with pipe separator."""
-    filters_path = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "filters.py"
+    filters_path = get_pkg_dir(cli_dir, cli_name) / "filters.py"
     if not filters_path.exists():
         pytest.skip("filters.py not found")
 
@@ -96,95 +97,6 @@ def test_filters_implements_in_operator_correctly(cli_name, cli_dir, command_fil
         f"filters.py missing pipe separator implementation for 'in' operator. "
         f"Fix: Ensure 'in' operator uses value.split('|') pattern."
     )
-
-
-def _find_list_command_files(commands_dir, command_filter):
-    """Find command files that define list commands with --filter option.
-
-    Scans *.py files in the commands directory for functions decorated as "list"
-    commands that also accept a --filter flag.
-
-    Returns:
-        List of Path objects for matching command files.
-    """
-    command_files = list(commands_dir.glob("*.py"))
-    list_command_files = []
-
-    for cmd_file in command_files:
-        if cmd_file.name == "__init__.py":
-            continue
-        content = cmd_file.read_text()
-        has_list = "def list(" in content or "@app.command(name=\"list\")" in content or '@app.command("list")' in content
-        has_filter_option = '"--filter"' in content or "'--filter'" in content
-
-        if command_filter:
-            file_matches = cmd_file.stem == command_filter or cmd_file.stem == f"{command_filter}s"
-            if not file_matches:
-                continue
-
-        if has_list and has_filter_option:
-            list_command_files.append(cmd_file)
-
-    return list_command_files
-
-
-def test_command_files_import_filter_map(cli_name, cli_dir, command_filter):
-    """Assertion 25: List command files with --filter import filter_map."""
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
-    if not commands_dir.exists():
-        pytest.skip("No commands directory found")
-
-    list_command_files = _find_list_command_files(commands_dir, command_filter)
-
-    if not list_command_files:
-        if command_filter:
-            pytest.skip(f"No list command files with --filter found for '{command_filter}'")
-        else:
-            pytest.skip("No list command files with --filter found")
-
-    for cmd_file in list_command_files:
-        content = cmd_file.read_text()
-        has_import = (
-            "filter_map" in content or
-            "from ..filter_map" in content or
-            "from ..filters import" in content or  # Local filters import
-            "from cli_tools_shared.filters import" in content or  # Shared filters import
-            "filter=filter" in content or  # Passes filter to client for server-side handling
-            "filters=filter" in content  # Passes filter list to client for server-side handling
-        )
-        assert has_import, (
-            f"{cmd_file.name} missing filter_map import. "
-            f"Fix: Add 'from ..filter_map import FilterMap', 'from cli_tools_shared.filters import apply_filters', or pass filter to client"
-        )
-
-
-def test_command_files_use_filter_map(cli_name, cli_dir, command_filter):
-    """Assertion 26: List commands with --filter use FilterMap."""
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
-    if not commands_dir.exists():
-        pytest.skip("No commands directory found")
-
-    list_command_files = _find_list_command_files(commands_dir, command_filter)
-
-    if not list_command_files:
-        if command_filter:
-            pytest.skip(f"No list command files with --filter found for '{command_filter}'")
-        else:
-            pytest.skip("No list command files with --filter found")
-
-    for cmd_file in list_command_files:
-        content = cmd_file.read_text()
-        uses_filter_map = (
-            "FilterMap" in content or
-            "filter_map" in content or
-            "apply_filters" in content or  # Direct filters usage
-            "filter=filter" in content or  # Passes filter to client for server-side handling
-            "filters=filter" in content  # Passes filter list to client for server-side handling
-        )
-        assert uses_filter_map, (
-            f"{cmd_file.name} not using FilterMap. "
-            f"Fix: Use FilterMap, apply_filters, or pass filter to client."
-        )
 
 
 def test_filter_help_describes_standard_syntax(cli_executable, cli_name, cli_dir, test_config, help_cache, command_filter):

@@ -49,7 +49,7 @@ For example:
 If the exact path does not exist, list available service skills and ask one targeted question for the intended tool. Do not guess from a nearby name.
 
 ```bash
-find /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills \
+find -L /Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills \
   -maxdepth 1 -mindepth 1 -type d -name '*-cli' -exec basename {} \; | sort
 ```
 

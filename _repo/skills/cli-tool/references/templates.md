@@ -247,6 +247,7 @@ class MySiteBrowser(BrowserAutomation):
     AUTH_URL_PATTERN = r"/login|/register"
     AUTH_SUCCESS_SELECTOR = ""  # optional, prefer AUTH_LOGIN_FORM_SELECTOR
     AUTH_LOGIN_FORM_SELECTOR = 'input[type="password"], form[action*="login"]'
+    AUTH_LOGIN_FORM_LINK_SELECTOR = ""  # optional: link on LOGIN_URL to follow when the credential form lives behind it
 
     def __init__(self, config=None):
         config = config or get_config()
@@ -254,8 +255,9 @@ class MySiteBrowser(BrowserAutomation):
 ```
 
 If `browser.py` ever grows methods beyond `__init__`, something is wrong —
-the auth lifecycle is the base class's responsibility. See the
-`cli-tool-browser-expert` skill for the full hook reference.
+the auth lifecycle is the base class's responsibility. See
+`/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/cli-tool-browser-expert/SKILL.md`
+for the full hook reference.
 
 **Hybrid auth example** (OAuth API + browser session):
 ```python

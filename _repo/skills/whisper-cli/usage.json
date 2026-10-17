@@ -18,7 +18,15 @@
       "options": [],
       "commands": {
         "create": {
-          "help": "Transcribe an audio or video file using whisper.cpp.",
+          "help": "Transcribe an audio or video file using whisper.cpp. Outputs a JSON transcript with joined text and timestamped segments (seconds). With --word-timestamps, also includes a word-level array. A non-empty initial prompt biases whisper.cpp toward the listed vocabulary/spellings. Resolution: explicit --prompt wins, else the configured WHISPER_CPP_PROMPT, else no prompt is passed.",
+          "examples": [
+            "whisper transcripts create audio.wav",
+            "whisper transcripts create video.mp4 --language es",
+            "whisper transcripts create audio.wav --word-timestamps",
+            "whisper transcripts create audio.wav -m /path/to/ggml-small.en.bin",
+            "whisper transcripts create audio.wav -o ./transcripts/ --table",
+            "whisper transcripts create audio.wav --prompt \"worktree, subagent, Codex\""
+          ],
           "arguments": [
             {
               "name": "file_path",
@@ -41,7 +49,8 @@
               "type": "bool",
               "required": false,
               "help": "Emit word-level timestamps (adds a 'words' array)",
-              "short": "-w"
+              "short": "-w",
+              "takes_value": false
             },
             {
               "name": "--model",
@@ -69,7 +78,8 @@
               "type": "bool",
               "required": false,
               "help": "Display segments as a table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--timeout",
@@ -82,6 +92,10 @@
         },
         "models": {
           "help": "List local ggml model files found in the models directory.",
+          "examples": [
+            "whisper transcripts models",
+            "whisper transcripts models --table"
+          ],
           "arguments": [],
           "options": [
             {
@@ -89,7 +103,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as a table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -104,5 +119,5 @@
     }
   },
   "usage_instructions": "Use for local, offline transcription of audio and video files with whisper.cpp. Commands follow `whisper <group> <action>` pattern. The primary command is `whisper transcripts create <file>` which outputs a JSON transcript with timestamped segments; add `--word-timestamps` for a word-level array. `whisper transcripts models` lists local ggml models. Output is uniform with the openai-whisper CLI.",
-  "discovered_at": "2026-06-25T22:37:29Z"
+  "discovered_at": "2026-10-12T16:12:36Z"
 }

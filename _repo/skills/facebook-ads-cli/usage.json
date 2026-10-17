@@ -1,0 +1,15 @@
+{
+  "tool": "facebook-ads",
+  "description": "CLI interface for facebook-ads",
+  "discovered_at": "2026-10-08T12:50:15Z",
+  "total_commands": 1,
+  "global_options": [],
+  "commands": {
+    "run": {
+      "help": "Run Meta's official CLI. Use `run -- --help` for the complete native tree.",
+      "arguments": [],
+      "options": []
+    }
+  },
+  "usage_instructions": "Use the `facebook-ads` CLI. Run `facebook-ads --help` to discover command groups and `--help` on any subcommand for its options."
+}

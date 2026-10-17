@@ -5,7 +5,7 @@ import typer
 from typing import Optional, List
 
 from ..n8n_api import get_n8n_api_client
-from cli_tools_shared.output import print_json, print_table, print_error, print_info, print_success, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_error, print_info, print_success, handle_error
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 
 app = typer.Typer(help="Manage n8n Data Tables", no_args_is_help=True)
@@ -50,6 +50,7 @@ COMMAND_CREDENTIALS = {
 
 
 @app.command("list")
+@command
 def tables_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -91,6 +92,7 @@ def tables_list(
 
 
 @app.command("get")
+@command
 def tables_get(
     table_id: str = typer.Argument(..., help="Data table ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -133,6 +135,7 @@ def tables_get(
 
 
 @app.command("create")
+@command
 def tables_create(
     name: str = typer.Argument(..., help="Table name"),
     column: Optional[List[str]] = typer.Option(None, "--column", "-c", help="Column definition as name:type (repeatable)"),
@@ -176,6 +179,7 @@ def tables_create(
 
 
 @app.command("delete")
+@command
 def tables_delete(
     table_id: str = typer.Argument(..., help="Data table ID to delete"),
 ):
@@ -195,6 +199,7 @@ def tables_delete(
 
 
 @app.command("columns")
+@command
 def tables_columns(
     table_id: str = typer.Argument(..., help="Data table ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -220,6 +225,7 @@ def tables_columns(
 
 
 @app.command("add-column")
+@command
 def tables_add_column(
     table_id: str = typer.Argument(..., help="Data table ID"),
     name: str = typer.Argument(..., help="Column name"),
@@ -253,6 +259,7 @@ def tables_add_column(
 
 
 @app.command("delete-column")
+@command
 def tables_delete_column(
     table_id: str = typer.Argument(..., help="Data table ID"),
     column_id: str = typer.Argument(..., help="Column ID to delete"),
@@ -294,6 +301,7 @@ def tables_delete_column(
 
 
 @app.command("rows")
+@command
 def tables_rows(
     table_id: str = typer.Argument(..., help="Data table ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -335,6 +343,7 @@ def tables_rows(
 
 
 @app.command("insert")
+@command
 def tables_insert(
     table_id: str = typer.Argument(..., help="Data table ID"),
     data: Optional[str] = typer.Argument(None, help="JSON array of row objects (or pipe via stdin)"),
@@ -381,6 +390,7 @@ def tables_insert(
 
 
 @app.command("update-rows")
+@command
 def tables_update_rows(
     table_id: str = typer.Argument(..., help="Data table ID"),
     row_id: int = typer.Argument(..., help="Row ID (integer)"),
@@ -418,6 +428,7 @@ def tables_update_rows(
 
 
 @app.command("delete-rows")
+@command
 def tables_delete_rows(
     table_id: str = typer.Argument(..., help="Data table ID"),
     row_id: List[str] = typer.Option(..., "--row-id", "-r", help="Row ID to delete (repeatable)"),

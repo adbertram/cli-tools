@@ -5,10 +5,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from cli_tools_shared.output import print_json, print_table, print_error, print_info, print_warning, handle_error
+from cli_tools_shared.output import command, print_json, print_table, print_error, print_info, print_warning, handle_error
 from cli_tools_shared.filters import apply_limit
 from ..n8n_api import get_n8n_api_client, N8nApiError
-from ..server import run_on_server
+from ..server import N8N_PLIST, restart_n8n, run_on_server
 
 app = typer.Typer(help="Query n8n server logs and configuration", no_args_is_help=True)
 
@@ -91,6 +91,7 @@ def _event_detail(event: dict) -> str:
 # ---------------------------------------------------------------------------
 
 @app.command("app")
+@command
 def logs_app(
     lines: int = typer.Option(50, "--lines", "-n", help="Number of lines to show"),
     log_file: str = typer.Option("/var/log/n8n.log", "--log-file", help="Log file path on server"),
@@ -112,6 +113,7 @@ def logs_app(
 
 
 @app.command("errors")
+@command
 def logs_errors(
     lines: int = typer.Option(50, "--lines", "-n", help="Number of lines to show"),
     log_file: str = typer.Option("/var/log/n8n.error.log", "--log-file", help="Error log file path on server"),
@@ -136,6 +138,7 @@ def logs_errors(
 
 
 @app.command("all")
+@command
 def logs_all(
     from_dt: str = typer.Option(None, "--from", "-f", help="Start datetime. Default: start of today"),
     to_dt: str = typer.Option(None, "--to", "-t", help="End datetime. Default: now"),
@@ -253,9 +256,10 @@ print(json.dumps(results))
 
 
 @app.command("config")
+@command
 def logs_config(
     plist_path: str = typer.Option(
-        "/Library/LaunchDaemons/com.n8n.server.plist",
+        N8N_PLIST,
         "--plist", help="LaunchDaemon plist path on server"
     ),
 ):
@@ -297,6 +301,7 @@ def logs_config(
 
 
 @app.command("set-level")
+@command
 def logs_set_level(
     level: str = typer.Argument(..., help="Log level: silent, error, warn, info, debug"),
     log_format: Optional[str] = typer.Option(None, "--format", help="Log format: text, json"),
@@ -304,7 +309,7 @@ def logs_set_level(
     db_logging: Optional[bool] = typer.Option(None, "--db-logging", help="Enable/disable database query logging"),
     restart: bool = typer.Option(True, "--restart/--no-restart", help="Restart n8n after changing config"),
     plist_path: str = typer.Option(
-        "/Library/LaunchDaemons/com.n8n.server.plist",
+        N8N_PLIST,
         "--plist", help="LaunchDaemon plist path on server"
     ),
 ):
@@ -361,8 +366,7 @@ for k, v in updates.items():
 
         if restart:
             print_info("Restarting n8n...")
-            run_on_server(f"sudo launchctl unload {plist_path}", timeout=15)
-            run_on_server(f"sudo launchctl load {plist_path}", timeout=15)
+            restart_n8n(plist_path=plist_path)
             print_info("n8n restarted with new logging configuration")
         else:
             print_warning("Config updated but n8n NOT restarted. Use: sudo launchctl unload/load to apply.")

@@ -36,7 +36,7 @@ def test_cli_specific_exclusions_widen_the_global_list():
 
 def test_cli_specific_exclusions_do_not_leak_to_other_clis():
     assert "listings" not in resolve_exclusions(
-        CONFIG, "wordpress", "excluded_from_list_required"
+        CONFIG, "notion", "excluded_from_list_required"
     )
 
 

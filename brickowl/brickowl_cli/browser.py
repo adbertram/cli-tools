@@ -27,20 +27,38 @@ class _BrickOwlAutomation(BrowserAutomation):
     AUTH_CHECK_URL = "https://www.brickowl.com/mystore/orders"
     AUTH_URL_PATTERN = r"/user(?:$|[/?].*)"
     AUTH_SUCCESS_SELECTOR = "#dLabel .hello"
+    # Non-interactive credential-fill login, matching the live Brick Owl login
+    # form (inputs are named ``main_identifier`` / ``main_password`` and the
+    # submit control is ``bottom_op``). Declaring all five hooks makes
+    # ``declarative_login_configured`` true, so ``brickowl auth login -c
+    # browser_session`` fills and submits the form itself and an expired saved
+    # session self-heals without a human at a terminal.
+    #
+    # Surface requirement: Brick Owl is Cloudflare-fronted and the headless
+    # Chromium fingerprint is served the "Just a moment..." interstitial, so
+    # the login leg must run headed (``HEADLESS=false``). Normal commands stay
+    # headless.
+    AUTH_LOGIN_USERNAME_SELECTOR = 'input[name="main_identifier"]'
+    AUTH_LOGIN_PASSWORD_SELECTOR = 'input[name="main_password"]'
+    AUTH_LOGIN_SUBMIT_SELECTOR = 'input[name="bottom_op"]'
+    AUTH_LOGIN_USERNAME_SECRET = "brickowl-legacy-username"
+    AUTH_LOGIN_PASSWORD_SECRET = "brickowl-legacy-password"
 
 
-class BrickOwlBrowser:
-    """Brick Owl browser operations backed by shared BrowserAutomation."""
+class BrickOwlBrowser(_BrickOwlAutomation):
+    """Brick Owl browser operations backed by shared BrowserAutomation.
+
+    Subclasses the declared automation instead of wrapping it: the shared
+    ``auth login`` seam only honors the declarative login for a real
+    ``BrowserAutomation`` instance, so a delegating wrapper silently kept the
+    interactive (human) login path.
+    """
 
     STORE_SETTINGS_URL = "https://www.brickowl.com/mystore/settings"
 
     def __init__(self, config=None):
-        self._automation = _BrickOwlAutomation(config or get_config())
-        self.config = self._automation.config
+        super().__init__(config or get_config())
         self._user_id: Optional[str] = None
-
-    def __getattr__(self, name):
-        return getattr(self._automation, name)
 
     def _ensure_authenticated(self):
         """Verify browser session is authenticated and initialize page.

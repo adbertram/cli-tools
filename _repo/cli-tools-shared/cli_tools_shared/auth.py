@@ -6,6 +6,9 @@ service workers, and cache all persist natively in
 live from the running browser-harness daemon via
 :meth:`BrowserAutomation.live_cookies`.
 
+Explicit named-session transfer exports only declared service cookies and
+origin localStorage. It never snapshots Chromium files or reusable credentials.
+
 CLI tools subclass :class:`BrowserAutomation` and declare class-level hooks::
 
     class MyBrowser(BrowserAutomation):
@@ -20,6 +23,7 @@ import binascii
 import hashlib
 import hmac
 import json
+import math
 import os
 import random
 import re
@@ -30,21 +34,32 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
 from ._debug_logging import get_debug_logger
+from .exceptions import ClientError
 from .output import print_info, print_success, print_warning
 from .browser import BrowserHarnessService, BrowserHarnessError
 from .browser.processes import (
+    acquire_profile_lifecycle_lock,
     list_process_commands,
     profile_process_pids,
-    terminate_profile_processes,
+    release_profile_lifecycle_lock,
+    resolve_user_data_dir,
 )
 
 logger = get_debug_logger("cli_tools.auth")
 
 
-class BrowserAutomationError(Exception):
-    """Browser automation error."""
+class BrowserAutomationError(ClientError):
+    """Browser automation error.
+
+    Subclasses :class:`~cli_tools_shared.exceptions.ClientError` so the shared
+    ``run_app`` error path (which catches ``ClientError``) prints browser
+    failures -- including HTTP 429/5xx error pages, see
+    :meth:`BrowserAutomation._raise_for_http_error_status` -- as one-line
+    errors instead of tracebacks.
+    """
 
     def __init__(self, message: str, cause: Exception = None):
         self.message = message
@@ -52,12 +67,143 @@ class BrowserAutomationError(Exception):
         super().__init__(message)
 
 
+PORTABLE_SESSION_MAX_BYTES = 16 * 1024 * 1024
+
+
+def validate_session_profile(profile: str) -> str:
+    """Validate an explicit named profile for a portable session operation."""
+    if not isinstance(profile, str) or profile == "default" or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", profile
+    ):
+        raise BrowserAutomationError("Portable sessions require an explicit safe named profile")
+    return profile
+
+
+def read_session_bundle(raw: str) -> dict:
+    """Parse bounded JSON without echoing secret-bearing invalid input."""
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError
+            result[key] = value
+        return result
+
+    try:
+        if len(raw.encode("utf-8")) > PORTABLE_SESSION_MAX_BYTES:
+            raise ValueError
+        bundle = json.loads(raw, object_pairs_hook=unique_object,
+                            parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+        if not isinstance(bundle, dict) or set(bundle) != {
+            "version", "tool", "profile", "auth_type", "identity", "origins", "cookies"
+        } or type(bundle["version"]) is not int or bundle["version"] != 1:
+            raise ValueError
+        validate_session_profile(bundle["profile"])
+        if not isinstance(bundle["tool"], str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", bundle["tool"]):
+            raise ValueError
+        if bundle["auth_type"] != "browser_session" or not isinstance(bundle["origins"], list) or not isinstance(bundle["cookies"], list):
+            raise ValueError
+        identity = bundle["identity"]
+        if not isinstance(identity, dict) or set(identity) != {"account_id", "username"} or any(
+            not isinstance(value, str) or not value or len(value) > 256 for value in identity.values()
+        ):
+            raise ValueError
+        return bundle
+    except Exception:
+        raise BrowserAutomationError("Invalid or oversized portable session bundle") from None
+
+
+def write_session_bundle(path: Path, bundle: dict) -> None:
+    """Publish a new private runtime JSON file, refusing existing outputs."""
+    import stat
+    import tempfile
+    from .config import get_cli_tools_data_root
+
+    path = Path(path).absolute()
+    root = get_cli_tools_data_root().resolve()
+    if ".." in path.parts or not path.is_relative_to(root) or not path.parent.resolve().is_relative_to(root) or path.parent.resolve() != path.parent or any(parent.is_symlink() for parent in (path, *path.parents) if parent.is_relative_to(root)):
+        raise BrowserAutomationError("Session bundles require a private CLI runtime path")
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    parent_stat = path.parent.stat()
+    if parent_stat.st_uid != os.getuid() or stat.S_IMODE(parent_stat.st_mode) & 0o077:
+        raise BrowserAutomationError("Session bundle directory must be private (0700)")
+    descriptor, temporary = tempfile.mkstemp(prefix=".session-", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(bundle, stream, allow_nan=False, separators=(",", ":"))
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.link(temporary, path, follow_symlinks=False)
+        descriptor = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except Exception:
+        raise BrowserAutomationError("Private session bundle write failed") from None
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def _session_origin(value: str) -> str:
+    if not isinstance(value, str):
+        raise BrowserAutomationError("Invalid portable session origin")
+    parsed = urlsplit(value)
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password or parsed.port or parsed.path or parsed.query or parsed.fragment or value != f"https://{parsed.hostname}":
+        raise BrowserAutomationError("Invalid portable session origin")
+    return value
+
+
+def _session_cookie(raw: dict, domains: tuple[str, ...], *, from_browser: bool = False) -> dict:
+    fields = {"name", "value", "domain", "path", "secure", "httpOnly", "sameSite", "expires", "priority", "sourceScheme", "sourcePort", "partitionKey"}
+    if not isinstance(raw, dict) or (not from_browser and set(raw) - fields):
+        raise BrowserAutomationError("Invalid portable cookie fields")
+    if raw.get("partitionKeyOpaque"):
+        raise BrowserAutomationError("Opaque partition cookies cannot be transferred")
+    row = {key: value for key, value in raw.items() if key in fields}
+    for key in ("name", "value", "domain", "path"):
+        if not isinstance(row.get(key), str) or any(character in row[key] for character in ("\x00", "\r", "\n")):
+            raise BrowserAutomationError("Invalid portable cookie")
+    if not row["name"] or row["domain"].lstrip(".") not in domains or not row["path"].startswith("/"):
+        raise BrowserAutomationError("Portable cookie is outside declared service scope")
+    for key in ("secure", "httpOnly"):
+        if type(row.get(key)) is not bool:
+            raise BrowserAutomationError("Invalid portable cookie flags")
+    for key, values in (("sameSite", ("Strict", "Lax", "None")), ("priority", ("Low", "Medium", "High")), ("sourceScheme", ("Unset", "NonSecure", "Secure"))):
+        if key in row and row[key] not in values:
+            raise BrowserAutomationError("Invalid portable cookie attributes")
+    if "sourcePort" in row and (type(row["sourcePort"]) is not int or row["sourcePort"] != -1 and not 1 <= row["sourcePort"] <= 65535):
+        raise BrowserAutomationError("Invalid portable cookie source port")
+    if from_browser and raw.get("session") is True:
+        row.pop("expires", None)
+    if "expires" in row and (type(row["expires"]) not in (int, float) or not math.isfinite(row["expires"]) or row["expires"] <= time.time()):
+        raise BrowserAutomationError("Portable cookie has expired or invalid expiry")
+    partition = row.get("partitionKey")
+    if partition is not None:
+        if not isinstance(partition, dict) or set(partition) != {"topLevelSite", "hasCrossSiteAncestor"} or type(partition["hasCrossSiteAncestor"]) is not bool:
+            raise BrowserAutomationError("Unsupported portable cookie partition")
+        site = _session_origin(partition["topLevelSite"])
+        if urlsplit(site).hostname not in domains:
+            raise BrowserAutomationError("Portable cookie partition is outside service scope")
+    return row
+
+
 @dataclass(frozen=True)
 class AuthResult:
-    """Result of an authentication check. Truthy when authenticated."""
+    """Result of an authentication check. Truthy when authenticated.
+
+    ``refreshed`` is True only when this call actively re-authenticated a
+    stale session (never on a fresh-session no-op). ``needs_human`` marks a
+    refresh attempt that stopped at a human-verification gate (CAPTCHA /
+    challenge wall) which automation must never solve; ``reason`` carries the
+    precise machine- and human-readable detail for failures.
+    """
     authenticated: bool
     live_check: bool
     available: bool = True
+    refreshed: bool = False
+    needs_human: bool = False
+    reason: str = ""
 
     def __bool__(self) -> bool:
         return self.authenticated
@@ -131,6 +277,20 @@ def classify_interstitial(
     return None
 
 
+# --- Main-document HTTP status --------------------------------------------
+# Chromium exposes the real HTTP status of the main document via Navigation
+# Timing Level 2. A site answering 429 (rate limit) or >=500 (outage) renders
+# a normal-looking error document at the requested URL, so a scraper that only
+# reads the DOM records the error page as valid (often empty) content --
+# silent data loss. ``HTTP_ERROR_STATUS_JS`` lets the engine read the status
+# after a navigation settles and refuse to hand the error page back as data.
+HTTP_ERROR_STATUS_JS = """() => {
+  const nav = performance.getEntriesByType('navigation');
+  const entry = nav && nav.length ? nav[0] : null;
+  return entry && Number.isFinite(entry.responseStatus) ? entry.responseStatus : null;
+}"""
+
+
 # Daemon-key sanity: ``BU_NAME`` is used as the AF_UNIX socket basename under
 # ``/tmp/cli-tools-bh/<key>``; macOS caps paths at 104 bytes. Hash long or
 # unsafe keys to a short, deterministic prefix.
@@ -175,8 +335,9 @@ class BrowserAutomation:
     """Base class for browser automation in CLI tools.
 
     Persistent Chromium user-data-dir per profile holds cookies,
-    localStorage, IndexedDB, service workers, and cache — there is no
-    snapshot/restore. Subclasses declare hooks; the base class drives
+    localStorage, IndexedDB, service workers, and cache. Explicit portable
+    transfer covers declared cookies/localStorage only. Subclasses declare
+    hooks; the base class drives
     headed login and headless command execution against the persistent
     profile.
     """
@@ -188,6 +349,8 @@ class BrowserAutomation:
     AUTH_URL_PATTERN = ""        # Regex — URL matches → user is on login page
     AUTH_FAILURE_URL_PATTERN = ""  # Regex — URL matches → service requires re-auth/confirmation
     # JS evaluated on the auth-check page; truthy result → NOT authenticated.
+    # A short lowercase diagnostic string is logged at DEBUG after strict
+    # character validation; use it for status/category only, never secrets.
     # For services that serve a URL-preserving error/interstitial at the
     # authenticated URL, so URL patterns alone report a false healthy session.
     AUTH_FAILURE_PAGE_JS = ""
@@ -195,12 +358,16 @@ class BrowserAutomation:
     AUTH_SUCCESS_URL = ""        # URL pattern indicating successful login
     AUTH_SUCCESS_SELECTOR = ""   # CSS/locator selector visible when authenticated
     AUTH_LOGIN_FORM_SELECTOR = ""  # CSS/locator selector for login-form elements; ABSENT → authenticated
+    AUTH_LOGIN_FORM_LINK_SELECTOR = ""  # Link on LOGIN_URL to follow when the credential form lives on a page behind it
     AUTH_LOGIN_USERNAME_SELECTOR = ""  # Selector for an approved non-interactive username field
     AUTH_LOGIN_PASSWORD_SELECTOR = ""  # Selector for an approved non-interactive password field
     AUTH_LOGIN_SUBMIT_SELECTOR = ""  # Selector for an approved non-interactive submit control
     AUTH_LOGIN_ERROR_SELECTOR = ""  # Selector visible when submitted credentials are rejected
     AUTH_LOGIN_USERNAME_SECRET = ""  # CLI-tools secret-manager name
     AUTH_LOGIN_PASSWORD_SECRET = ""  # CLI-tools secret-manager name
+    # Derive username/password secret names from the CLI tool name and active
+    # profile using the shared profile-secret naming convention.
+    AUTH_LOGIN_SECRETS_PROFILE_SCOPED = False
     AUTH_LOGIN_TOTP_SELECTOR = ""  # Selector for a TOTP challenge input
     AUTH_LOGIN_TOTP_SUBMIT_SELECTOR = ""  # Selector for the TOTP submit control
     AUTH_LOGIN_TOTP_SECRET = ""  # CLI-tools secret-manager Base32 seed name
@@ -238,6 +405,12 @@ class BrowserAutomation:
     INTERSTITIAL_JITTER_RATIO = 0.5     # Extra 0..N x base, so retries desynchronize
     INTERSTITIAL_SETTLE_TIMEOUT_MS = 20000  # Budget for a self-clearing wall
     INTERSTITIAL_POLL_INTERVAL_MS = 1000    # Poll cadence while it clears
+    # Real HTTP status of the main document (see HTTP_ERROR_STATUS_JS). When
+    # True (default), get_page raises after navigation once the settled page
+    # turns out to be an HTTP 429 or >=500 error document, so the error page
+    # is never scraped as if it were content. Opt out per tool with False;
+    # the check is skipped whenever the status cannot be read.
+    HTTP_ERROR_STATUS_RAISE = True
     # Automation-free login. When True, authenticate() opens a PLAIN browser (no
     # --remote-debugging-port, no CDP, no webdriver patching) for the user to log
     # in by hand — for sites whose login flow blocks automated browsers — then
@@ -257,12 +430,114 @@ class BrowserAutomation:
     AUTH_LOGIN_HANDLER = None
     # Milliseconds to let the login page settle before the handler runs.
     AUTH_LOGIN_SETTLE_MS = 5000
+    # Headless session-refresh throttle for ``ensure_fresh_session``: at most
+    # one refresh attempt per window per process, so per-request callers that
+    # run it before every page cannot re-login in a loop.
+    AUTH_REFRESH_THROTTLE_SECONDS = 60
+    # Challenge signals for ``_detect_login_challenge``. Each rule is a
+    # ``(label, css_selector, text_markers, cookie_markers)`` tuple evaluated
+    # in declaration order; the first rule with a matched selector, a matching
+    # lowercased page title/body substring, or a matching lowercased cookie
+    # substring wins. Keep the most specific vendors first. Labels follow the
+    # browser-automation skill's CAPTCHA/challenge reference list.
+    AUTH_CHALLENGE_RULES: Tuple[Tuple[str, str, Tuple[str, ...], Tuple[str, ...]], ...] = (
+        (
+            "reCAPTCHA",
+            "iframe[src*='recaptcha'], .g-recaptcha, #recaptcha",
+            ("i'm not a robot",),
+            (),
+        ),
+        (
+            "hCaptcha",
+            "iframe[src*='hcaptcha'], .h-captcha",
+            ("i am human",),
+            (),
+        ),
+        (
+            "Cloudflare",
+            "iframe[src*='challenges.cloudflare.com'], #cf-challenge-running, "
+            ".cf-browser-verification",
+            (
+                "just a moment",
+                "checking your browser before accessing",
+                "attention required",
+            ),
+            ("cf_clearance",),
+        ),
+        (
+            "Turnstile",
+            ".cf-turnstile",
+            ("verify you are human",),
+            (),
+        ),
+        (
+            "DataDome",
+            "iframe[src*='captcha-delivery.com'], .datadome, .datadome-iframe",
+            ("verify you are human",),
+            ("datadome",),
+        ),
+        (
+            "PerimeterX/HUMAN",
+            "#px-captcha, .px-captcha, iframe[src*='perimeterx']",
+            ("press & hold to confirm you are a human",),
+            ("_px",),
+        ),
+        (
+            "Arkose/Funcaptcha",
+            "iframe[src*='funcaptcha'], iframe[src*='arkose']",
+            (),
+            (),
+        ),
+        (
+            "generic bot-check",
+            "iframe[src*='captcha'], iframe[src*='turnstile']",
+            (
+                "verify you are human",
+                "pardon our interruption",
+                "access to this page has been denied",
+                "you have been blocked",
+            ),
+            ("_abck",),
+        ),
+    )
+    # Account-block messaging: a distinct, higher-priority rule group from
+    # AUTH_CHALLENGE_RULES, in the same data-driven style. When the site says
+    # the account is banned/blocked, automation must stop immediately (retries
+    # can extend a ban) and surface the site's own wording — reason, unblock
+    # time — to a human. ``_detect_account_block`` matches these markers
+    # case-insensitively against body-text lines and captures the matched line
+    # verbatim, bounded by ``AUTH_ACCOUNT_BLOCK_SNIPPET_CHARS``.
+    AUTH_ACCOUNT_BLOCK_MARKERS: Tuple[str, ...] = (
+        "your account is banned",
+        "account has been suspended",
+        "account is blocked",
+        "account will be unblocked",
+        "your account has been locked",
+    )
+    AUTH_ACCOUNT_BLOCK_SNIPPET_CHARS = 120
 
     def __init__(self, config):
         self.config = config
+        if self.AUTH_LOGIN_SECRETS_PROFILE_SCOPED:
+            from .config import _secret_name_for_profile_field
+
+            tool_name = self._tool_name()
+            profile_name = self._profile_name()
+            self.AUTH_LOGIN_USERNAME_SECRET = _secret_name_for_profile_field(
+                tool_name,
+                "USERNAME",
+                profile_name,
+            )
+            self.AUTH_LOGIN_PASSWORD_SECRET = _secret_name_for_profile_field(
+                tool_name,
+                "PASSWORD",
+                profile_name,
+            )
         self._page: Optional[BrowserHarnessService] = None
         self._service: Optional[BrowserHarnessService] = None
         self._auth_verified_at: float = 0
+        self._auth_refresh_attempted_at: float = 0
+        self._auth_last_refresh_result: Optional[AuthResult] = None
 
     # --- Config accessors ---
 
@@ -343,6 +618,20 @@ class BrowserAutomation:
             )
         return self._service
 
+    def daemon_endpoint_path(self):
+        """Resolve only this browser's bound named daemon endpoint."""
+        service = self._get_service()
+        service._bh.h
+        from browser_harness import _ipc
+        return _ipc.pid_path(service.session)
+
+    def cleanup_daemon_endpoint(self):
+        """Remove endpoint files after the caller proves its owner has ended."""
+        service = self._get_service()
+        service._bh.h
+        from browser_harness import _ipc
+        _ipc.cleanup_endpoint(service.session)
+
     _safe_url_for_log = staticmethod(BrowserHarnessService._safe_url_for_log)
 
     def _prompt_enter_eof_safe(self, message: str = "", *, allow_no_tty: bool = False) -> bool:
@@ -421,6 +710,334 @@ class BrowserAutomation:
             ) from e
         finally:
             self.close()
+
+    # ==================== Automatic headless session refresh ==============
+
+    @property
+    def declarative_login_configured(self) -> bool:
+        """True when the non-interactive credential login is fully declared.
+
+        All five pieces must be present: the username, password, and submit
+        selectors AND both CLI-tools secret-manager names. A partial
+        declaration counts as unconfigured so callers fall back to the
+        interactive flow instead of failing halfway through a fill.
+        """
+        return bool(
+            self.AUTH_LOGIN_USERNAME_SELECTOR
+            and self.AUTH_LOGIN_PASSWORD_SELECTOR
+            and self.AUTH_LOGIN_SUBMIT_SELECTOR
+            and self.AUTH_LOGIN_USERNAME_SECRET
+            and self.AUTH_LOGIN_PASSWORD_SECRET
+        )
+
+    def ensure_fresh_session(self) -> AuthResult:
+        """Confirm or headlessly refresh the saved browser session.
+
+        Automatic, non-interactive session refresh for per-command callers.
+        This path NEVER opens a visible browser and NEVER reads stdin:
+
+        1. ``is_authenticated()`` (TTL-cached) reports the session fresh →
+           return ``AuthResult(authenticated=True, refreshed=False)``.
+        2. Stale session + fully declared credential login (see
+           :attr:`declarative_login_configured`) → run the login HEADLESS:
+           ``get_page(LOGIN_URL)`` then ``_complete_noninteractive_login``,
+           verify exactly like ``_authenticate_noninteractive`` (AUTH_CHECK_URL
+           + ``_check_auth_settled``), then confirm persistence with a fresh
+           ``is_authenticated()`` restart probe. Success →
+           ``AuthResult(authenticated=True, refreshed=True)``.
+        3. Failure: inspect the page for a CAPTCHA / challenge gate via
+           ``_detect_login_challenge``. A challenge →
+           ``AuthResult(needs_human=True, reason=...)``; any other failure →
+           ``AuthResult(needs_human=False, reason=...)``.
+
+        :class:`BrowserAutomationError` is raised only for engine-level
+        failures (the browser could not start, or an HTTP-error / abort wall
+        was served instead of the login page). Refresh attempts are throttled
+        to at most one per ``AUTH_REFRESH_THROTTLE_SECONDS`` per process;
+        repeat callers inside the window receive the stored outcome instead
+        of logging in again.
+        """
+        logger.debug("ensure_fresh_session: session=%s", self._session_name())
+
+        result = self.is_authenticated()
+        if result.authenticated:
+            logger.debug("ensure_fresh_session: session already fresh")
+            return AuthResult(
+                authenticated=True,
+                live_check=result.live_check,
+                available=result.available,
+                refreshed=False,
+            )
+
+        now = time.time()
+        if (
+            self._auth_refresh_attempted_at
+            and now - self._auth_refresh_attempted_at < self.AUTH_REFRESH_THROTTLE_SECONDS
+            and self._auth_last_refresh_result is not None
+        ):
+            logger.debug(
+                "ensure_fresh_session: throttled (attempt %.0fs ago, window=%ss); "
+                "reusing the stored outcome",
+                now - self._auth_refresh_attempted_at,
+                self.AUTH_REFRESH_THROTTLE_SECONDS,
+            )
+            return self._auth_last_refresh_result
+
+        if not self.declarative_login_configured:
+            outcome = AuthResult(
+                authenticated=False,
+                live_check=result.live_check,
+                refreshed=False,
+                needs_human=False,
+                reason=(
+                    "declarative non-interactive login is not configured "
+                    "(username/password/submit selectors and both secret names required)"
+                ),
+            )
+            return self._record_refresh_outcome(outcome)
+
+        page = None
+        try:
+            page = self.get_page(self.LOGIN_URL)
+        except BrowserAutomationError:
+            # Engine-level: the browser could not start or a served wall
+            # aborted navigation (HTTP error status / interstitial handling).
+            # Do NOT convert this into an AuthResult — the engine is unusable.
+            raise
+
+        try:
+            page.wait_for_timeout(self.AUTH_LOGIN_SETTLE_MS)
+            # An account-block notice takes priority over any captcha: never
+            # retry a banned account, and surface the site's own wording.
+            blocked = self._detect_account_block(page)
+            if blocked is not None:
+                return self._account_block_outcome(blocked, "login")
+            challenge = self._detect_login_challenge(page)
+            if challenge is not None:
+                return self._challenge_outcome(challenge, "login")
+            self._complete_noninteractive_login(page)
+            if self.AUTH_CHECK_URL:
+                # Verify against the same ground truth ``is_authenticated()``
+                # uses; the flow can land on any post-login page.
+                page.goto(self.AUTH_CHECK_URL)
+                page.wait_for_timeout(2000)
+            # A "banned" interstitial can render on the auth-check page even
+            # when the page still looks authenticated; catch it before any
+            # settle verdict so a banned account is never reported as fresh.
+            blocked = self._detect_account_block(page)
+            if blocked is not None:
+                return self._account_block_outcome(blocked, "auth-check")
+            if not self._check_auth_settled(page):
+                blocked = self._detect_account_block(page)
+                if blocked is not None:
+                    return self._account_block_outcome(blocked, "auth-check")
+                challenge = self._detect_login_challenge(page)
+                if challenge is not None:
+                    return self._challenge_outcome(challenge, "auth-check")
+                outcome = AuthResult(
+                    authenticated=False,
+                    live_check=True,
+                    refreshed=False,
+                    needs_human=False,
+                    reason=(
+                        "headless session refresh did not reach an authenticated "
+                        f"state at {self.AUTH_CHECK_URL or self._safe_url_for_log(page.url)}."
+                    ),
+                )
+                return self._record_refresh_outcome(outcome)
+        except Exception as exc:
+            # Post-navigation failure: credentials rejected, controls missing,
+            # an account block, a login timeout, or a service error while
+            # completing the form. Re-check for an account block and then a
+            # challenge that appeared during the attempt; otherwise report the
+            # underlying failure without raising.
+            if page is not None:
+                blocked = self._detect_account_block(page)
+                if blocked is not None:
+                    page_context = "login" if self._is_login_page(page) else "post-login"
+                    return self._account_block_outcome(blocked, page_context)
+                challenge = self._detect_login_challenge(page)
+                if challenge is not None:
+                    return self._challenge_outcome(challenge, "post-login")
+            outcome = AuthResult(
+                authenticated=False,
+                live_check=True,
+                refreshed=False,
+                needs_human=False,
+                reason=str(exc),
+            )
+            return self._record_refresh_outcome(outcome)
+        finally:
+            self.close()
+
+        # Persistence check — mirror ``_authenticate_noninteractive``: the
+        # session must survive a browser restart before we claim success.
+        self._auth_verified_at = 0
+        persisted = self.is_authenticated()
+        if persisted.authenticated:
+            self._auth_verified_at = time.time()
+            logger.debug("ensure_fresh_session: refreshed and verified")
+            return self._record_refresh_outcome(
+                AuthResult(authenticated=True, live_check=True, refreshed=True)
+            )
+
+        outcome = AuthResult(
+            authenticated=False,
+            live_check=True,
+            refreshed=False,
+            needs_human=False,
+            reason=(
+                "headless session refresh logged in but the session did not "
+                "persist across a browser restart."
+            ),
+        )
+        return self._record_refresh_outcome(outcome)
+
+    def _record_refresh_outcome(self, outcome: AuthResult) -> AuthResult:
+        """Record a completed refresh attempt so the throttle can reuse it."""
+        self._auth_refresh_attempted_at = time.time()
+        self._auth_last_refresh_result = outcome
+        return outcome
+
+    def _challenge_outcome(self, challenge: str, page_context: str) -> AuthResult:
+        """Build the ``needs_human`` result for a detected challenge."""
+        return self._record_refresh_outcome(
+            AuthResult(
+                authenticated=False,
+                live_check=True,
+                refreshed=False,
+                needs_human=True,
+                reason=(
+                    f"{challenge} challenge detected on the {page_context} page; "
+                    "a human must complete it before the session can be refreshed"
+                ),
+            )
+        )
+
+    def _challenge_probe_js(self) -> str:
+        """Return the JS probe used by :meth:`_detect_login_challenge`.
+
+        One round trip: for every rule selector returns whether an element
+        matches, plus the document title, a bounded body excerpt, and the
+        cookie header in original case — everything the Python-side rule
+        matchers need (they lowercase for marker matching and keep the raw
+        body text for verbatim line capture).
+        """
+        encoded = json.dumps([rule[1] for rule in self.AUTH_CHALLENGE_RULES])
+        return (
+            "() => {\n"
+            "  const selectors = " + encoded + ";\n"
+            "  const matched = selectors.map(sel => {\n"
+            "    try { return !!document.querySelector(sel); } catch (e) { return false; }\n"
+            "  });\n"
+            "  let title = '';\n"
+            "  try { title = document.title || ''; } catch (e) {}\n"
+            "  let text = '';\n"
+            "  try { text = document.body ? document.body.innerText : ''; } catch (e) {}\n"
+            "  let cookie = '';\n"
+            "  try { cookie = document.cookie || ''; } catch (e) {}\n"
+            "  return { matched: matched, title: title, text: text.slice(0, 16000), cookie: cookie };\n"
+            "}"
+        )
+
+    def _detect_login_challenge(self, page) -> Optional[str]:
+        """Return the first challenge vendor detected on ``page``, else None.
+
+        Data-driven over :attr:`AUTH_CHALLENGE_RULES` — reCAPTCHA, hCaptcha,
+        Cloudflare, Turnstile, DataDome, PerimeterX/HUMAN, Arkose/Funcaptcha,
+        and a generic bot-check fallback (the browser-automation skill's
+        CAPTCHA reference signal list). The first rule whose selector, page
+        title/body marker, or cookie marker matches wins; a page that cannot
+        be probed reports no challenge rather than raising.
+        """
+        if not self.AUTH_CHALLENGE_RULES:
+            return None
+        try:
+            probe = page.evaluate(self._challenge_probe_js())
+        except Exception as exc:
+            logger.debug("_detect_login_challenge: probe failed: %s", exc)
+            return None
+        if not isinstance(probe, dict):
+            return None
+        matched = probe.get("matched")
+        matched = matched if isinstance(matched, list) else []
+        title = str(probe.get("title") or "").lower()
+        text = str(probe.get("text") or "").lower()
+        cookie = str(probe.get("cookie") or "").lower()
+        for index, (label, _selector, text_markers, cookie_markers) in enumerate(
+            self.AUTH_CHALLENGE_RULES
+        ):
+            if index < len(matched) and matched[index]:
+                logger.debug("_detect_login_challenge: %s via selector", label)
+                return label
+            if any(marker in title or marker in text for marker in text_markers):
+                logger.debug("_detect_login_challenge: %s via title/body text", label)
+                return label
+            if any(marker in cookie for marker in cookie_markers):
+                logger.debug("_detect_login_challenge: %s via cookie", label)
+                return label
+        return None
+
+    def _detect_account_block(self, page) -> Optional[str]:
+        """Return the site's own first banned/blocked body line, else None.
+
+        Data-driven over :attr:`AUTH_ACCOUNT_BLOCK_MARKERS`, matched
+        case-insensitively against body-text lines (not just substrings of the
+        whole page). When a marker matches, the whole matched line is returned
+        verbatim — bounded to ``AUTH_ACCOUNT_BLOCK_SNIPPET_CHARS`` — so the
+        caller can surface the site's exact wording (for example a ban notice
+        with its reason and unblock time) to a human instead of paraphrasing.
+        A page that cannot be probed reports no block rather than raising.
+        """
+        if not self.AUTH_ACCOUNT_BLOCK_MARKERS:
+            return None
+        try:
+            probe = page.evaluate(self._challenge_probe_js())
+        except Exception as exc:
+            logger.debug("_detect_account_block: probe failed: %s", exc)
+            return None
+        if not isinstance(probe, dict):
+            return None
+        text = str(probe.get("text") or "")
+        for line in text.splitlines():
+            lowered = line.lower()
+            if any(marker in lowered for marker in self.AUTH_ACCOUNT_BLOCK_MARKERS):
+                snippet = line.strip()[: self.AUTH_ACCOUNT_BLOCK_SNIPPET_CHARS]
+                logger.debug("_detect_account_block: matched a banned/blocked line")
+                return snippet
+        return None
+
+    def _raise_if_account_blocked(self, page) -> None:
+        """Stop immediately when ``page`` shows an account-block notice.
+
+        Retrying a banned account can extend the ban, so any block messaging
+        found aborts the login right away with the site's own wording.
+        """
+        snippet = self._detect_account_block(page)
+        if snippet is not None:
+            raise BrowserAutomationError(
+                "Account block detected during browser login: " + snippet
+            )
+
+    def _account_block_outcome(self, snippet: str, page_context: str) -> AuthResult:
+        """Build the ``needs_human`` result for an account-block notice.
+
+        A banned account must never be retried by automation; the site's own
+        line is preserved verbatim in ``reason`` so the human sees exactly
+        what the site reported (reason, unblock time, ...).
+        """
+        return self._record_refresh_outcome(
+            AuthResult(
+                authenticated=False,
+                live_check=True,
+                refreshed=False,
+                needs_human=True,
+                reason=(
+                    "Account block detected on the "
+                    f"{page_context} page: {snippet}"
+                ),
+            )
+        )
 
     def authenticate(self, force: bool = False):
         """Interactive login via headed persistent browser."""
@@ -576,6 +1193,27 @@ class BrowserAutomation:
                 "selectors, submit selector, and both secret names are required."
             )
 
+        # Some services open LOGIN_URL on a landing page that only links to the
+        # real credential form (e.g. a marketing page whose "LOGIN" link starts
+        # a stateful /oauth/authorize redirect). Follow that link first so the
+        # selectors below are matched against the form, not the landing page.
+        if self.AUTH_LOGIN_FORM_LINK_SELECTOR and not self._is_login_page(page):
+            login_link = page.locator(self.AUTH_LOGIN_FORM_LINK_SELECTOR)
+            if login_link.count() == 0:
+                raise BrowserAutomationError(
+                    "Non-interactive browser login could not find the login-form link "
+                    f"{self.AUTH_LOGIN_FORM_LINK_SELECTOR!r} on {page.url}."
+                )
+            href = login_link.first.get_attribute("href")
+            if not href:
+                raise BrowserAutomationError(
+                    f"Login-form link {self.AUTH_LOGIN_FORM_LINK_SELECTOR!r} has no href."
+                )
+            page.goto(href)
+            page.wait_for_selector(
+                self.AUTH_LOGIN_USERNAME_SELECTOR, state="visible", timeout=15000
+            )
+
         totp_settings = (
             self.AUTH_LOGIN_TOTP_SELECTOR,
             self.AUTH_LOGIN_TOTP_SUBMIT_SELECTOR,
@@ -586,6 +1224,10 @@ class BrowserAutomation:
                 "Non-interactive browser TOTP is partially configured; input selector, "
                 "submit selector, and secret name are required."
             )
+
+        # If the login page already shows an account-block notice, stop before
+        # touching the form: submitting could extend a ban.
+        self._raise_if_account_blocked(page)
 
         controls = (
             ("username", page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)),
@@ -627,8 +1269,14 @@ class BrowserAutomation:
 
         deadline = time.time() + self.AUTH_LOGIN_AUTOMATION_TIMEOUT
         totp_submitted = False
+        # The site can render an account-block notice immediately after the
+        # submit; surface it without waiting out the automation timeout.
+        self._raise_if_account_blocked(page)
         while time.time() < deadline:
             page.wait_for_timeout(1000)
+            # A ban notice is the one state we must never poll past — retries
+            # can extend the ban, so abort as soon as it appears.
+            self._raise_if_account_blocked(page)
             if self.AUTH_LOGIN_ERROR_SELECTOR:
                 error = page.locator(self.AUTH_LOGIN_ERROR_SELECTOR)
                 if error.count() and error.first.is_visible():
@@ -682,36 +1330,42 @@ class BrowserAutomation:
         cookies that help the manual login pass risk scoring; the fresh login
         overwrites the session cookies regardless.
         """
+        from .browser.desktop_lease import wait_for_desktop_lease
         from .browser.driver import _chrome_binary
+
+        chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
+        wait_for_desktop_lease(chrome)
 
         # Release any CDP browser (e.g. from a pre-login auth check) so the
         # persistent profile is unlocked for the plain browser.
         self.close()
 
-        profile_dir = self._get_persistent_profile_dir()
+        profile_dir = resolve_user_data_dir(self._get_persistent_profile_dir())
         profile_dir.mkdir(parents=True, exist_ok=True)
-
-        chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
-        args = [
-            chrome,
-            f"--user-data-dir={profile_dir}",
-            "--no-first-run",
-            "--no-default-browser-check",
-            self.LOGIN_URL,
-        ]
-        print_info("Opening a normal browser window for login (no automation attached).")
-        print_info("Log in fully — finish any OTP/CAPTCHA — until your account page is visible.")
-        print_info("Then come back here and press Enter to capture the session.")
-
-        proc = subprocess.Popen(
-            args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
+        lifecycle_lock = acquire_profile_lifecycle_lock(profile_dir)
         try:
-            confirmed = self._prompt_enter_eof_safe(allow_no_tty=True)
-            if not confirmed:
-                self._wait_for_manual_browser_close(proc, profile_dir)
+            args = [
+                chrome,
+                f"--user-data-dir={profile_dir}",
+                "--no-first-run",
+                "--no-default-browser-check",
+                self.LOGIN_URL,
+            ]
+            print_info("Opening a normal browser window for login (no automation attached).")
+            print_info("Log in fully — finish any OTP/CAPTCHA — until your account page is visible.")
+            print_info("Then come back here and press Enter to capture the session.")
+
+            proc = subprocess.Popen(
+                args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+            try:
+                confirmed = self._prompt_enter_eof_safe(allow_no_tty=True)
+                if not confirmed:
+                    self._wait_for_manual_browser_close(proc, profile_dir)
+            finally:
+                self._quit_login_chrome(proc)
         finally:
-            self._quit_login_chrome(proc, profile_dir)
+            release_profile_lifecycle_lock(lifecycle_lock)
 
         if not self.is_authenticated():
             raise BrowserAutomationError(
@@ -745,23 +1399,20 @@ class BrowserAutomation:
             "Timed out waiting for the manual login browser window to close."
         )
 
-    def _quit_login_chrome(self, proc, profile_dir) -> None:
-        """Quit the plain login browser bound to this profile so cookies flush
-        and the user-data-dir lock is released. Scoped to THIS profile's
-        ``--user-data-dir`` so the user's other browser windows are untouched.
-        """
+    def _quit_login_chrome(self, proc, profile_dir=None) -> None:
+        """Stop this manual-login launcher without touching shared profile state."""
         try:
             proc.terminate()
         except Exception:
             pass
-        terminate_profile_processes(profile_dir)
-        time.sleep(3)
-        lock = Path(profile_dir) / "SingletonLock"
-        try:
-            if lock.is_symlink() or lock.exists():
-                lock.unlink()
-        except OSError:
-            pass
+        wait = getattr(proc, "wait", None)
+        if callable(wait):
+            try:
+                wait(timeout=5)
+            except subprocess.TimeoutExpired as exc:
+                raise BrowserAutomationError(
+                    "Manual login Chrome did not exit after it was closed."
+                ) from exc
 
     # ---- Token-cookie auth check (AUTH_TOKEN_COOKIE) ----
 
@@ -835,6 +1486,173 @@ class BrowserAutomation:
             except BrowserHarnessError as e:
                 raise BrowserAutomationError(str(e)) from e
         return svc.cookie_list()
+
+    def _portable_scope(self) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        from .config import get_profiles_base_dir
+
+        profile = validate_session_profile(self._profile_name())
+        if getattr(self.config, "PROFILE_AUTH_TYPE_FIELD", None) and self.config._profile_auth_type_for_env(self.config.env_file_path) != "browser_session":
+            raise BrowserAutomationError("Portable transfer requires a browser_session authentication profile")
+        expected = get_profiles_base_dir(self._tool_name()) / profile / "browser-data" / "chromium-profile"
+        actual = self._get_persistent_profile_dir()
+        if actual.resolve() != expected.absolute() or any(path.is_symlink() for path in (expected, expected.parent, expected.parent.parent)):
+            raise BrowserAutomationError("Portable session profile must be isolated")
+        origins = tuple(_session_origin(value) for value in self.config.browser_session_origins())
+        domains = tuple(self.config.browser_session_cookie_domains())
+        if not origins or len(set(origins)) != len(origins) or not domains or len(set(domains)) != len(domains) or any(
+            not isinstance(domain, str) or not re.fullmatch(r"[a-z0-9]+(?:[.-][a-z0-9]+)*", domain) for domain in domains
+        ):
+            raise BrowserAutomationError("Invalid portable service scope declaration")
+        service = self._get_service()
+        if any(not callable(getattr(service, name, None)) for name in ("cookie_set", "localstorage_get", "localstorage_set")):
+            raise BrowserAutomationError("Portable sessions are unsupported by this browser backend")
+        return origins, domains
+
+    def _portable_identity(self, expected_account_id: str, expected_username: str = None) -> dict:
+        try:
+            if not isinstance(expected_account_id, str) or not expected_account_id:
+                raise ValueError
+            self._auth_verified_at = 0
+            self._portable_profile_dir = self._get_persistent_profile_dir()
+            # Opt-in service hooks fetch the authenticated account endpoint now.
+            # Its exact actor is the proof; a separate UI heuristic adds no proof.
+            identity = self.config.browser_session_identity(self)
+            if not isinstance(identity, dict) or set(identity) != {"account_id", "username"} or any(
+                not isinstance(value, str) or not value or len(value) > 256 for value in identity.values()
+            ) or identity["account_id"] != expected_account_id or (
+                expected_username is not None and identity["username"].casefold() != expected_username.casefold()
+            ):
+                raise ValueError
+            return identity
+        except Exception as error:
+            if isinstance(error, BrowserAutomationError) and str(error) == "Portable session browser close failed":
+                raise
+            raise BrowserAutomationError("Portable session identity verification failed or requires device verification") from None
+
+    def _portable_close(self) -> None:
+        """Close strictly so a transfer never hides a persistence failure."""
+        service = self._service
+        try:
+            directory = getattr(self, "_portable_profile_dir", None)
+            if service is not None:
+                if directory is None:
+                    directory = self._get_persistent_profile_dir()
+                    self._portable_profile_dir = directory
+                service.browser_close()
+            if directory is not None and profile_process_pids(directory):
+                raise BrowserAutomationError("Portable session browser close failed")
+        except Exception:
+            raise BrowserAutomationError("Portable session browser close failed") from None
+        self._page = None
+        self._service = None
+        self._auth_verified_at = 0
+
+    def _validate_portable_bundle(self, bundle: dict, target_profile: str,
+                                  expected_account_id: str, expected_username: str = None) -> dict:
+        bundle = read_session_bundle(json.dumps(bundle, allow_nan=False))
+        origins, domains = self._portable_scope()
+        if bundle["tool"] != self._tool_name() or bundle["profile"] != validate_session_profile(target_profile) or bundle["identity"]["account_id"] != expected_account_id or (
+            expected_username is not None and bundle["identity"]["username"].casefold() != expected_username.casefold()
+        ):
+            raise BrowserAutomationError("Portable session tool, profile, or expected identity mismatch")
+        found = []
+        for row in bundle["origins"]:
+            if not isinstance(row, dict) or set(row) != {"origin", "localStorage"} or row["origin"] not in origins or not isinstance(row["localStorage"], list):
+                raise BrowserAutomationError("Invalid portable localStorage scope")
+            keys = []
+            for item in row["localStorage"]:
+                if not isinstance(item, dict) or set(item) != {"key", "value"} or any(not isinstance(value, str) for value in item.values()):
+                    raise BrowserAutomationError("Invalid portable localStorage entry")
+                keys.append(item["key"])
+            if len(set(keys)) != len(keys):
+                raise BrowserAutomationError("Duplicate portable localStorage key")
+            found.append(row["origin"])
+        if len(found) != len(origins) or set(found) != set(origins):
+            raise BrowserAutomationError("Portable session origins do not match declared service scope")
+        bundle["cookies"] = [_session_cookie(row, domains) for row in bundle["cookies"]]
+        identities = [(row["name"], row["domain"], row["path"], json.dumps(row.get("partitionKey"), sort_keys=True)) for row in bundle["cookies"]]
+        if not identities or len(set(identities)) != len(identities):
+            raise BrowserAutomationError("Portable session has missing or duplicate cookies")
+        return bundle
+
+    def export_session(self, output: Path, *, expected_account_id: str,
+                       expected_username: str = None) -> dict:
+        """Export declared cookies and origin storage to a private runtime file."""
+        try:
+            origins, domains = self._portable_scope()
+            if not self.config.has_saved_session():
+                raise BrowserAutomationError("Portable session source has no saved browser session")
+            identity = self._portable_identity(expected_account_id, expected_username)
+            service = self._get_service()
+            if not service._opened:
+                service.browser_open("about:blank", headed=not self._headless_enabled(),
+                                     persistent_profile_dir=self._get_persistent_profile_dir(),
+                                     user_agent=self._browser_user_agent(), window_size=self._browser_window_size())
+            storage = []
+            for origin in origins:
+                service.page_goto(origin + "/")
+                storage.append({"origin": origin, "localStorage": service.localstorage_get(origin)})
+            cookies = [_session_cookie(row, domains, from_browser=True) for row in service.cookie_list()
+                       if isinstance(row, dict) and isinstance(row.get("domain"), str) and row["domain"].lstrip(".") in domains]
+            bundle = {"version": 1, "tool": self._tool_name(), "profile": self._profile_name(),
+                      "auth_type": "browser_session", "identity": identity, "cookies": cookies, "origins": storage}
+            bundle = self._validate_portable_bundle(bundle, self._profile_name(), expected_account_id, expected_username)
+            if self._portable_identity(expected_account_id, expected_username) != identity:
+                raise BrowserAutomationError("Portable session identity changed during export")
+            self._portable_close()
+            write_session_bundle(output, bundle)
+            return {"tool": bundle["tool"], "profile": bundle["profile"], "identity": identity,
+                    "cookies": len(cookies), "origins": len(storage), "exported": True}
+        except Exception:
+            raise BrowserAutomationError("Portable session export failed; no session data was disclosed") from None
+        finally:
+            self._portable_close()
+
+    def import_session(self, bundle: dict, *, expected_account_id: str,
+                       expected_username: str = None, target_profile: str = None) -> dict:
+        """Restore into a fresh private staging profile and verify persistence."""
+        try:
+            target_profile = target_profile or self._profile_name()
+            bundle = self._validate_portable_bundle(bundle, target_profile, expected_account_id, expected_username)
+            directory = self._get_persistent_profile_dir()
+            self._portable_profile_dir = directory
+            if directory.exists() and any(directory.iterdir()):
+                raise BrowserAutomationError("Portable session restore requires an empty staging browser profile")
+            service = self._get_service()
+            service.browser_open("about:blank", headed=not self._headless_enabled(), persistent_profile_dir=directory,
+                                 user_agent=self._browser_user_agent(), window_size=self._browser_window_size())
+            service.cookie_set(bundle["cookies"])
+            actual = { (row["name"], row["domain"], row["path"], json.dumps(row.get("partitionKey"), sort_keys=True)): _session_cookie(row, tuple(self.config.browser_session_cookie_domains()), from_browser=True)
+                       for row in service.cookie_list() if isinstance(row, dict) and row.get("domain", "").lstrip(".") in self.config.browser_session_cookie_domains() }
+            for row in bundle["cookies"]:
+                key = (row["name"], row["domain"], row["path"], json.dumps(row.get("partitionKey"), sort_keys=True))
+                saved = actual.get(key, {})
+                if any(saved.get(field) != value for field, value in row.items() if field != "expires") or (
+                    "expires" in row and abs(saved.get("expires", 0) - row["expires"]) > 1
+                ):
+                    raise BrowserAutomationError("Portable cookie readback failed")
+            for row in bundle["origins"]:
+                service.page_goto(row["origin"] + "/")
+                service.localstorage_set(row["origin"], row["localStorage"])
+                readback = {item["key"]: item["value"] for item in service.localstorage_get(row["origin"])}
+                if any(readback.get(item["key"]) != item["value"] for item in row["localStorage"]):
+                    raise BrowserAutomationError("Portable storage readback failed")
+            self._portable_close()
+            identity = self._portable_identity(expected_account_id, expected_username)
+            self._portable_close()
+            return {"tool": bundle["tool"], "profile": target_profile, "identity": identity,
+                    "cookies": len(bundle["cookies"]), "origins": len(bundle["origins"]), "verified": True}
+        except Exception as error:
+            if isinstance(error, BrowserAutomationError) and str(error) in {
+                "Portable session browser close failed",
+                "Portable session identity verification failed or requires device verification",
+                "Portable cookie readback failed",
+                "Portable storage readback failed",
+            }:
+                raise
+            raise BrowserAutomationError("Portable session restore failed or requires device verification; private staging was retained") from None
+        finally:
+            self._portable_close()
 
     # ---------------- Interstitial resolution ----------------
 
@@ -958,14 +1776,53 @@ class BrowserAutomation:
 
         raise AssertionError("unreachable: interstitial loop must return or raise")
 
+    def _main_document_http_status(self, page) -> Optional[int]:
+        """The main document's real HTTP status, or None when unreadable."""
+        try:
+            value = page.evaluate(HTTP_ERROR_STATUS_JS)
+        except Exception:
+            logger.debug("_main_document_http_status: evaluate failed", exc_info=True)
+            return None
+        return value if isinstance(value, int) else None
+
+    def _raise_for_http_error_status(self, page) -> None:
+        """Refuse to hand back a 429/5xx error document as if it were content.
+
+        A site answering HTTP 429 (rate limit) or >=500 (outage) renders a
+        normal-looking error page at the requested URL; a scraper that only
+        reads the DOM records that error page as valid (often empty) data.
+        Microworkers.com hit this live on 2026-09-04: /jobs.php answered 429,
+        the task-list extractor found zero rows, and discovery logged an
+        ``ok`` envelope with 0 tasks while ~1600 were actually available.
+        Opt out per tool with ``HTTP_ERROR_STATUS_RAISE = False``.
+        """
+        if not self.HTTP_ERROR_STATUS_RAISE:
+            return
+        status = self._main_document_http_status(page)
+        if status is None or (status < 500 and status != 429):
+            return
+        try:
+            url = page.evaluate("() => location.href")
+        except Exception:
+            url = ""
+        raise BrowserAutomationError(
+            f"The site answered HTTP {status} for the main document at "
+            f"{self._safe_url_for_log(url)} -- likely rate limiting or an "
+            "outage. Refusing to treat the error page as content; retry later."
+        )
+
     def get_page(self, url: str = None) -> BrowserHarnessService:
         """Get a page backed by the persistent profile, past any interstitial.
 
         Navigates via :meth:`_navigate_page`, then resolves any wall declared
-        in ``INTERSTITIALS`` so callers only ever receive real content.
+        in ``INTERSTITIALS`` so callers only ever receive real content, then
+        raises if that real content is actually an HTTP 429/5xx error document
+        (:meth:`_raise_for_http_error_status`).
         """
         page = self._navigate_page(url)
-        return self._resolve_interstitials(page, url)
+        page = self._resolve_interstitials(page, url)
+        self._raise_for_http_error_status(page)
+        return page
 
     def _navigate_page(self, url: str = None) -> BrowserHarnessService:
         """Get a :class:`BrowserHarnessService` backed by the persistent profile.
@@ -1018,16 +1875,31 @@ class BrowserAutomation:
         return self._page
 
     def clear_session(self) -> None:
-        """Wipe the persistent profile and invalidate the cached service.
+        """Clear this CLI's browser session state.
 
-        Propagates failures from the underlying ``data_delete()`` — no
-        silent recovery (one execution path, fail loudly).
+        Isolated profiles retain the historical behavior and delete their
+        Chromium user-data-dir. Shared profiles are never deleted from a
+        per-tool logout/``--force`` path: doing so would sign every browser
+        CLI out of Google/SSO. For a shared profile, close the service and
+        clear only tool-local browser-data through the config. Use
+        ``config.clear_shared_chromium_profile()`` for an intentional global
+        reset.
         """
         self._auth_verified_at = 0
-        svc = self._get_service()
-        if getattr(svc, "_user_data_dir", None) is None:
-            svc._user_data_dir = self._get_persistent_profile_dir()
-        svc.data_delete()
+        uses_shared = bool(
+            hasattr(self.config, "uses_shared_chromium_profile")
+            and self.config.uses_shared_chromium_profile()
+        )
+        if uses_shared:
+            if self._service is not None:
+                self._service.close()
+            if hasattr(self.config, "clear_session"):
+                self.config.clear_session()
+        else:
+            svc = self._get_service()
+            if getattr(svc, "_user_data_dir", None) is None:
+                svc._user_data_dir = self._get_persistent_profile_dir()
+            svc.data_delete()
         self._service = None
         self._page = None
 
@@ -1108,11 +1980,24 @@ class BrowserAutomation:
         if not callable(evaluate):
             return False
         try:
-            failed = bool(evaluate(self.AUTH_FAILURE_PAGE_JS))
+            verdict = evaluate(self.AUTH_FAILURE_PAGE_JS)
+            failed = bool(verdict)
         except Exception as e:
             logger.debug("_is_auth_failure_content: page inspection failed: %s", e)
             return False
-        logger.debug("_is_auth_failure_content: failed=%s", failed)
+        diagnostic = None
+        safe_diagnostic = re.fullmatch(
+            r"(?:http_status_[0-9]{3}(?:_code_[a-z][a-z0-9_]{0,80})?"
+            r"|invalid_json|missing_access_token|request_failed)",
+            verdict,
+        ) if isinstance(verdict, str) else None
+        if safe_diagnostic:
+            diagnostic = verdict
+        logger.debug(
+            "_is_auth_failure_content: failed=%s diagnostic=%s",
+            failed,
+            diagnostic,
+        )
         return failed
 
     def _raise_if_auth_failure_page(self, page) -> None:

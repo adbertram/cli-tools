@@ -265,6 +265,10 @@ def _split_block_on_element_limit(
         sibling = copy.deepcopy(block)
         sibling_body = sibling[block_type]
         sibling_body[rt_key] = group
+        if block_type == "numbered_list_item" and idx != 0:
+            # Notion permits a list start index only on the first item of a
+            # numbered list. Overflow siblings continue the same list.
+            sibling_body.pop("list_start_index", None)
         if idx != last_idx:
             # Keep children only on the final sibling to avoid duplicating them.
             sibling_body.pop("children", None)

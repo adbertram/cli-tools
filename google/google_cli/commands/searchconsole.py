@@ -2,6 +2,7 @@
 COMMAND_CREDENTIALS = {
     "index": ["custom"],
     "sites": ["custom"],
+    "sitemaps": ["custom"],
     "urls": ["custom"],
 }
 
@@ -486,3 +487,67 @@ def searchconsole_urls_get(
         raise typer.Exit(handle_error(e))
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+sitemaps_app = typer.Typer(help="Manage submitted Search Console sitemaps")
+app.add_typer(sitemaps_app, name="sitemaps")
+SITEMAP_FIELDS = ["path", "lastSubmitted", "isPending", "isSitemapsIndex", "type", "lastDownloaded", "warnings", "errors", "contents"]
+
+
+@sitemaps_app.command("list")
+@command
+def searchconsole_sitemaps_list(
+    site_url: str = typer.Argument(..., help="Exact Search Console property URL or sc-domain property"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as table"),
+    limit: int = typer.Option(100, "--limit", "-l", min=1, help="Maximum number of sitemaps"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Comma-separated output fields"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """List sitemaps submitted for a Search Console property."""
+    from cli_tools_shared.filters import apply_filters
+
+    fields = [field.strip() for item in properties for field in item.split(",")] if properties else SITEMAP_FIELDS
+    unknown = set(fields) - set(SITEMAP_FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown sitemap properties: {', '.join(sorted(unknown))}")
+    service = get_client(profile=profile).get_webmasters_v3_service()
+    rows = service.sitemaps().list(siteUrl=site_url).execute().get("sitemap", [])
+    rows = apply_filters(rows, filter, allowed_fields=SITEMAP_FIELDS)[:limit]
+    rows = [{key: value for key, value in row.items() if key in fields} for row in rows]
+    if table:
+        columns = fields if properties else ["path", "lastSubmitted", "isPending", "errors"]
+        print_table(rows, columns, columns)
+    else:
+        print_json(rows)
+
+
+@sitemaps_app.command("get")
+@command
+def searchconsole_sitemaps_get(
+    site_url: str = typer.Argument(..., help="Exact Search Console property URL or sc-domain property"),
+    sitemap_url: str = typer.Argument(..., help="Submitted sitemap URL"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Get Google's processing status for a submitted sitemap."""
+    service = get_client(profile=profile).get_webmasters_v3_service()
+    result = service.sitemaps().get(siteUrl=site_url, feedpath=sitemap_url).execute()
+    if table:
+        columns = ["path", "lastSubmitted", "isPending", "errors"]
+        print_table([result], columns, columns)
+    else:
+        print_json(result)
+
+
+@sitemaps_app.command("submit")
+@command
+def searchconsole_sitemaps_submit(
+    site_url: str = typer.Argument(..., help="Exact Search Console property URL or sc-domain property"),
+    sitemap_url: str = typer.Argument(..., help="Public sitemap URL to submit"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Submit a sitemap URL to Google; acceptance does not guarantee indexing."""
+    service = get_client(profile=profile).get_webmasters_v3_service()
+    service.sitemaps().submit(siteUrl=site_url, feedpath=sitemap_url).execute()
+    print_json({"siteUrl": site_url, "path": sitemap_url, "submitted": True})

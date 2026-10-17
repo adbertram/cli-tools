@@ -138,7 +138,7 @@ def test_load_missing_secret_placeholder_raises_config_error(
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
         assert command == "get"
-        return subprocess.CompletedProcess([], 1, stdout="", stderr="not found")
+        return subprocess.CompletedProcess([], 44, stdout="", stderr="not found")
 
     monkeypatch.setattr(config_module, "_run_secret_manager", fake_run)
 
@@ -148,6 +148,35 @@ def test_load_missing_secret_placeholder_raises_config_error(
     message = str(excinfo.value)
     assert "exampletool-api-key" in message
     assert str(profile) in message
+
+
+def test_load_secret_placeholder_preserves_secret_manager_error(
+    tmp_path,
+    monkeypatch,
+    isolated_data_home,
+):
+    tool_dir = _tool_dir(tmp_path)
+    profile = get_profiles_base_dir(tool_dir.name) / "default" / ".env"
+    _write_profile(
+        profile,
+        "ACTIVE=true\nAPI_KEY=secret://exampletool-api-key\n",
+    )
+
+    def fake_run(command: str, secret_name: str, *, secret_value=None):
+        assert command == "get"
+        return subprocess.CompletedProcess(
+            [], 1, stdout="", stderr="Permission denied: /repo/secrets.log"
+        )
+
+    monkeypatch.setattr(config_module, "_run_secret_manager", fake_run)
+
+    with pytest.raises(ConfigError) as excinfo:
+        ApiKeyConfig(tool_dir=tool_dir)
+
+    message = str(excinfo.value)
+    assert "exampletool-api-key" in message
+    assert "Permission denied" in message
+    assert "Missing secret" not in message
 
 
 def test_load_missing_optional_secret_placeholder_treats_field_as_unconfigured(
@@ -266,7 +295,7 @@ def test_load_missing_root_config_secret_raises_config_error_with_env_path(
 
     def fake_run(command: str, secret_name: str, *, secret_value=None):
         assert command == "get"
-        return subprocess.CompletedProcess([], 1, stdout="", stderr="not found")
+        return subprocess.CompletedProcess([], 44, stdout="", stderr="not found")
 
     monkeypatch.setattr(config_module, "_run_secret_manager", fake_run)
 
