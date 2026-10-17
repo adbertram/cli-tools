@@ -107,6 +107,18 @@ gemini-api files delete files/abc123
 gemini-api files delete files/abc123 --yes  # Skip confirmation
 ```
 
+### Account
+
+Open the AI Studio page where prepaid credits are added (for example after a `402 RESOURCE_EXHAUSTED ... prepayment credits are depleted` error). Makes no Gemini API call and needs no credentials.
+
+```bash
+# Open https://ai.studio/projects in the default browser and print the URL
+gemini-api account topup
+
+# Only print the URL
+gemini-api account topup --no-open
+```
+
 ### Models
 
 ```bash

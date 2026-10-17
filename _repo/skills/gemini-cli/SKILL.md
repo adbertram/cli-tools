@@ -29,6 +29,7 @@ gemini-api <command-group> <action> [arguments] [options]
 | List models | `gemini-api models list --table` |
 | Show API usage | `gemini-api usage show --table` |
 | Check auth status | `gemini-api auth status` |
+| Add API credits (open billing page) | `gemini-api account topup` (`--no-open` prints URL only) |
 </quick_start>
 
 <essential_principles>
@@ -46,6 +47,7 @@ installs `gemini-api` as an unambiguous alias.
 </principle>
 
 <principle name="Command Groups">
+- **account** -- Open the AI Studio page to add prepaid credits (no auth needed)
 - **auth** -- Manage API authentication (login, logout, status)
 - **chat** -- Chat and content generation with optional file attachments
 - **files** -- Upload, list, get, and delete files via the Gemini Files API
