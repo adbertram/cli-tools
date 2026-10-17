@@ -1,0 +1,632 @@
+
+<!doctype html>
+<html lang="en"
+      x-data="{
+        theme: localStorage.getItem('garrul.theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+        helpOpen: false,
+        navOpen: false,
+        setTheme(t) { this.theme = t; localStorage.setItem('garrul.theme', t); document.documentElement.setAttribute('data-theme', t); },
+        typing(e) { const t = e.target; return !!(t && t.closest && t.closest('input, textarea, select, [contenteditable]')); },
+        onKey(e) {
+          if (e.key === 'Escape') { this.helpOpen = false; return; }
+          if (e.ctrlKey || e.metaKey || e.altKey) return;
+          if (this.typing(e)) return;
+          if (e.key === '?') { e.preventDefault(); this.helpOpen = !this.helpOpen; return; }
+          if (e.key === '/') { const el = Array.from(document.querySelectorAll('input[type=text],input[type=search]')).find(n => n.offsetParent !== null); if (el) { e.preventDefault(); el.focus(); } }
+        }
+      }"
+      x-init="document.documentElement.setAttribute('data-theme', theme)"
+      @keydown.window="onKey($event)">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edit webhook — Garrul Admin</title>
+<style>
+/* ── Design tokens ──────────────────────────────────────────────────────
+   Light is the default (:root). Dark is opt-in via [data-theme="dark"] on
+   <html>. When the operator has made no explicit choice, the OS preference
+   wins via the prefers-color-scheme block below (scoped to :not([data-theme])
+   so an explicit data-theme="light" always beats a dark OS). */
+:root {
+  --bg: #f6f8fa; --surface: #ffffff; --surface-2: #f0f3f6;
+  --border: #e2e7ec; --border-strong: #cdd5dd;
+  --text: #1b2733; --muted: #5c6b7a;
+  --accent: #2563eb; --accent-fg: #ffffff; --accent-weak: #e8f0fe;
+  --ok: #15803d; --ok-weak: #e7f6ec;
+  --warn: #b45309; --warn-weak: #fdf2e3;
+  --bad: #dc2626; --bad-weak: #fdeaea;
+  --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.10);
+  --shadow-lg: 0 8px 28px rgba(16,24,40,.16);
+  --radius: 10px; --radius-sm: 7px;
+}
+[data-theme="dark"] {
+  --bg: #0b0d10; --surface: #131820; --surface-2: #0f141b;
+  --border: #1e2530; --border-strong: #2a3340;
+  --text: #e7eaf0; --muted: #8a93a6;
+  --accent: #6aa9ff; --accent-fg: #0b0d10; --accent-weak: #16243a;
+  --ok: #4ad295; --ok-weak: #11251c;
+  --warn: #f7b955; --warn-weak: #2a2113;
+  --bad: #ef6a6a; --bad-weak: #2a1717;
+  --shadow: 0 1px 2px rgba(0,0,0,.4);
+  --shadow-lg: 0 8px 28px rgba(0,0,0,.55);
+  --radius: 10px; --radius-sm: 7px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg: #0b0d10; --surface: #131820; --surface-2: #0f141b;
+    --border: #1e2530; --border-strong: #2a3340;
+    --text: #e7eaf0; --muted: #8a93a6;
+    --accent: #6aa9ff; --accent-fg: #0b0d10; --accent-weak: #16243a;
+    --ok: #4ad295; --ok-weak: #11251c;
+    --warn: #f7b955; --warn-weak: #2a2113;
+    --bad: #ef6a6a; --bad-weak: #2a1717;
+    --shadow: 0 1px 2px rgba(0,0,0,.4);
+    --shadow-lg: 0 8px 28px rgba(0,0,0,.55);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+       font: 14px/1.5 system-ui, -apple-system, Segoe UI, sans-serif; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+/* Consistent keyboard focus ring across all interactive chrome. The switch
+   input manages its own ring (it's visually hidden), so exclude it here. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px;
+                 border-radius: var(--radius-sm); }
+.switch input:focus-visible { outline: none; }
+/* ── App shell: fixed sidebar + scrolling content ───────────────────────── */
+.app-shell { display: flex; min-height: 100vh; }
+.sidebar { position: sticky; top: 0; align-self: flex-start; flex: 0 0 240px;
+           width: 240px; height: 100vh; background: var(--surface);
+           border-right: 1px solid var(--border); display: flex;
+           flex-direction: column; overflow-y: auto; z-index: 50; }
+.brand { display: flex; align-items: center; gap: 0.5rem; padding: 1rem 1.1rem;
+         font-size: 1.1rem; font-weight: 700; color: var(--text);
+         text-decoration: none; }
+.brand:hover { text-decoration: none; }
+.brand .icon { color: var(--accent); }
+.sidebar-nav { flex: 1; padding: 0.25rem 0.6rem; }
+.nav-section { margin-bottom: 1rem; }
+.nav-heading { margin: 0.5rem 0.6rem 0.35rem; font-size: 0.68rem; font-weight: 600;
+               text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.nav-link { display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.6rem;
+            border-radius: var(--radius-sm); color: var(--text); font-size: 0.9rem;
+            text-decoration: none; }
+.nav-link .icon { color: var(--muted); transition: color 0.12s; }
+.nav-link:hover { background: var(--surface-2); text-decoration: none; }
+.nav-link.active { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+.nav-link.active .icon { color: var(--accent); }
+.sidebar-footer { display: flex; align-items: center; gap: 0.5rem;
+                  padding: 0.75rem 1.1rem; border-top: 1px solid var(--border); }
+.sidebar-footer .me { color: var(--muted); font-size: 0.85rem; flex: 1; min-width: 0;
+                      display: flex; align-items: center; gap: 0.4rem; }
+.footer-actions { display: flex; gap: 0.3rem; flex: 0 0 auto; }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center;
+            min-width: 30px; height: 30px; padding: 0 0.4rem; background: transparent;
+            border: 1px solid transparent; border-radius: var(--radius-sm); color: var(--muted); }
+.icon-btn:hover { background: var(--surface-2); color: var(--text); border-color: transparent; }
+.content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1.25rem;
+          border-bottom: 1px solid var(--border); background: var(--surface);
+          position: sticky; top: 0; z-index: 40; }
+.topbar h1 { font-size: 1.05rem; margin: 0; font-weight: 600; }
+.hamburger { display: none; }
+.scrim { display: none; }
+main { width: 100%; margin: 1.5rem auto; padding: 0 1.25rem; }
+.card { background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1rem;
+        box-shadow: var(--shadow); }
+.card h2, .card h3 { margin-top: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between;
+             gap: 1rem; margin-bottom: 0.5rem; }
+.card-head h2, .card-head h3 { margin: 0; }
+.embed-snippet { background: var(--surface-2); border: 1px solid var(--border);
+                 border-radius: var(--radius-sm); padding: 0.75rem 0.9rem; margin: 0;
+                 overflow-x: auto; font-size: 0.82rem; line-height: 1.5; }
+.embed-snippet code { background: transparent; padding: 0; }
+.stat-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.stat { background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 0.85rem 1.1rem; box-shadow: var(--shadow); }
+.stat .v { font-size: 2rem; font-weight: 700; line-height: 1.1;
+           font-variant-numeric: tabular-nums; color: var(--text); }
+.stat .l { color: var(--muted); font-size: 0.8rem; margin-top: 0.15rem; }
+/* Status variants: tinted wash + colored value. */
+.stat.ok { background: var(--ok-weak); border-color: transparent; }
+.stat.ok .v { color: var(--ok); }
+.stat.warn { background: var(--warn-weak); border-color: transparent; }
+.stat.warn .v { color: var(--warn); }
+.stat.bad { background: var(--bad-weak); border-color: transparent; }
+.stat.bad .v { color: var(--bad); }
+.stat.accent { background: var(--accent-weak); border-color: transparent; }
+.stat.accent .v { color: var(--accent); }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 0.55rem 0.5rem; border-bottom: 1px solid var(--border);
+         text-align: left; vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.72rem; text-transform: uppercase;
+     letter-spacing: 0.04em; position: sticky; top: 0; background: var(--surface);
+     z-index: 1; }
+tbody tr:nth-child(even) { background: var(--surface-2); }
+tbody tr:hover { background: var(--accent-weak); }
+.row-body { color: var(--text); width: 45%; min-width: 340px; overflow-wrap: anywhere; }
+.row-body .md { font-size: 0.9rem; }
+/* A fenced code block does not wrap, so one comment containing a <pre> would
+   widen the whole queue table past the viewport and the auto-layout would
+   collapse the meta column to one character per line. overflow-x alone does not
+   help — the table sizes columns from intrinsic content, which ignores both the
+   scroll container and a percentage max-width — so take the block's inline size
+   out of that calculation and let it scroll in place instead. */
+.md pre { contain: inline-size; overflow-x: auto; }
+.meta-cell { max-width: 200px; }
+.meta-cell code { overflow-wrap: anywhere; }
+.meta-cell a { color: inherit; text-decoration: none; }
+.meta-cell a:hover code { text-decoration: underline; }
+.meta-title { font-weight: 600; font-size: 0.82rem; overflow-wrap: anywhere; }
+.meta-ext { font-size: 0.7rem; }
+.cid { display: inline-block; font-size: 0.72rem; cursor: pointer; overflow-wrap: anywhere; }
+.cid:hover { color: var(--text); text-decoration: underline; }
+.pill { display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px;
+        font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+        border: 1px solid transparent; background: var(--surface-2); color: var(--muted); }
+.pill.approved { color: var(--ok); background: var(--ok-weak); }
+.pill.pending { color: var(--warn); background: var(--warn-weak); }
+.pill.spam, .pill.deleted, .pill.banned { color: var(--bad); background: var(--bad-weak); }
+.pill.admin { color: var(--accent); background: var(--accent-weak); }
+.pill.mod { color: var(--warn); background: var(--warn-weak); }
+button, .btn { display: inline-flex; align-items: center; gap: 0.4rem;
+               background: var(--surface); color: var(--text); border: 1px solid var(--border);
+               padding: 0.35rem 0.7rem; border-radius: var(--radius-sm); cursor: pointer;
+               font-size: 0.85rem; font-weight: 500; transition: background 0.12s, border-color 0.12s; }
+button:hover, .btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+/* Primary: filled accent. */
+button.btn-primary, .btn-primary { background: var(--accent); color: var(--accent-fg);
+                                   border-color: var(--accent); }
+button.btn-primary:hover, .btn-primary:hover { filter: brightness(1.05);
+                                               border-color: var(--accent); background: var(--accent); }
+/* Secondary alias keeps existing class="secondary" markup working. */
+button.btn-secondary, .btn-secondary, button.secondary, .secondary {
+  background: var(--surface-2); color: var(--text); border-color: var(--border); }
+/* Danger; .bad is the historical alias used in <td class="actions"> rows. */
+button.btn-danger, .btn-danger, button.bad, .btn.bad { color: var(--bad); }
+button.btn-danger:hover, .btn-danger:hover, button.bad:hover, .btn.bad:hover {
+  border-color: var(--bad); background: var(--bad-weak); }
+button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.actions { display: flex; gap: 0.4rem; flex-wrap: wrap; max-width: 168px; }
+.actions button { padding: 0.28rem 0.55rem; font-size: 0.8rem; }
+.author-cell { display: flex; gap: 0.5rem; align-items: center; color: inherit;
+               text-decoration: none; max-width: 180px; }
+.author-cell:hover .author-name { text-decoration: underline; }
+.author-avatar { display: inline-block; width: 28px; height: 28px;
+                 border-radius: 50%; overflow: hidden; flex: 0 0 auto;
+                 background: var(--surface-2); }
+.author-avatar img, .author-avatar svg { width: 100%; height: 100%;
+                                          display: block; border-radius: 50%; }
+.author-meta { display: flex; flex-direction: column; min-width: 0;
+               line-height: 1.15; }
+.author-name { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; }
+.author-sub { font-size: 0.7rem; }
+.filter-bar { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 1rem; }
+.filter-bar input[type=text], .filter-bar input[type=date] {
+                                background: var(--surface); border: 1px solid var(--border);
+                                color: var(--text); padding: 0.4rem 0.6rem;
+                                border-radius: var(--radius-sm); }
+.filter-bar input[type=text]:focus, .filter-bar input[type=date]:focus {
+                                outline: 2px solid var(--accent); outline-offset: 1px;
+                                border-color: var(--accent); }
+.filter-bar input[type=text] { min-width: 200px; }
+.filter-bar.queue-filter { flex-wrap: wrap; }
+.filter-bar.queue-filter input[type=text] { min-width: 140px; }
+.muted { color: var(--muted); }
+.pager { display: flex; justify-content: space-between; margin-top: 1rem; }
+.bulk-cell { width: 32px; }
+.score-cell { width: 70px; text-align: center; font-variant-numeric: tabular-nums; }
+.score { font-weight: 600; }
+.score-pos { color: var(--ok); }
+.score-neg { color: var(--bad); }
+.bulk-bar { position: sticky; bottom: 0; display: flex; align-items: center;
+            gap: 0.5rem; padding: 0.75rem 1rem; background: var(--surface);
+            border-top: 1px solid var(--border); margin: 1rem -1rem -1rem;
+            border-radius: 0 0 var(--radius) var(--radius); box-shadow: var(--shadow-lg); }
+.bulk-bar span:first-child { font-weight: 600; margin-right: auto; }
+/* The keyboard cursor. An outline and no background tint, because the tint has
+   nowhere to land: tbody tr:nth-child(even) is already surface-2, so tinting
+   the cursor row surface-2 marked odd rows and left even ones looking exactly
+   as they did.
+   Drawn on the <tr>, which border-collapse: collapse makes paintable, and not
+   on the cells: .actions is display:flex, so that td is out of table layout
+   and sizes to its buttons — per-cell edges came up short there and the
+   rectangle didn't close. scroll-margin keeps the row clear of the sticky bulk
+   bar when j/k scrolls it into view. */
+.row-cursor { border: 2px solid var(--accent); scroll-margin: 4rem 0; }
+.shortcut-strip { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem;
+                  font-size: 0.8rem; margin: 0 0 0.75rem; }
+/* Moderator notes. Bodies are plain text, so pre-wrap is what makes a note
+   someone typed with line breaks read back the way they typed it — nothing
+   else in this admin renders unparsed operator input. */
+.note-list { list-style: none; margin: 0; padding: 0;
+             display: flex; flex-direction: column; gap: 0.5rem; }
+.note { border-left: 3px solid var(--border); padding: 0.25rem 0 0.25rem 0.6rem; }
+.note-meta { font-size: 0.8rem; display: flex; align-items: center;
+             gap: 0.4rem; flex-wrap: wrap; }
+.note-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.note-del { font-size: 0.75rem; padding: 0.05rem 0.35rem; }
+/* Queue note badge. Neutral on purpose — it says "read before you act",
+   not "this is bad", which is what the report and spam pills already say. */
+.note-badge { background: var(--surface-2); color: var(--text);
+              border: 1px solid var(--border-strong); }
+[x-cloak] { display: none !important; }
+.reply-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+               display: flex; align-items: flex-start; justify-content: center;
+               padding-top: 6vh; z-index: 1100; }
+.reply-modal-inner { background: var(--surface); border: 1px solid var(--border);
+                     border-radius: var(--radius); padding: 1.25rem; width: min(560px, 92vw);
+                     max-height: 85vh; overflow: auto; box-shadow: var(--shadow-lg); }
+.reply-list { list-style: none; padding: 0; margin: 0 0 0.75rem; max-height: 30vh;
+              overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.reply-list li { border-bottom: 1px solid var(--border); }
+.reply-list li:last-child { border-bottom: none; }
+.reply-pick { display: flex; justify-content: space-between; gap: 0.75rem;
+              width: 100%; padding: 0.5rem 0.75rem; background: transparent;
+              border: none; color: var(--text); text-align: left; cursor: pointer; }
+.reply-pick:hover { background: var(--surface-2); }
+.reply-pick.active { background: var(--accent); color: var(--accent-fg); }
+.reply-pick.active .muted { color: var(--accent-fg); opacity: 0.85; }
+/* Preview renders the same allowlisted HTML a posted comment would store, so it
+   is boxed to read as output rather than as more of the form. */
+.reply-preview { border: 1px solid var(--border); border-radius: 6px;
+                 padding: 0.5rem 0.75rem; background: var(--surface-2); }
+.reply-preview > div > :first-child { margin-top: 0; }
+.reply-preview > div > :last-child { margin-bottom: 0; }
+.comment-card { border: 1px solid var(--border); border-radius: 6px;
+                padding: 0.75rem; margin: 0.5rem 0; }
+.comment-card-head { display: flex; justify-content: space-between;
+                     align-items: center; gap: 1rem; margin-bottom: 0.25rem; }
+.comment-card .md { margin-top: 0.5rem; font-size: 0.9rem; }
+.user-head { display: flex; gap: 1rem; align-items: center; }
+.user-meta { flex: 1; min-width: 0; }
+.user-stats { display: flex; gap: 2rem; margin-top: 1rem;
+              padding-top: 1rem; border-top: 1px solid var(--border); }
+code { background: var(--surface-2); padding: 0.1rem 0.3rem; border-radius: 3px;
+       font-family: ui-monospace, monospace; font-size: 0.85em; }
+.toast-tray { position: fixed; right: 1rem; bottom: 1rem; display: flex;
+              flex-direction: column; gap: 0.5rem; z-index: 1000;
+              pointer-events: none; }
+.toast { background: var(--surface); border: 1px solid var(--border);
+         border-left: 3px solid var(--ok); border-radius: var(--radius-sm);
+         padding: 0.6rem 0.9rem; box-shadow: var(--shadow-lg);
+         max-width: 320px; font-size: 0.85rem; }
+.toast.bad { border-left-color: var(--bad); }
+.help-popover { position: fixed; bottom: 1rem; left: 1rem;
+                background: var(--surface); border: 1px solid var(--border);
+                border-radius: var(--radius); padding: 1rem 1.25rem; min-width: 220px;
+                z-index: 900; box-shadow: var(--shadow-lg); }
+.help-popover dl { display: grid; grid-template-columns: auto 1fr;
+                   gap: 0.4rem 0.8rem; margin: 0; }
+.help-popover dt { font-weight: 500; }
+.help-popover dd { margin: 0; color: var(--muted); }
+kbd { background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.05rem 0.4rem;
+      font-family: ui-monospace, monospace; font-size: 0.8em; }
+.dash-cols { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.dash-list { list-style: none; margin: 0; padding: 0; }
+.dash-list li { padding: 0.25rem 0; border-bottom: 1px dashed var(--border); }
+.dash-list li:last-child { border-bottom: 0; }
+.banner { display: flex; gap: 1rem; align-items: center; justify-content: space-between;
+          padding: 0.6rem 1rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+.banner.update { background: var(--warn-weak); color: var(--warn); border-bottom-color: var(--border-strong); }
+.banner.update a { color: var(--warn); text-decoration: underline; }
+.banner.update code { background: rgba(0,0,0,0.08); color: inherit; }
+.banner.update button { background: transparent; color: inherit; border-color: var(--border-strong); }
+.banner.update button:hover { border-color: var(--warn); }
+.link-list { list-style: none; padding: 0; margin: 0.5rem 0; display: grid;
+             gap: 0.25rem; }
+.link-list li { padding: 0.15rem 0; }
+.release-card { border: 1px solid var(--border); border-radius: 6px;
+                padding: 0.75rem 1rem; margin: 0.75rem 0; }
+.release-card:last-child { margin-bottom: 0; }
+.release-head { margin: 0 0 0.25rem; font-size: 1rem;
+                display: flex; gap: 0.5rem; align-items: baseline;
+                flex-wrap: wrap; }
+.release-head a { font-family: ui-monospace, monospace; }
+.release-name { color: var(--muted); font-weight: 400; font-size: 0.9rem; }
+.release-body { font-size: 0.9rem; }
+.release-body p:first-child { margin-top: 0; }
+.release-body p:last-child { margin-bottom: 0; }
+/* ── Shared controls (icons, switches, steppers, tabs, charts) ──────────── */
+.icon { display: inline-block; vertical-align: -0.18em; flex: 0 0 auto; }
+.field-row, .switch-row { display: flex; gap: 0.75rem; align-items: flex-start;
+                          padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+.field-row:last-child, .switch-row:last-child { border-bottom: 0; }
+/* Same row rhythm as .field-row, but label above and control below, for
+   controls too wide to sit in the narrow column (see renderTextarea). */
+.field-stack { display: flex; flex-direction: column; gap: 0.4rem;
+               padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+.field-stack:last-child { border-bottom: 0; }
+.switch-row { cursor: pointer; }
+.field-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.field-text .muted { font-size: 0.8rem; }
+.switch { position: relative; display: inline-flex; flex: 0 0 auto; margin-top: 0.1rem; }
+.switch input { position: absolute; inset: 0; width: 100%; height: 100%;
+                margin: 0; opacity: 0; cursor: pointer; }
+.switch-track { width: 38px; height: 22px; border-radius: 999px;
+                background: var(--border-strong); transition: background 0.15s;
+                display: inline-block; position: relative; }
+.switch-thumb { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+                border-radius: 50%; background: #fff; transition: transform 0.15s;
+                box-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.stepper { display: inline-flex; align-items: stretch; flex: 0 0 auto;
+           border: 1px solid var(--border); border-radius: var(--radius-sm);
+           overflow: hidden; background: var(--surface-2); }
+.stepper-btn { background: transparent; border: 0; border-radius: 0;
+               padding: 0 0.6rem; font-size: 1rem; line-height: 1; color: var(--muted); }
+.stepper-btn:hover { background: var(--accent-weak); color: var(--text); border-color: transparent; }
+.stepper input[type=number] { width: 3.5rem; border: 0; border-left: 1px solid var(--border);
+                              border-right: 1px solid var(--border); background: var(--surface);
+                              color: var(--text); text-align: center; padding: 0.35rem 0.25rem;
+                              font-variant-numeric: tabular-nums; }
+.tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--border);
+        margin-bottom: 1rem; flex-wrap: wrap; }
+.tab { background: transparent; border: 0; border-bottom: 2px solid transparent;
+       border-radius: 0; padding: 0.5rem 0.75rem; color: var(--muted);
+       font-size: 0.9rem; cursor: pointer; }
+.tab:hover { color: var(--text); border-color: transparent; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.chart { display: block; width: 100%; }
+.settings-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+/* Usage page bars (Cloudflare dashboard) and the queue audit strip. */
+.usage-row { margin: 0.75rem 0; }
+.usage-row:first-of-type { margin-top: 0.25rem; }
+.usage-label { display: flex; justify-content: space-between; align-items: baseline;
+               gap: 0.5rem; margin-bottom: 0.3rem; font-size: 0.9rem; }
+.usage-label .muted { font-variant-numeric: tabular-nums; }
+.audit-strip { font-size: 0.8rem; margin-top: 0.4rem; }
+
+/* Below 880px the sidebar becomes an off-canvas drawer toggled by the
+   hamburger; a scrim covers the content behind it. navOpen drives both. */
+@media (max-width: 880px) {
+  .sidebar { position: fixed; top: 0; left: 0; height: 100vh;
+             transform: translateX(-100%); transition: transform 0.2s ease;
+             box-shadow: var(--shadow-lg); }
+  .sidebar.open { transform: translateX(0); }
+  .scrim { display: block; position: fixed; inset: 0; z-index: 45;
+           background: rgba(0,0,0,0.45); }
+  .hamburger { display: inline-flex; }
+}
+
+@media (max-width: 720px) {
+  .topbar { padding: 0.5rem 0.75rem; }
+  .topbar h1 { font-size: 0.95rem; }
+  main { margin: 0.75rem auto; padding: 0 0.6rem; }
+  .card { padding: 0.75rem 0.85rem; border-radius: 6px; }
+  .card table { display: block; overflow-x: auto; }
+  .author-cell { max-width: 140px; }
+  .row-body { width: auto; min-width: 240px; max-width: 280px; }
+  .bulk-bar { flex-wrap: wrap; }
+  .filter-bar.queue-filter { gap: 0.35rem; }
+  .filter-bar.queue-filter input[type=text] { min-width: 120px; }
+  .toast-tray { left: 0.5rem; right: 0.5rem; align-items: stretch; }
+  .toast { max-width: none; }
+}
+</style>
+</head>
+<body>
+
+<div x-data="{ shown: localStorage.getItem(&quot;garrul.dismissed.update.v2.27.0&quot;) !== '1' }"
+     x-show="shown"
+     class="banner update">
+  <span>Update available: <strong>v2.27.0</strong> —
+    <a href="https://github.com/KingPin/Garrul/releases/tag/v2.27.0" target="_blank" rel="noopener">release notes</a>.
+    Run <code>npm run upgrade</code>.</span>
+  <button @click="localStorage.setItem(&quot;garrul.dismissed.update.v2.27.0&quot;,'1'); shown=false"
+          aria-label="Dismiss update notice">Dismiss</button>
+</div>
+<div class="app-shell">
+  <div class="scrim" x-show="navOpen" x-cloak @click="navOpen = false"></div>
+  <aside class="sidebar" :class="navOpen && 'open'">
+    <a href="/admin" class="brand" @click="navOpen = false"><svg class="icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg><span>Garrul</span></a>
+    <nav class="sidebar-nav">
+<div class="nav-section">
+  <p class="nav-heading">Moderation</p>
+  <a href="/admin" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg><span>Dashboard</span></a><a href="/admin/queue" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg><span>Queue</span></a><a href="/admin/saved-replies" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg><span>Replies</span></a>
+</div>
+<div class="nav-section">
+  <p class="nav-heading">Manage</p>
+  <a href="/admin/users" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Users</span></a><a href="/admin/subscriptions" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><span>Subscriptions</span></a><a href="/admin/webhooks" class="nav-link active"
+       aria-current="page"
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 1 1 2 17"/><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"/><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"/></svg><span>Webhooks</span></a>
+</div>
+<div class="nav-section">
+  <p class="nav-heading">System</p>
+  <a href="/admin/audit" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg><span>Audit</span></a><a href="/admin/operator" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg><span>Operator</span></a><a href="/admin/telegram" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4Z"/></svg><span>Telegram</span></a><a href="/admin/settings" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span>Settings</span></a>
+</div>
+<div class="nav-section">
+  <p class="nav-heading">Help</p>
+  <a href="/admin/about" class="nav-link"
+       
+       @click="navOpen = false"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span>About</span></a>
+</div>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="me">CLI Test Admin <span class="pill admin">admin</span></span>
+      <span class="footer-actions">
+        <button class="icon-btn" @click="setTheme(theme === 'dark' ? 'light' : 'dark')"
+                aria-label="Toggle theme"
+                :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
+          <span x-show="theme === 'dark'" x-cloak><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+          <span x-show="theme !== 'dark'" x-cloak><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg></span>
+        </button>
+        <button class="icon-btn" @click="helpOpen = !helpOpen" aria-label="Keyboard shortcuts">?</button>
+      </span>
+    </div>
+  </aside>
+  <div class="content">
+    <div class="topbar">
+      <button class="icon-btn hamburger" @click="navOpen = !navOpen" aria-label="Toggle navigation"><svg class="icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+      <h1>Edit webhook</h1>
+    </div>
+    <main>
+
+<a href="/admin/webhooks" class="muted">← back to webhooks</a>
+<div class="card" x-data="{
+  busy: false,
+  rotate: false,
+  error: null,
+  async submit(e) {
+    e.preventDefault();
+    if (this.busy) return;
+    this.busy = true; this.error = null;
+    const form = new FormData(e.target);
+    const events = [&quot;comment.posted&quot;,&quot;comment.edited&quot;,&quot;comment.deleted&quot;,&quot;comment.approved&quot;,&quot;comment.spam&quot;,&quot;comment.reported&quot;].filter(ev =&gt; form.get(&#39;event_&#39; + ev));
+    const body = {
+      url: form.get(&#39;url&#39;),
+      events: events.length === 6 ? null : events,
+      adapter: form.get(&#39;adapter&#39;),
+      enabled: form.get(&#39;enabled&#39;) === &#39;on&#39;,
+    };
+    // Three states, and &#39;omitted&#39; is the default: the form can&#39;t show the
+    // stored secret, so sending null on a blank field would unsign the
+    // endpoint every time an admin edited its URL.
+    const typed = form.get(&#39;secret&#39;);
+    if (form.get(&#39;clear_secret&#39;)) body.secret = null;
+    else if (typed) body.secret = typed;
+    try {
+      const r = await fetch(&quot;\u002fadmin\u002fapi\u002fwebhooks\u002f01M2R5BCGA193VTCQWK6921ETC&quot;, {
+        method: &quot;PATCH&quot;,
+        headers: { &#39;content-type&#39;: &#39;application/json&#39; },
+        body: JSON.stringify(body),
+      });
+      const j = await r.json().catch(() =&gt; ({}));
+      if (!r.ok) throw new Error(j.error || (&#39;save failed: &#39; + r.status));
+      this.$dispatch(&#39;toast&#39;, { text: &#39;Endpoint saved&#39; });
+      setTimeout(() =&gt; location.href = &#39;/admin/webhooks&#39;, 300);
+    } catch (err) {
+      this.error = err.message;
+    } finally {
+      this.busy = false;
+    }
+  }
+}">
+  <h3 style="margin-top:0">Edit webhook endpoint</h3>
+  
+  <p x-show="error" style="color:var(--bad)" x-text="error"></p>
+  <form @submit="submit">
+    <p>
+      <label>URL<br>
+        <input type="text" name="url" required value="http://hooks.example.test/garrul"
+          placeholder="https://example.com/webhooks/garrul"
+          style="width:100%;max-width:560px">
+      </label>
+      <span class="muted" style="display:block;font-size:0.8rem">
+        For the <strong>Telegram</strong> adapter, put the destination
+        <code>chat id</code> here (e.g. <code>-1001234567890</code> or
+        <code>@yourchannel</code>) — not a URL. The bot token comes from the
+        <code>TELEGRAM_BOT_TOKEN</code> secret.
+      </span>
+    </p>
+    <div style="margin:1rem 0">
+      HMAC secret: <span class="pill approved">set</span>
+      <button type="button" class="btn" @click="rotate = !rotate"
+        x-text="rotate ? 'cancel rotation' : 'rotate…'"></button>
+      <label style="margin-left:0.75rem;font-weight:normal">
+        <input type="checkbox" name="clear_secret"> remove signing
+      </label>
+      <div x-show="rotate" x-cloak style="margin-top:0.4rem">
+        <input type="password" name="secret" autocomplete="new-password"
+          placeholder="new secret, 16–256 characters"
+          style="width:100%;max-width:560px">
+      </div>
+      <span class="muted" style="display:block;font-size:0.8rem">
+        The stored secret is write-only — it is never rendered back to the
+        browser. Leave this alone to keep it. Rotating invalidates the old
+        signature immediately, so coordinate with the receiver before changing
+        it on a live endpoint.
+      </span>
+    </div>
+    <p>
+      <label>Adapter<br>
+        <select name="adapter"><option value="generic" selected>Generic JSON (v1 contract)</option><option value="slack">Slack incoming webhook</option><option value="discord">Discord webhook</option><option value="telegram">Telegram bot (chat id in URL field)</option></select>
+      </label>
+    </p>
+    <p>
+      Events:<br>
+      
+<label style="display:inline-flex;gap:0.3rem;align-items:center;margin-right:0.8rem">
+  <input type="checkbox" name="event_comment.posted" checked> comment.posted
+</label>
+<label style="display:inline-flex;gap:0.3rem;align-items:center;margin-right:0.8rem">
+  <input type="checkbox" name="event_comment.edited" > comment.edited
+</label>
+<label style="display:inline-flex;gap:0.3rem;align-items:center;margin-right:0.8rem">
+  <input type="checkbox" name="event_comment.deleted" > comment.deleted
+</label>
+<label style="display:inline-flex;gap:0.3rem;align-items:center;margin-right:0.8rem">
+  <input type="checkbox" name="event_comment.approved" checked> comment.approved
+</label>
+<label style="display:inline-flex;gap:0.3rem;align-items:center;margin-right:0.8rem">
+  <input type="checkbox" name="event_comment.spam" > comment.spam
+</label>
+<label style="display:inline-flex;gap:0.3rem;align-items:center;margin-right:0.8rem">
+  <input type="checkbox" name="event_comment.reported" > comment.reported
+</label>
+      <span class="muted" style="display:block;font-size:0.8rem">
+        All boxes checked = no filter (every event matches).
+      </span>
+    </p>
+    <p>
+      <label>
+        <input type="checkbox" name="enabled" checked>
+        Enabled
+      </label>
+    </p>
+    <button :disabled="busy" type="submit">
+      <span x-show="!busy">Save changes</span>
+      <span x-show="busy">Saving…</span>
+    </button>
+  </form>
+</div>
+    </main>
+  </div>
+</div>
+<div class="toast-tray" role="status" aria-live="polite" aria-atomic="true"
+     x-data="{ items: [] }"
+     @toast.window="items.push({ id: Date.now() + Math.random(), text: $event.detail.text, kind: $event.detail.kind || 'ok' }); setTimeout(() => { items.shift(); }, 4000)">
+  <template x-for="t in items" :key="t.id">
+    <div :class="'toast ' + t.kind" x-text="t.text"></div>
+  </template>
+</div>
+<div class="help-popover" x-show="helpOpen" x-cloak @click.away="helpOpen = false" role="dialog" aria-label="Keyboard shortcuts">
+  <h4 style="margin-top:0">Shortcuts</h4>
+  <dl>
+    <dt><kbd>/</kbd></dt><dd>Focus search</dd>
+    <dt><kbd>?</kbd></dt><dd>Toggle this help</dd>
+    <dt><kbd>Esc</kbd></dt><dd>Close help</dd>
+  </dl>
+  
+</div>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.5/dist/cdn.min.js"
+        integrity="sha384-BxpSbjbDhVKwnC1UfcjsNEuMuxg4af5IXOaSi1Iq5rASQ/9a7uslhEXbP9UI/fXo"
+        crossorigin="anonymous"
+        defer></script>
+</body>
+</html>
