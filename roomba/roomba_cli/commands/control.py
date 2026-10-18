@@ -17,7 +17,7 @@ COMMAND_CREDENTIALS = {
 }
 
 
-def _resolve_robot(robot: str | None) -> str:
+def _resolve_robot(robot):
     """Resolve a robot name, falling back to the configured default."""
     from ..config import get_config
     config = get_config()
@@ -32,7 +32,7 @@ def _resolve_robot(robot: str | None) -> str:
 app = typer.Typer(help="Control Roomba robots")
 
 
-def _send_command(robot: str, command: str):
+def _send_command(robot, command):
     """Helper to send a command and display result.
 
     Raises typer.Exit(1) on failure, returns silently on success.
@@ -53,15 +53,32 @@ def control_start(
 ):
     """Start cleaning.
 
+    Fetches the robot's current map/region data and sends a
+    region-aware start command, mimicking what the iRobot HOME
+    app does when you tap on a job to start it.
+
     Examples:
         roomba control start "Living Room"
         roomba control start 192.168.1.50
         roomba control start  # uses default robot
     """
     try:
-        _send_command(_resolve_robot(robot), "start")
+        client = get_client()
+        result = client.start_cleaning(_resolve_robot(robot))
+
+        print_json(result)
+
+        if not result.success:
+            print_error(f"Start failed: {result.message}")
+            raise typer.Exit(1)
+        else:
+            print_success(result.message)
+
     except typer.Exit:
         raise
+    except ClientError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
     except Exception as e:
         raise typer.Exit(handle_error(e))
 
@@ -239,47 +256,6 @@ def control_rooms(
             raise typer.Exit(1)
 
         print_json([room.to_dict() for room in rooms])
-
-    except ClientError as e:
-        print_error(str(e))
-        raise typer.Exit(1)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
-
-
-@app.command("clean")
-def control_clean(
-    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
-    rooms: Optional[str] = typer.Option(None, "--rooms", "-r", help="Comma-separated room IDs to clean"),
-):
-    """Start cleaning with optional room selection.
-
-    Start a cleaning mission, optionally limited to specific rooms/zones.
-
-    Examples:
-        roomba control clean "Living Room"
-        roomba control clean "Living Room" --rooms "room1,room2"
-        roomba control clean  # uses default robot, cleans all areas
-    """
-    try:
-        client = get_client()
-        resolved_robot = _resolve_robot(robot)
-
-        # Build params dict
-        params: Optional[dict] = None
-        if rooms:
-            room_ids = [rid.strip() for rid in rooms.split(",")]
-            params = {"roomIds": room_ids}
-
-        result = client.send_command_with_params(
-            resolved_robot, "start", params
-        )
-
-        print_json(result)
-
-        if not result.success:
-            print_error(f"Clean command failed: {result.message}")
-            raise typer.Exit(1)
 
     except ClientError as e:
         print_error(str(e))
