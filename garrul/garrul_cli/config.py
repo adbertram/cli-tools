@@ -55,6 +55,24 @@ class Config(BaseConfig):
 
         return browser_for(self)
 
+    def has_saved_session(self) -> bool:
+        """True when there is a session to use, stored or in the shared profile.
+
+        The base check only looks for the shared profile's cookie database,
+        which is exactly the file another CLI's re-login empties. A session this
+        CLI stored itself is just as saved.
+        """
+        from . import session_store
+
+        return bool(session_store.load(self)) or super().has_saved_session()
+
+    def clear_session(self):
+        """Drop the stored session cookie along with the tool-local browser data."""
+        from . import session_store
+
+        session_store.clear(self)
+        super().clear_session()
+
     def test_connection(self) -> dict:
         """Prove the saved session still works with a real authenticated request."""
         from .client import GarrulClient

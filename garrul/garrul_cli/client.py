@@ -24,10 +24,10 @@ from cli_tools_shared.exceptions import ClientError, CredentialError
 from cli_tools_shared.http_session import BrowserAuthState, RequestsRetryPolicy, request_with_retry
 
 from . import parsers
+from . import session_store
 from .config import get_config
+from .session_store import SESSION_COOKIE_NAMES
 
-# Production names the cookie __Host-garrul_sess; an ENV=dev instance uses the bare name.
-SESSION_COOKIE_NAMES = ("__Host-garrul_sess", "garrul_sess")
 BULK_LIMIT = 100
 DETAIL_WORKERS = 8
 TIMEOUT_SECONDS = 30
@@ -85,14 +85,27 @@ class GarrulClient:
     # ------------------------------------------------------------ transport
 
     def _session_cookie(self) -> str:
-        """Read the session cookie that `garrul auth login` left in the CLI browser profile.
+        """Return the Garrul session cookie this CLI uses for admin requests.
 
-        BrowserAuthState.from_config reads live cookies through config.get_browser(),
-        the BrowserAutomation subclass in browser.py. No page is driven.
+        The stored copy comes first. It is the value the Worker issued at login,
+        kept outside the shared Chromium profile so another CLI's re-login
+        cannot take it. The server owns the session lifetime (the KV record
+        slides on every read), so the browser's original Max-Age is not a
+        reason to stop sending it; a dead session answers 401 and surfaces as a
+        credential error.
+
+        With no stored copy, fall back to the live cookie in the browser
+        profile, which is where `garrul auth login` used to be the only source.
         """
         if self._cookie is None:
-            state = BrowserAuthState.from_config(self.config)
             host = urlparse(self.base_url).hostname
+            stored = session_store.load(self.config)
+            if stored:
+                matching = [cookie for cookie in stored if cookie["name"] in SESSION_COOKIE_NAMES]
+                if matching:
+                    self._cookie = "; ".join(f"{cookie['name']}={cookie['value']}" for cookie in matching)
+                    return self._cookie
+            state = BrowserAuthState.from_config(self.config)
             found = [c for c in state.cookies_for_host(host, [host]) if c.name in SESSION_COOKIE_NAMES]
             if not found:
                 raise CredentialError(
