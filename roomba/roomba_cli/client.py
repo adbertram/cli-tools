@@ -17,6 +17,7 @@ from .models import (
     RobotDetail,
     CommandResult,
     CleaningPhase,
+    RoomInfo,
 )
 
 
@@ -273,6 +274,128 @@ class RoombaClient:
                 success=False,
                 robot=robot_config["name"],
                 command=command,
+                message=f"Command failed: {e}",
+            )
+        finally:
+            try:
+                roomba.disconnect()
+            except Exception:
+                pass
+
+    def get_rooms(self, name_or_ip: str) -> List[RoomInfo]:
+        """Get list of rooms from robot's pmaps data.
+
+        Args:
+            name_or_ip: Robot name or IP address
+            
+        Returns:
+            List of RoomInfo objects with room details
+        """
+        robot_config = self.config.get_robot(name_or_ip)
+        if not robot_config:
+            raise ClientError(f"Robot '{name_or_ip}' not found in configuration")
+
+        ip = robot_config["ip"]
+        blid = robot_config["blid"]
+        password = robot_config.get("password")
+
+        if not password:
+            raise ClientError(f"No password stored for robot '{name_or_ip}'")
+
+        from roombapy import RoombaFactory
+        from roombapy.roomba import Roomba
+        import threading
+            
+        room_client = RoombaFactory.create_roomba(ip, blid, password)
+        
+        # Wait for state data containing pmaps
+        rooms_data = []
+        data_received = threading.Event()
+        
+        def on_message(message):
+            nonlocal rooms_data
+            if "state" in message and "reported" in message["state"]:
+                reported = message["state"]["reported"]
+                if "pmaps" in reported:
+                    rooms_data = reported["pmaps"]
+                    data_received.set()
+        
+        room_client.register_on_message_callback(on_message)
+        room_client.connect()
+        time.sleep(10)  # Wait for pmaps data
+        
+        try:
+            roomba = RoombaFactory.create_roomba(ip, blid, password)
+            rooms = []
+            if rooms_data:
+                for item in rooms_data:
+                    room_id = str(item.get("id", ""))
+                    name = item.get("name", f"Room {room_id}")
+                    is_fav = item.get("favoriteZone", False)
+                    rooms.append(RoomInfo(room_id, name, is_fav))
+            return rooms
+        finally:
+            room_client.disconnect()
+
+    def send_command_with_params(
+        self, name_or_ip: str, command: str, params: Optional[dict] = None
+    ) -> CommandResult:
+        """Send a command with additional parameters.
+
+        Args:
+            name_or_ip: Robot name or IP address  
+            command: Command to send (start, stop, etc.)
+            params: Optional command parameters including roomIds
+            
+        Returns:
+            CommandResult model
+        """
+        robot_config = self.config.get_robot(name_or_ip)
+        if not robot_config:
+            raise ClientError(f"Robot '{name_or_ip}' not found in configuration")
+
+        ip = robot_config["ip"]
+        blid = robot_config["blid"]
+        password = robot_config.get("password")
+
+        if not password:
+            raise ClientError(f"No password stored for robot '{name_or_ip}'")
+
+        # Validate command
+        valid_commands = ["start", "stop", "pause", "resume", "dock", "find", "evac"]
+        if command not in valid_commands:
+            raise ClientError(
+                f"Invalid command '{command}'. Valid commands: {', '.join(valid_commands)}"
+            )
+
+        # Create roomba instance
+        roomba = RoombaFactory.create_roomba(ip, blid, password)
+
+        try:
+            # Small delay before connecting  
+            time.sleep(0.5)
+            roomba.connect()
+
+            # Wait briefly for connection to establish
+            time.sleep(1.0)
+
+            # Send the command with params
+            roomba.send_command(command, params or {})
+
+            # Wait briefly for command to be sent
+            time.sleep(0.5)
+
+            return CommandResult(
+                success=True,
+                robot=robot_config["name"],
+                command=command,
+                message=f"Command '{command}' sent with params: {params}",
+            )
+        except Exception as e:
+            return CommandResult(
+                success=False,
+                robot=robot_config["name"],
+                command=command, 
                 message=f"Command failed: {e}",
             )
         finally:

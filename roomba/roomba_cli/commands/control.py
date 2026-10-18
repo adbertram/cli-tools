@@ -215,3 +215,74 @@ def control_status(
         raise typer.Exit(1)
     except Exception as e:
         raise typer.Exit(code=handle_error(e))
+
+
+@app.command("rooms")
+def control_rooms(
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
+):
+    """Get list of rooms/zones from robot.
+
+    Displays available rooms and favorite zones based on the robot's map data.
+
+    Examples:
+        roomba control rooms "Living Room"
+        roomba control rooms 192.168.1.50
+        roomba control rooms  # uses default robot
+    """
+    try:
+        client = get_client()
+        rooms = client.get_rooms(_resolve_robot(robot))
+
+        if not rooms:
+            print_error("No rooms found for robot")
+            raise typer.Exit(1)
+
+        print_json([room.to_dict() for room in rooms])
+
+    except ClientError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("clean")
+def control_clean(
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
+    rooms: Optional[str] = typer.Option(None, "--rooms", "-r", help="Comma-separated room IDs to clean"),
+):
+    """Start cleaning with optional room selection.
+
+    Start a cleaning mission, optionally limited to specific rooms/zones.
+
+    Examples:
+        roomba control clean "Living Room"
+        roomba control clean "Living Room" --rooms "room1,room2"
+        roomba control clean  # uses default robot, cleans all areas
+    """
+    try:
+        client = get_client()
+        resolved_robot = _resolve_robot(robot)
+
+        # Build params dict
+        params: Optional[dict] = None
+        if rooms:
+            room_ids = [rid.strip() for rid in rooms.split(",")]
+            params = {"roomIds": room_ids}
+
+        result = client.send_command_with_params(
+            resolved_robot, "start", params
+        )
+
+        print_json(result)
+
+        if not result.success:
+            print_error(f"Clean command failed: {result.message}")
+            raise typer.Exit(1)
+
+    except ClientError as e:
+        print_error(str(e))
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
