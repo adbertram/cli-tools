@@ -6,68 +6,60 @@ from ..client import get_client, ClientError
 from cli_tools_shared.output import print_json, print_table, print_success, print_error, handle_error
 
 COMMAND_CREDENTIALS = {
-    "dock": [
-        "custom"
-    ],
-    "evac": [
-        "custom"
-    ],
-    "find": [
-        "custom"
-    ],
-    "pause": [
-        "custom"
-    ],
-    "resume": [
-        "custom"
-    ],
-    "start": [
-        "custom"
-    ],
-    "status": [
-        "custom"
-    ],
-    "stop": [
-        "custom"
-    ]
+    "dock": ["custom"],
+    "evac": ["custom"],
+    "find": ["custom"],
+    "pause": ["custom"],
+    "resume": ["custom"],
+    "start": ["custom"],
+    "status": ["custom"],
+    "stop": ["custom"],
 }
+
+
+def _resolve_robot(robot: str | None) -> str:
+    """Resolve a robot name, falling back to the configured default."""
+    from ..config import get_config
+    config = get_config()
+    if robot:
+        return robot
+    default = config.get_default_robot()
+    if default:
+        return default
+    raise ClientError("No robot specified and no default configured")
 
 
 app = typer.Typer(help="Control Roomba robots")
 
 
-def _send_command(robot: str, command: str, table: bool = False):
-    """Helper to send a command and display result."""
+def _send_command(robot: str, command: str):
+    """Helper to send a command and display result.
+
+    Raises typer.Exit(1) on failure, returns silently on success.
+    """
     client = get_client()
     result = client.send_command(robot, command)
 
-    if table:
-        print_table(
-            [result.to_dict()],
-            ["robot", "command", "success", "message"],
-            ["Robot", "Command", "Success", "Message"],
-        )
-    else:
-        print_json(result)
+    print_json(result)
 
     if not result.success:
+        print_error(f"Command failed: {result.message}")
         raise typer.Exit(1)
 
 
 @app.command("start")
 def control_start(
-    robot: str = typer.Argument(..., help="Robot name or IP address"),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
-    """
-    Start cleaning.
+    """Start cleaning.
 
     Examples:
         roomba control start "Living Room"
         roomba control start 192.168.1.50
+        roomba control start  # uses default robot
     """
     try:
-        _send_command(robot, "start", table)
+        _send_command(_resolve_robot(robot), "start")
     except typer.Exit:
         raise
     except Exception as e:
@@ -76,17 +68,17 @@ def control_start(
 
 @app.command("stop")
 def control_stop(
-    robot: str = typer.Argument(..., help="Robot name or IP address"),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
-    """
-    Stop cleaning.
+    """Stop cleaning.
 
     Examples:
         roomba control stop "Living Room"
+        roomba control stop 192.168.1.50
+        roomba control stop  # uses default robot
     """
     try:
-        _send_command(robot, "stop", table)
+        _send_command(_resolve_robot(robot), "stop")
     except typer.Exit:
         raise
     except Exception as e:
@@ -95,17 +87,17 @@ def control_stop(
 
 @app.command("pause")
 def control_pause(
-    robot: str = typer.Argument(..., help="Robot name or IP address"),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
-    """
-    Pause cleaning.
+    """Pause cleaning.
 
     Examples:
         roomba control pause "Living Room"
+        roomba control pause 192.168.1.50
+        roomba control pause  # uses default robot
     """
     try:
-        _send_command(robot, "pause", table)
+        _send_command(_resolve_robot(robot), "pause")
     except typer.Exit:
         raise
     except Exception as e:
@@ -114,17 +106,17 @@ def control_pause(
 
 @app.command("resume")
 def control_resume(
-    robot: str = typer.Argument(..., help="Robot name or IP address"),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
-    """
-    Resume cleaning after pause.
+    """Resume cleaning after pause.
 
     Examples:
         roomba control resume "Living Room"
+        roomba control resume 192.168.1.50
+        roomba control resume  # uses default robot
     """
     try:
-        _send_command(robot, "resume", table)
+        _send_command(_resolve_robot(robot), "resume")
     except typer.Exit:
         raise
     except Exception as e:
@@ -133,17 +125,17 @@ def control_resume(
 
 @app.command("dock")
 def control_dock(
-    robot: str = typer.Argument(..., help="Robot name or IP address"),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
-    """
-    Send robot to dock.
+    """Send robot to dock.
 
     Examples:
         roomba control dock "Living Room"
+        roomba control dock 192.168.1.50
+        roomba control dock  # uses default robot
     """
     try:
-        _send_command(robot, "dock", table)
+        _send_command(_resolve_robot(robot), "dock")
     except typer.Exit:
         raise
     except Exception as e:
@@ -152,17 +144,17 @@ def control_dock(
 
 @app.command("find")
 def control_find(
-    robot: str = typer.Argument(..., help="Robot name or IP address"),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
-    """
-    Play sound to locate robot.
+    """Play sound to locate robot.
 
     Examples:
         roomba control find "Living Room"
+        roomba control find 192.168.1.50
+        roomba control find  # uses default robot
     """
     try:
-        _send_command(robot, "find", table)
+        _send_command(_resolve_robot(robot), "find")
     except typer.Exit:
         raise
     except Exception as e:
@@ -171,17 +163,17 @@ def control_find(
 
 @app.command("evac")
 def control_evac(
-    robot: str = typer.Argument(..., help="Robot name or IP address"),
-    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
-    """
-    Empty bin (for models with Clean Base).
+    """Empty bin (for models with Clean Base).
 
     Examples:
         roomba control evac "Living Room"
+        roomba control evac 192.168.1.50
+        roomba control evac  # uses default robot
     """
     try:
-        _send_command(robot, "evac", table)
+        _send_command(_resolve_robot(robot), "evac")
     except typer.Exit:
         raise
     except Exception as e:
@@ -190,12 +182,11 @@ def control_evac(
 
 @app.command("status")
 def control_status(
-    robot: str = typer.Argument(..., help="Robot name or IP address"),
+    robot: str | None = typer.Argument(None, help="Robot name or IP address"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     timeout: float = typer.Option(10.0, "--timeout", help="Connection timeout in seconds"),
 ):
-    """
-    Get live status from robot.
+    """Get live status from robot.
 
     Connects to the robot and retrieves current state including
     battery level, cleaning phase, and bin status.
@@ -204,10 +195,11 @@ def control_status(
         roomba control status "Living Room"
         roomba control status "Living Room" --table
         roomba control status "Living Room" --timeout 15
+        roomba control status  # uses default robot
     """
     try:
         client = get_client()
-        status = client.get_status(robot, timeout=timeout)
+        status = client.get_status(_resolve_robot(robot), timeout=timeout)
 
         if table:
             print_table(
@@ -222,4 +214,4 @@ def control_status(
         print_error(str(e))
         raise typer.Exit(1)
     except Exception as e:
-        raise typer.Exit(handle_error(e))
+        raise typer.Exit(code=handle_error(e))
