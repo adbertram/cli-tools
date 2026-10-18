@@ -8,6 +8,7 @@ from email.utils import parsedate_to_datetime
 from types import SimpleNamespace
 from urllib.parse import urlencode
 from cli_tools_shared.exceptions import ClientError
+from cli_tools_shared.auth import BrowserAutomationError
 from .config import get_config, rewards_location
 
 MAX_BODY = 8_000_000
@@ -405,6 +406,8 @@ class WhopClient:
         try: return getattr(submission_operations,name)(self,*args,**kwargs)
         except WhopError: raise
         except ClientError as error:
+            if isinstance(error,BrowserAutomationError) and type(error.status) is int and (error.status==429 or 500<=error.status<=599):
+                raise WhopError(f'upstream_read_failed_http_{error.status}',category='rate_limit' if error.status==429 else 'transient',status=error.status) from None
             code=str(error).split(':',1)[0]
             if not re.fullmatch(r'[A-Za-z0-9_]{1,100}',code): code='submission_read_failed'
             category='auth' if code in ('submission_whop_actor_changed','account_identity_missing') else 'policy_changed' if code=='submission_requirements_changed' else 'invalid_request' if code=='campaign_join_confirmation_required' else 'not_ready' if code in ('submission_linked_tiktok_missing_or_ambiguous','submission_campaign_not_active_public','submission_application_required_or_unknown','submission_campaign_not_tiktok','submission_campaign_not_funded','submission_intake_not_open','submission_form_unavailable','submission_form_not_ready','submission_join_required','campaign_join_not_observed') else 'invalid_request'

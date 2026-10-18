@@ -74,6 +74,7 @@ def test_rate_limit_and_5xx_raise_naming_status(status):
     with pytest.raises(BrowserAutomationError) as excinfo:
         ProbeBrowser(status).get_page("https://example.com/results")
     assert f"HTTP {status}" in str(excinfo.value)
+    assert excinfo.value.status == status
     assert "rate limiting or an outage" in str(excinfo.value)
     assert "https://example.com/results" in str(excinfo.value)
 

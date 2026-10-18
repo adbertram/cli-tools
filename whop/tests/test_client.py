@@ -184,6 +184,8 @@ def test_missing_cursor_fails(client):
 
 def test_list_options_consume_values(monkeypatch):
     from whop_cli.commands import linked_accounts
+    from whop_cli.config import Config
+    monkeypatch.setattr(Config,'has_saved_session',lambda self:True)
     calls=[]
     monkeypatch.setattr(linked_accounts,'read',lambda *args,**kwargs:(calls.append((args,kwargs)) or [{'id':'one','platform':'tiktok'}]))
     result=CliRunner().invoke(linked_accounts.app,['list','--limit','1','--filter','platform:eq:tiktok','--properties','id'])

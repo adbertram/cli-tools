@@ -38,6 +38,24 @@ def stored(c):
 def ready(c,**kwargs):
     return c.submission_readiness(CAMPAIGN,expected_account_id=ACTOR,expected_tiktok_account_id=TIKTOK,**kwargs)
 
+@pytest.mark.parametrize('status',[429,500,502,503,504,599])
+def test_readiness_preserves_navigation_http_failure_without_private_context(client,status):
+    from cli_tools_shared.auth import BrowserAutomationError
+    client.linked_accounts.side_effect=BrowserAutomationError('Private URL and session context',status=status)
+    with pytest.raises(op.WhopError) as caught:
+        ready(client)
+    assert str(caught.value)==f'upstream_read_failed_http_{status}'
+    assert caught.value.status==status
+    assert caught.value.category==('rate_limit' if status==429 else 'transient')
+    client.campaign.assert_not_called()
+
+def test_unclassified_browser_failure_stays_sanitized(client):
+    from cli_tools_shared.auth import BrowserAutomationError
+    client.linked_accounts.side_effect=BrowserAutomationError('Private URL and session context')
+    with pytest.raises(op.WhopError,match='^submission_read_failed$') as caught:
+        ready(client)
+    assert caught.value.status is None
+
 def send(c,receipt,request=REQUEST,**kwargs):
     requirements=ready(c)['requirements_digest']
     return c.create_submission(request,CAMPAIGN,receipt,expected_account_id=ACTOR,expected_tiktok_account_id=TIKTOK,accepted_requirements_digest=requirements,confirm=kwargs.pop('confirm',True),**kwargs)
@@ -370,6 +388,8 @@ def test_lock_is_exclusive_and_readiness_does_not_create_journal(client,receipt)
 def test_cli_confirmation_guard_before_receipt_or_client(monkeypatch):
     from typer.testing import CliRunner
     from whop_cli.commands import submissions
+    from whop_cli.config import Config
+    monkeypatch.setattr(Config,'has_saved_session',lambda self:True)
     read=Mock();monkeypatch.setattr(submissions,'read',read)
     result=CliRunner().invoke(submissions.app,['create',REQUEST,CAMPAIGN,'--publication-receipt','missing.json','--expected-account-id',ACTOR,'--expected-tiktok-account-id',TIKTOK,'--requirements-digest','a'*64])
     assert result.exit_code!=0 and 'submission_confirmation_required' in result.stderr

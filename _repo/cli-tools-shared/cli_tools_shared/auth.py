@@ -61,9 +61,10 @@ class BrowserAutomationError(ClientError):
     errors instead of tracebacks.
     """
 
-    def __init__(self, message: str, cause: Exception = None):
+    def __init__(self, message: str, cause: Exception = None, *, status: Optional[int] = None):
         self.message = message
         self.cause = cause
+        self.status = status
         super().__init__(message)
 
 
@@ -1808,7 +1809,8 @@ class BrowserAutomation:
         raise BrowserAutomationError(
             f"The site answered HTTP {status} for the main document at "
             f"{self._safe_url_for_log(url)} -- likely rate limiting or an "
-            "outage. Refusing to treat the error page as content; retry later."
+            "outage. Refusing to treat the error page as content; retry later.",
+            status=status,
         )
 
     def get_page(self, url: str = None) -> BrowserHarnessService:
