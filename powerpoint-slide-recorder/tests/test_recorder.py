@@ -2208,9 +2208,9 @@ class LiveClickStepProbeTests(unittest.TestCase):
         self.assertEqual(terminal_after_effects, {26: 1})
 
     @staticmethod
-    def _timing_part(main_sequence_steps, build_templates=""):
+    def _timing_part(main_sequence_steps, build_templates="", transition=""):
         namespace = TEST_PRESENTATIONML_NAMESPACE
-        return f'''<p:sldLayout xmlns:p="{namespace}"><p:timing>
+        return f'''<p:sldLayout xmlns:p="{namespace}">{transition}<p:timing>
           <p:tnLst><p:par><p:cTn nodeType="tmRoot"><p:childTnLst>
             <p:seq><p:cTn nodeType="mainSeq"><p:childTnLst>{main_sequence_steps}</p:childTnLst></p:cTn></p:seq>
           </p:childTnLst></p:cTn></p:par></p:tnLst>
@@ -2334,7 +2334,7 @@ class LiveClickStepProbeTests(unittest.TestCase):
 
         self.assertEqual(record.click_build_ms_in_xml(part), [])
 
-    def _deck(self, root, slide_steps, layout_steps=""):
+    def _deck(self, root, slide_steps, layout_steps="", slide_transition=""):
         import zipfile
 
         deck_path = root / "deck.pptx"
@@ -2342,7 +2342,7 @@ class LiveClickStepProbeTests(unittest.TestCase):
         with zipfile.ZipFile(deck_path, "w") as deck:
             deck.writestr("ppt/presentation.xml", presentation)
             deck.writestr("ppt/_rels/presentation.xml.rels", presentation_relationships)
-            deck.writestr("ppt/slides/slide8.xml", self._timing_part(slide_steps))
+            deck.writestr("ppt/slides/slide8.xml", self._timing_part(slide_steps, transition=slide_transition))
             deck.writestr("ppt/slideLayouts/slideLayout2.xml", self._timing_part(layout_steps))
             deck.writestr(
                 "ppt/slides/_rels/slide8.xml.rels",
@@ -2378,6 +2378,58 @@ class LiveClickStepProbeTests(unittest.TestCase):
                     record.click_settle_seconds_for_slide(deck_path, 8),
                     record.SLIDE_CLICK_PROBE_SETTLE_SECONDS,
                 )
+
+    # PowerPoint-authored shape: Morph duration lives in an AlternateContent choice;
+    # the fallback cut has no explicit duration.
+    MORPH_TRANSITION = '''
+      <mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+          xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main"
+          xmlns:p159="http://schemas.microsoft.com/office/powerpoint/2015/09/main">
+        <mc:Choice Requires="p159"><p:transition p14:dur="1000"><p159:morph option="byObject"/></p:transition></mc:Choice>
+        <mc:Fallback><p:transition><p:cut/></p:transition></mc:Fallback>
+      </mc:AlternateContent>'''
+
+    def test_morph_transition_settles_before_the_next_press_during_the_walk(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._deck(
+                Path(temp_dir), self._click_step(self._effect("clickEffect", 500)),
+                slide_transition=self.MORPH_TRANSITION,
+            )
+            settle = record.click_settle_seconds_for_slide(deck_path, 8)
+
+        self.assertEqual(settle, 1.0 + record.CLICK_BUILD_SETTLE_MARGIN_SECONDS)
+        # Advance from 7 into the Morph on 8, play 8's one cue, then finish.
+        with mock.patch.object(record, "press_space"), \
+                mock.patch.object(record, "live_slideshow_slide_index", side_effect=[8, 8, None]), \
+                mock.patch.object(record.time, "sleep") as sleep:
+            observed = record.walk_slideshow_slide_indexes(4, 7, {7: 0.7, 8: settle})
+
+        self.assertEqual(record.click_steps_from_slide_index_walk([7, 8], observed), {7: 0, 8: 1})
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [settle] * 3)
+
+    def test_transition_duration_never_shortens_a_longer_click_build(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            deck_path = self._deck(Path(temp_dir), self.slide_eight_steps(), slide_transition=self.MORPH_TRANSITION)
+            self.assertEqual(record.click_settle_seconds_for_slide(deck_path, 8), 2.3)
+
+    def test_transition_duration_keeps_default_transition_behavior(self):
+        for transition in ("", '<p:transition/>', '<p:transition spd="slow"><p:fade/></p:transition>'):
+            with self.subTest(transition=transition), tempfile.TemporaryDirectory() as temp_dir:
+                deck_path = self._deck(Path(temp_dir), "", slide_transition=transition)
+                self.assertEqual(record.click_settle_seconds_for_slide(deck_path, 8), record.SLIDE_CLICK_PROBE_SETTLE_SECONDS)
+
+    def test_explicit_duration_applies_to_other_transitions_and_rejects_invalid_values(self):
+        for duration, expected in (("2500", 2500), ("0", 0), ("oops", None), ("-1", None), ("1.5", None)):
+            with self.subTest(duration=duration):
+                part = self._timing_part("", transition=(
+                    '<p:transition xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" '
+                    f'p14:dur="{duration}"><p:fade/></p:transition>'
+                ))
+                if expected is None:
+                    with self.assertRaisesRegex(ValueError, "Invalid transition p14:dur"):
+                        record.transition_ms_in_xml(part)
+                else:
+                    self.assertEqual(record.transition_ms_in_xml(part), expected)
 
     @staticmethod
     def _presentation_parts(part_numbers):

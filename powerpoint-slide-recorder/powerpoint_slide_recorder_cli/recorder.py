@@ -172,11 +172,11 @@ DURING_CAPTURE_SLIDESHOW_CHECK_SECONDS = 2.0
 # Floor for the settle window after a Space press, before the next press or a slide
 # index read. A press that lands while a click build is still playing is absorbed by
 # PowerPoint (it finishes the build instead of starting the next step), so each slide
-# settles for its own longest click build read from the deck (see
+# settles for its own longest click build or explicit transition duration (see
 # click_settle_seconds_for_slide). 0.7s is the measured window for the plain 500ms
 # fade builds and stays the minimum for every slide.
 SLIDE_CLICK_PROBE_SETTLE_SECONDS = 0.7
-# Headroom added to a slide's longest authored click build: the same 200ms margin the
+# Headroom added to a slide's longest authored build or transition: the same 200ms margin the
 # 0.7s floor gives a 500ms build, covering keystroke delivery and show-index latency.
 CLICK_BUILD_SETTLE_MARGIN_SECONDS = 0.2
 # Hard upper bound on click steps the probe will tolerate on a single slide before
@@ -190,6 +190,7 @@ SLIDE_ADVANCE_CONFIRM_SECONDS = 3.0
 # window, or the post-final-slide black screen where the view has no current slide).
 SLIDESHOW_ENDED_MARKER = "ended"
 PRESENTATIONML_NAMESPACE = "http://schemas.openxmlformats.org/presentationml/2006/main"
+POWERPOINT_2010_NAMESPACE = "http://schemas.microsoft.com/office/powerpoint/2010/main"
 PACKAGE_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships"
 DOCUMENT_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 SLIDE_LAYOUT_RELATIONSHIP_SUFFIX = "/slideLayout"
@@ -1266,12 +1267,32 @@ def terminal_next_click_after_effect_step(deck_path, slide_number):
     return int(any(terminal_next_click_after_effect_in_xml(part) for part in slide_animation_parts(deck_path, slide_number)))
 
 
+def transition_ms_in_xml(part_xml):
+    """Longest explicit p14:dur in milliseconds, including AlternateContent transitions.
+
+    PowerPoint writes Morph and other transitions inside compatibility choices. Read
+    their authored durations without guessing milliseconds from legacy speed names.
+    """
+    root = ElementTree.fromstring(part_xml)
+    durations = [0]
+    for transition in root.iter(f"{{{PRESENTATIONML_NAMESPACE}}}transition"):
+        duration = transition.get(f"{{{POWERPOINT_2010_NAMESPACE}}}dur")
+        if duration is None:
+            continue
+        if not duration.isascii() or not duration.isdigit():
+            raise ValueError(f"Invalid transition p14:dur {duration!r}: expected non-negative integer milliseconds")
+        durations.append(int(duration))
+    return max(durations)
+
+
 def click_settle_seconds_for_slide(deck_path, slide_number):
-    """Seconds to wait after any press on this slide so its longest click build has finished."""
-    longest_build_ms = max(
-        [0, *(ms for part in slide_animation_parts(deck_path, slide_number) for ms in click_build_ms_in_xml(part))]
+    """Seconds to wait so this slide's longest click build or transition has finished."""
+    parts = slide_animation_parts(deck_path, slide_number)
+    longest_ms = max(
+        [0, *(ms for part in parts for ms in click_build_ms_in_xml(part)),
+         *(transition_ms_in_xml(part) for part in parts)]
     )
-    return round(max(SLIDE_CLICK_PROBE_SETTLE_SECONDS, longest_build_ms / 1000 + CLICK_BUILD_SETTLE_MARGIN_SECONDS), 3)
+    return round(max(SLIDE_CLICK_PROBE_SETTLE_SECONDS, longest_ms / 1000 + CLICK_BUILD_SETTLE_MARGIN_SECONDS), 3)
 
 
 def render_live_slideshow_slide_index():
