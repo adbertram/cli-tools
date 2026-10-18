@@ -52,7 +52,7 @@ frameio shares get https://f.io/58zYKG1t --properties "id,downloadingEnabled"
 ### Assets
 
 ```bash
-# List the assets in the share's FILE collection (newest first, as the API returns them)
+# List files across the share and its folders (breadth-first, preserving collection order)
 frameio assets list https://f.io/58zYKG1t
 
 # Table output
@@ -139,7 +139,7 @@ frameio assets download https://f.io/58zYKG1t 5f14f9b8-b379-416d-98cb-40872e5f50
 
 ## Limits and Explicit Failures
 
-- Only the first page of 200 assets is read. A share reporting `hasNextPage: true` fails with an error because cursor pagination is not verified.
+- File discovery includes shared folders recursively, in breadth-first order. At most 200 files and folders total are accepted. Each collection reads its first page only; `hasNextPage: true` fails explicitly because cursor pagination is not verified. Duplicate IDs and folder cycles also fail.
 - Metadata responses larger than 2 MiB fail.
 - Share and asset IDs must be UUIDs.
 - Asset commands fail when the share is disabled, has downloading disabled, is expired, or has missing or malformed settings.

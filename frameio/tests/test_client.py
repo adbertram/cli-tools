@@ -251,3 +251,61 @@ def test_signed_urls_are_never_written_to_disk(monkeypatch, tmp_path):
     for path in tmp_path.rglob("*"):
         if path.is_file() and path.name != "video.mp4":
             assert "signature" not in path.read_text(errors="ignore")
+
+
+def folder_share(monkeypatch, collections):
+    share = public_share(monkeypatch)
+    original_read = share._read
+
+    def read(operation, variables):
+        if operation == "GetShareCollectionAssets":
+            assert "folderId: $folderId" in client.QUERIES[operation]
+            return {"share": {"id": SHARE, "collectionAssets":
+                collections.get((variables["folderId"], variables["assetType"]), collection_of())}}
+        return original_read(operation, variables)
+
+    monkeypatch.setattr(share, "_read", read)
+    return share
+
+
+def test_nested_share_files_are_discovered_and_download_membership_verified(monkeypatch):
+    folder = "a5274655-1aac-4d2b-b728-11b16bed7dcb"
+    nested = "d5274655-1aac-4d2b-b728-11b16bed7dcb"
+    share = folder_share(monkeypatch, {
+        (None, "FOLDER"): collection_of(folder),
+        (folder, "FOLDER"): collection_of(nested),
+        (nested, "FILE"): collection_of(ASSET),
+    })
+    assert share.asset_ids() == [ASSET]
+    assert share.list_assets()[0]["id"] == ASSET
+    assert share.get_asset(ASSET)["video"] is True
+    with pytest.raises(client.FrameIOError, match="not in the share"):
+        share.get_asset(IMAGE)
+
+
+def test_folder_cycles_fail_without_looping(monkeypatch):
+    share = folder_share(monkeypatch, {
+        (None, "FOLDER"): collection_of(IMAGE),
+        (IMAGE, "FOLDER"): collection_of(IMAGE),
+    })
+    with pytest.raises(client.FrameIOError, match="duplicate"):
+        share.asset_ids()
+
+
+def test_nested_pagination_cannot_silently_omit_files(monkeypatch):
+    share = folder_share(monkeypatch, {
+        (None, "FOLDER"): collection_of(IMAGE),
+        (IMAGE, "FILE"): {"nodes": [{"id": ASSET}], "pageInfo": {"hasNextPage": True}},
+    })
+    with pytest.raises(client.FrameIOError, match="pagination is not verified"):
+        share.list_assets(limit=1)
+
+
+def test_total_discovery_budget_includes_folders(monkeypatch):
+    monkeypatch.setattr(client, "MAX_ASSETS", 1)
+    share = folder_share(monkeypatch, {
+        (None, "FOLDER"): collection_of(IMAGE),
+        (IMAGE, "FILE"): collection_of(ASSET),
+    })
+    with pytest.raises(client.FrameIOError, match="exceeds supported discovery"):
+        share.asset_ids()

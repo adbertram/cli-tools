@@ -42,7 +42,10 @@ def public_share(monkeypatch, *, settings=None, collection=None, asset=None, ass
         if operation == "GetShareForShareReview":
             return {"share": settings}
         if operation == "GetShareCollectionAssets":
-            assert variables == {"shareId": SHARE, "assetType": "FILE", "page": {"first": 200}}
+            assert variables["folderId"] is None
+            if variables["assetType"] == "FOLDER":
+                return {"share": {"id": SHARE, "collectionAssets": collection_of()}}
+            assert variables == {"shareId": SHARE, "folderId": None, "assetType": "FILE", "page": {"first": 200}}
             return {"share": {"id": SHARE, "collectionAssets": collection}}
         if operation == "GetAssetForDownload":
             return {"asset": assets[variables["assetId"]]}

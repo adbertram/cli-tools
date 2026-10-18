@@ -25,10 +25,10 @@ QUERIES = {
       share(shareId: $shareId) { id enabled downloadingEnabled expiration }
     }""",
     "GetShareCollectionAssets": """query GetShareCollectionAssets(
-      $shareId: ID!, $assetType: ChildAssetTypeInput, $page: PageInput!) {
+      $shareId: ID!, $folderId: ID, $assetType: ChildAssetTypeInput, $page: PageInput!) {
       share(shareId: $shareId) {
         id
-        collectionAssets(page: $page, assetType: $assetType) {
+        collectionAssets(page: $page, assetType: $assetType, folderId: $folderId) {
           pageInfo { endCursor hasNextPage mode }
           nodes { id }
         }
@@ -157,8 +157,27 @@ class PublicShare:
                 raise FrameIOError("Frame.io share has malformed expiration metadata") from None
             if expiration <= datetime.now(timezone.utc):
                 raise FrameIOError("Frame.io share has expired")
+        ids: list[str] = []
+        folders: list[str | None] = [None]
+        seen: set[str] = set()
+        for folder_id in folders:
+            for asset_type in ("FILE", "FOLDER"):
+                found = self._collection_ids(folder_id, asset_type)
+                if seen.intersection(found):
+                    raise FrameIOError("Frame.io share returned duplicate asset or folder IDs")
+                seen.update(found)
+                if len(seen) > MAX_ASSETS:
+                    raise FrameIOError(f"Frame.io share exceeds supported discovery; more than {MAX_ASSETS} assets and folders")
+                if asset_type == "FILE":
+                    ids.extend(found)
+                else:
+                    folders.extend(found)
+        return ids
+
+    def _collection_ids(self, folder_id: str | None, asset_type: str) -> list[str]:
         share = self._read("GetShareCollectionAssets", {
-            "shareId": self.share_id, "assetType": "FILE", "page": {"first": MAX_ASSETS}}).get("share")
+            "shareId": self.share_id, "folderId": folder_id,
+            "assetType": asset_type, "page": {"first": MAX_ASSETS}}).get("share")
         if not isinstance(share, dict) or share.get("id") != self.share_id:
             raise FrameIOError("Frame.io share returned no asset collection")
         collection = share.get("collectionAssets")
@@ -200,7 +219,7 @@ class PublicShare:
         return row
 
     def list_assets(self, limit: int = 100) -> list[dict]:
-        """Rows for the first `limit` assets of the share's FILE collection, in API order."""
+        """Rows for the first `limit` files across the share and its folders, breadth-first."""
         return [self._asset(asset_id) for asset_id in self.asset_ids()[:limit]]
 
     def get_asset(self, asset_id: str) -> dict:

@@ -83,7 +83,7 @@ def list_assets(
     table: bool = TABLE,
     properties: Optional[str] = PROPERTIES,
 ):
-    """List the assets in a share's file collection."""
+    """List files across the share and its folders."""
     if filter:
         try:
             validate_filters(filter)

@@ -1,7 +1,7 @@
 {
   "tool": "frameio",
   "description": "CLI interface for frameio",
-  "discovered_at": "2026-10-14T22:16:34Z",
+  "discovered_at": "2026-10-18T17:18:08Z",
   "total_commands": 4,
   "global_options": [],
   "commands": {
@@ -71,7 +71,7 @@
           ]
         },
         "list": {
-          "help": "List the assets in a share's file collection.",
+          "help": "List files across the share and its folders.",
           "arguments": [
             {
               "name": "share_url",
