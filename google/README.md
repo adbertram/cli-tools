@@ -588,12 +588,18 @@ google searchconsole index https://example.com/new-article --site-url https://ex
 # Parse a Page indexing (coverage) export
 google searchconsole coverage parse ~/Downloads/example.com-Coverage-2026-10-19.zip
 google searchconsole coverage parse ~/Downloads/example.com-Coverage-2026-10-19.zip --table
+
+# Parse a reason-level drilldown export with the affected URLs
+google searchconsole coverage parse ~/Downloads/example.com-Coverage-Drilldown-2026-10-19.zip
+google searchconsole coverage parse ~/Downloads/example.com-Coverage-Drilldown-2026-10-19.zip --table
 ```
 
 `coverage parse` accepts the ZIP downloaded from Search Console's Page indexing report, or an
 already-extracted directory containing `Chart.csv`, `Critical issues.csv`,
 `Non-critical issues.csv`, and `Metadata.csv`. It prints JSON by default and does not call the
-Search Console API.
+Search Console API. The command also accepts a reason-level drilldown export containing
+`Chart.csv`, `Table.csv`, and `Metadata.csv`; that form includes the affected URLs and their
+last-crawled dates.
 
 **Configuration:**
 

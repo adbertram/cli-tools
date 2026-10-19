@@ -560,16 +560,18 @@ def searchconsole_sitemaps_submit(
 
 COVERAGE_FILE_NAMES = {
     "chart": "Chart.csv",
+    "table": "Table.csv",
     "critical_issues": "Critical issues.csv",
     "non_critical_issues": "Non-critical issues.csv",
     "metadata": "Metadata.csv",
 }
-COVERAGE_REQUIRED_COLUMNS = {
-    "chart": ("Date", "Not indexed", "Indexed", "Impressions"),
-    "critical_issues": ("Reason", "Source", "Validation", "Pages"),
-    "non_critical_issues": ("Reason", "Source", "Validation", "Pages"),
-    "metadata": ("Property", "Value"),
-}
+SUMMARY_FILES = frozenset({"chart", "critical_issues", "non_critical_issues", "metadata"})
+DRILLDOWN_FILES = frozenset({"chart", "table", "metadata"})
+SUMMARY_CHART_COLUMNS = ("Date", "Not indexed", "Indexed", "Impressions")
+DRILLDOWN_CHART_COLUMNS = ("Date", "Affected pages")
+ISSUE_COLUMNS = ("Reason", "Source", "Validation", "Pages")
+METADATA_COLUMNS = ("Property", "Value")
+TABLE_COLUMNS = ("URL", "Last crawled")
 
 
 def _coverage_member_name(filename: str) -> str:
@@ -578,7 +580,7 @@ def _coverage_member_name(filename: str) -> str:
 
 
 def _read_coverage_source(path: Path) -> dict[str, str]:
-    """Read the four CSV files from a coverage ZIP or an extracted directory."""
+    """Read the recognized CSV files from a coverage ZIP or directory."""
     expected = {name.lower(): key for key, name in COVERAGE_FILE_NAMES.items()}
     found: dict[str, str] = {}
 
@@ -607,20 +609,20 @@ def _read_coverage_source(path: Path) -> dict[str, str]:
     else:
         raise ValueError(f"Coverage export not found or not a ZIP/directory: {path}")
 
-    missing = [COVERAGE_FILE_NAMES[key] for key in COVERAGE_FILE_NAMES if key not in found]
-    if missing:
-        raise ValueError(f"Coverage export is missing required file(s): {', '.join(missing)}")
     return found
 
 
-def _coverage_rows(text: str, key: str) -> list[tuple[int, dict[str, str]]]:
+def _coverage_rows(
+    text: str,
+    filename: str,
+    required_columns: tuple[str, ...],
+) -> list[tuple[int, dict[str, str]]]:
     """Parse one CSV and verify its required columns."""
-    filename = COVERAGE_FILE_NAMES[key]
     reader = csv.DictReader(io.StringIO(text, newline=""))
     if reader.fieldnames is None:
         raise ValueError(f"{filename} is empty")
     missing = [
-        column for column in COVERAGE_REQUIRED_COLUMNS[key]
+        column for column in required_columns
         if column not in reader.fieldnames
     ]
     if missing:
@@ -635,6 +637,24 @@ def _coverage_rows(text: str, key: str) -> list[tuple[int, dict[str, str]]]:
             )
         rows.append((row_number, row))
     return rows
+
+
+def _coverage_date(
+    value: str | None,
+    filename: str,
+    row_number: int,
+    column: str = "Date",
+) -> str:
+    """Validate and return a YYYY-MM-DD cell."""
+    text = (value or "").strip()
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise ValueError(
+            f"{filename} row {row_number}: {column} must be YYYY-MM-DD, "
+            f"got {text!r}"
+        ) from None
+    return text
 
 
 def _coverage_optional_int(
@@ -667,11 +687,10 @@ def _coverage_required_int(
     return result
 
 
-def _coverage_issue_rows(text: str, key: str) -> list[dict[str, object]]:
+def _coverage_issue_rows(text: str, filename: str) -> list[dict[str, object]]:
     """Parse a critical or non-critical issues CSV."""
-    filename = COVERAGE_FILE_NAMES[key]
     issues = []
-    for row_number, row in _coverage_rows(text, key):
+    for row_number, row in _coverage_rows(text, filename, ISSUE_COLUMNS):
         reason = (row.get("Reason") or "").strip()
         if not reason:
             raise ValueError(f"{filename} row {row_number}: Reason is empty")
@@ -686,22 +705,28 @@ def _coverage_issue_rows(text: str, key: str) -> list[dict[str, object]]:
     return issues
 
 
-def _parse_coverage_export(path: Path) -> dict:
-    """Parse a Page indexing CSV export into a structured payload."""
-    files = _read_coverage_source(path)
+def _coverage_metadata(text: str) -> list[dict[str, str]]:
+    """Parse Metadata.csv into ordered property/value records."""
+    metadata = []
+    for row_number, row in _coverage_rows(text, "Metadata.csv", METADATA_COLUMNS):
+        prop = (row.get("Property") or "").strip()
+        if not prop:
+            raise ValueError(f"Metadata.csv row {row_number}: Property is empty")
+        metadata.append({
+            "property": prop,
+            "value": (row.get("Value") or "").strip(),
+        })
+    return metadata
 
+
+def _parse_summary_export(path: Path, files: dict[str, str]) -> dict:
+    """Parse the summary export with chart, issues, and metadata."""
     chart = []
-    for row_number, row in _coverage_rows(files["chart"], "chart"):
-        date_value = (row.get("Date") or "").strip()
-        try:
-            date.fromisoformat(date_value)
-        except ValueError:
-            raise ValueError(
-                f"Chart.csv row {row_number}: Date must be YYYY-MM-DD, "
-                f"got {date_value!r}"
-            ) from None
+    for row_number, row in _coverage_rows(
+        files["chart"], "Chart.csv", SUMMARY_CHART_COLUMNS
+    ):
         chart.append({
-            "date": date_value,
+            "date": _coverage_date(row.get("Date"), "Chart.csv", row_number),
             "not_indexed": _coverage_optional_int(
                 row.get("Not indexed"), "Chart.csv", row_number, "Not indexed"
             ),
@@ -713,19 +738,12 @@ def _parse_coverage_export(path: Path) -> dict:
             ),
         })
 
-    metadata = []
-    for row_number, row in _coverage_rows(files["metadata"], "metadata"):
-        prop = (row.get("Property") or "").strip()
-        if not prop:
-            raise ValueError(f"Metadata.csv row {row_number}: Property is empty")
-        metadata.append({
-            "property": prop,
-            "value": (row.get("Value") or "").strip(),
-        })
-
-    critical_issues = _coverage_issue_rows(files["critical_issues"], "critical_issues")
+    metadata = _coverage_metadata(files["metadata"])
+    critical_issues = _coverage_issue_rows(
+        files["critical_issues"], "Critical issues.csv"
+    )
     non_critical_issues = _coverage_issue_rows(
-        files["non_critical_issues"], "non_critical_issues"
+        files["non_critical_issues"], "Non-critical issues.csv"
     )
     latest = next(
         (
@@ -736,6 +754,7 @@ def _parse_coverage_export(path: Path) -> dict:
     )
     return {
         "source": str(path),
+        "kind": "summary",
         "metadata": metadata,
         "latest": latest,
         "chart": chart,
@@ -752,6 +771,80 @@ def _parse_coverage_export(path: Path) -> dict:
     }
 
 
+def _parse_drilldown_export(path: Path, files: dict[str, str]) -> dict:
+    """Parse a reason-level drilldown export with its URL table."""
+    chart = []
+    for row_number, row in _coverage_rows(
+        files["chart"], "Chart.csv", DRILLDOWN_CHART_COLUMNS
+    ):
+        chart.append({
+            "date": _coverage_date(row.get("Date"), "Chart.csv", row_number),
+            "affected_pages": _coverage_optional_int(
+                row.get("Affected pages"), "Chart.csv", row_number, "Affected pages"
+            ),
+        })
+
+    table = []
+    for row_number, row in _coverage_rows(files["table"], "Table.csv", TABLE_COLUMNS):
+        url = (row.get("URL") or "").strip()
+        if not url:
+            raise ValueError(f"Table.csv row {row_number}: URL is empty")
+        last_crawled = (row.get("Last crawled") or "").strip()
+        if last_crawled:
+            _coverage_date(last_crawled, "Table.csv", row_number, "Last crawled")
+        table.append({
+            "url": url,
+            "last_crawled": last_crawled or None,
+        })
+
+    metadata = _coverage_metadata(files["metadata"])
+    issue = next(
+        (
+            item["value"] for item in metadata
+            if item["property"].lower() == "issue"
+        ),
+        None,
+    )
+    latest = next(
+        (
+            row for row in reversed(chart)
+            if row["affected_pages"] is not None
+        ),
+        None,
+    )
+    return {
+        "source": str(path),
+        "kind": "drilldown",
+        "issue": issue,
+        "metadata": metadata,
+        "latest": latest,
+        "chart": chart,
+        "table": table,
+        "totals": {
+            "row_count": len(table),
+            "unique_url_count": len({row["url"] for row in table}),
+        },
+    }
+
+
+def _parse_coverage_export(path: Path) -> dict:
+    """Parse a Page indexing summary or drilldown CSV export."""
+    files = _read_coverage_source(path)
+    if SUMMARY_FILES.issubset(files):
+        return _parse_summary_export(path, files)
+    if DRILLDOWN_FILES.issubset(files):
+        return _parse_drilldown_export(path, files)
+    missing_summary = sorted(SUMMARY_FILES - files.keys())
+    missing_drilldown = sorted(DRILLDOWN_FILES - files.keys())
+    summary_names = [COVERAGE_FILE_NAMES[key] for key in missing_summary]
+    drilldown_names = [COVERAGE_FILE_NAMES[key] for key in missing_drilldown]
+    raise ValueError(
+        "Coverage export does not match a summary or drilldown export. "
+        f"Summary export is missing: {', '.join(summary_names)}. "
+        f"Drilldown export is missing: {', '.join(drilldown_names)}."
+    )
+
+
 def _print_coverage_tables(payload: dict) -> None:
     """Print the parsed coverage export as readable tables."""
     tables = []
@@ -761,24 +854,38 @@ def _print_coverage_tables(payload: dict) -> None:
             ["property", "value"],
             ["Property", "Value"],
         ))
-    if payload["latest"] is not None:
-        tables.append((
-            [payload["latest"]],
-            ["date", "not_indexed", "indexed", "impressions"],
-            ["Date", "Not Indexed", "Indexed", "Impressions"],
-        ))
-    if payload["critical_issues"]:
-        tables.append((
-            payload["critical_issues"],
-            ["reason", "source", "validation", "pages"],
-            ["Reason", "Source", "Validation", "Pages"],
-        ))
-    if payload["non_critical_issues"]:
-        tables.append((
-            payload["non_critical_issues"],
-            ["reason", "source", "validation", "pages"],
-            ["Reason", "Source", "Validation", "Pages"],
-        ))
+    if payload["kind"] == "drilldown":
+        if payload["latest"] is not None:
+            tables.append((
+                [payload["latest"]],
+                ["date", "affected_pages"],
+                ["Date", "Affected Pages"],
+            ))
+        if payload["table"]:
+            tables.append((
+                payload["table"],
+                ["url", "last_crawled"],
+                ["URL", "Last Crawled"],
+            ))
+    else:
+        if payload["latest"] is not None:
+            tables.append((
+                [payload["latest"]],
+                ["date", "not_indexed", "indexed", "impressions"],
+                ["Date", "Not Indexed", "Indexed", "Impressions"],
+            ))
+        if payload["critical_issues"]:
+            tables.append((
+                payload["critical_issues"],
+                ["reason", "source", "validation", "pages"],
+                ["Reason", "Source", "Validation", "Pages"],
+            ))
+        if payload["non_critical_issues"]:
+            tables.append((
+                payload["non_critical_issues"],
+                ["reason", "source", "validation", "pages"],
+                ["Reason", "Source", "Validation", "Pages"],
+            ))
     for index, (rows, columns, headers) in enumerate(tables):
         if index:
             typer.echo()

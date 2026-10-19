@@ -27,6 +27,24 @@ SAMPLE_FILES = {
     "Non-critical issues.csv": "Reason,Source,Validation,Pages",
 }
 
+DRILLDOWN_FILES = {
+    "Metadata.csv": (
+        "Property,Value\n"
+        "Sitemap,All known pages\n"
+        "Issue,Crawled - currently not indexed"
+    ),
+    "Chart.csv": (
+        "Date,Affected pages\n"
+        "2026-07-23,2\n"
+        "2026-10-11,2\n"
+    ),
+    "Table.csv": (
+        "URL,Last crawled\n"
+        "http://example.com//one/,2026-10-11\n"
+        "https://example.com/two/,2026-10-10\n"
+    ),
+}
+
 
 def _write_directory(tmp_path, files):
     export_dir = tmp_path / "coverage-export"
@@ -183,3 +201,79 @@ def test_parse_duplicate_member_name_fails(tmp_path):
 
     assert result.exit_code != 0
     assert "more than one Chart.csv" in result.output
+
+
+def test_parse_drilldown_outputs_url_rows(tmp_path):
+    export_zip = _write_zip(tmp_path, DRILLDOWN_FILES)
+
+    result = _invoke(export_zip)
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "drilldown"
+    assert payload["issue"] == "Crawled - currently not indexed"
+    assert payload["latest"] == {"date": "2026-10-11", "affected_pages": 2}
+    assert payload["chart"] == [
+        {"date": "2026-07-23", "affected_pages": 2},
+        {"date": "2026-10-11", "affected_pages": 2},
+    ]
+    assert payload["table"] == [
+        {"url": "http://example.com//one/", "last_crawled": "2026-10-11"},
+        {"url": "https://example.com/two/", "last_crawled": "2026-10-10"},
+    ]
+    assert payload["totals"] == {"row_count": 2, "unique_url_count": 2}
+
+
+def test_parse_drilldown_directory_input(tmp_path):
+    export_dir = _write_directory(tmp_path, DRILLDOWN_FILES)
+
+    result = _invoke(export_dir)
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["kind"] == "drilldown"
+    assert payload["totals"]["row_count"] == 2
+
+
+def test_parse_drilldown_table_output(tmp_path):
+    export_zip = _write_zip(tmp_path, DRILLDOWN_FILES)
+
+    result = _invoke(export_zip, "--table")
+
+    assert result.exit_code == 0, result.output
+    assert "Crawled - currently not indexed" in result.stdout
+    assert "http://example.com//one/" in result.stdout
+    assert "Last Crawled" in result.stdout
+
+
+def test_parse_drilldown_missing_table_fails(tmp_path):
+    files = dict(DRILLDOWN_FILES)
+    del files["Table.csv"]
+
+    result = _invoke(_write_zip(tmp_path, files))
+
+    assert result.exit_code != 0
+    assert "Drilldown export" in result.output
+    assert "Table.csv" in result.output
+
+
+def test_parse_drilldown_missing_url_header_fails(tmp_path):
+    files = dict(DRILLDOWN_FILES)
+    files["Table.csv"] = "Page,Last crawled\nhttps://example.com/,2026-10-11\n"
+
+    result = _invoke(_write_zip(tmp_path, files))
+
+    assert result.exit_code != 0
+    assert "Table.csv" in result.output
+    assert "URL" in result.output
+
+
+def test_parse_drilldown_invalid_last_crawled_fails(tmp_path):
+    files = dict(DRILLDOWN_FILES)
+    files["Table.csv"] = "URL,Last crawled\nhttps://example.com/,10/11/2026\n"
+
+    result = _invoke(_write_zip(tmp_path, files))
+
+    assert result.exit_code != 0
+    assert "Last crawled" in result.output
+    assert "YYYY-MM-DD" in result.output
