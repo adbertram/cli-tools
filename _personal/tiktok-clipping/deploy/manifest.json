@@ -1,6 +1,6 @@
 {
   "target": "ata_clipper",
-  "n8n_base_url": "http://100.117.198.37:5678",
+  "n8n_base_url": "http://adam-server.local:5678",
   "workflows": {
     "clip": "iok4Q6LnQuJ4xMvg",
     "metrics": "iaxAgwwMFnZ9ZmFa",
