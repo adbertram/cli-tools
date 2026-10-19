@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-10-09T20:28:19Z",
-  "total_commands": 110,
+  "discovered_at": "2026-10-19T19:49:38Z",
+  "total_commands": 111,
   "global_options": [
     {
       "name": "--version",
@@ -3526,8 +3526,42 @@
         }
       ],
       "commands": {
+        "coverage": {
+          "help": "Parse Page indexing (coverage) exports",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "parse": {
+              "help": "Parse a Google Search Console Page indexing export.",
+              "arguments": [
+                {
+                  "name": "export_path",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Path to a Coverage export .zip or extracted directory"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
         "index": {
-          "help": "Request Google to crawl and index a URL via URL Inspection API.",
+          "help": "Inspect a URL's Google index status via the URL Inspection API.",
           "usage_instructions": "Nested group for indexing operations.",
           "arguments": [
             {

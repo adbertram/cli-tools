@@ -581,10 +581,19 @@ google searchconsole sites list
 # Get details for a specific site
 google searchconsole sites get https://example.com/
 
-# Request URL indexing
+# Inspect a URL's index status
 google searchconsole index https://example.com/page
 google searchconsole index https://example.com/new-article --site-url https://example.com/
+
+# Parse a Page indexing (coverage) export
+google searchconsole coverage parse ~/Downloads/example.com-Coverage-2026-10-19.zip
+google searchconsole coverage parse ~/Downloads/example.com-Coverage-2026-10-19.zip --table
 ```
+
+`coverage parse` accepts the ZIP downloaded from Search Console's Page indexing report, or an
+already-extracted directory containing `Chart.csv`, `Critical issues.csv`,
+`Non-critical issues.csv`, and `Metadata.csv`. It prints JSON by default and does not call the
+Search Console API.
 
 **Configuration:**
 
