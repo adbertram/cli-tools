@@ -1,16 +1,20 @@
 """Playwright-backed browser service for CLI tools.
 
 This service implements the same small synchronous surface as
-``BrowserHarnessService`` while launching a persistent Chrome profile through
-Playwright. It is intentionally optional: tools that need it add ``playwright``
-to their own dependencies.
+``BrowserHarnessService`` while driving a persistent Chrome profile through
+Playwright. On macOS, Chrome starts through LaunchServices so SSH callers share
+the logged-in desktop's keychain access. It is intentionally optional: tools
+that need it add ``playwright`` to their own dependencies.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -19,6 +23,7 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
 from .desktop_lease import wait_for_desktop_lease
+from .driver import _chrome_launch_command, _find_free_port, _wait_for_cdp
 from .processes import (
     ProfileInUseError,
     ProcessCommand,
@@ -28,11 +33,13 @@ from .processes import (
     format_profile_in_use_message,
     list_process_commands,
     pid_is_running,
+    profile_process_commands,
     profile_process_owner,
     profile_process_pids,
     remove_stale_profile_artifacts,
     release_profile_lifecycle_lock,
     resolve_user_data_dir,
+    terminate_process,
 )
 
 
@@ -101,6 +108,9 @@ class PlaywrightBrowserService:
         self.default_timeout = timeout
         self.executable_path = executable_path
         self._playwright = None
+        self._browser = None
+        self._chrome_proc = None
+        self._cdp_port = None
         self._context = None
         self._page = None
         self._opened = False
@@ -268,7 +278,7 @@ class PlaywrightBrowserService:
             )
         if headed and os.getenv("CLI_TOOL_TEST_NO_HEADED_BROWSER") == "1":
             headed = False
-        if self._opened:
+        if self._opened or self._chrome_proc is not None:
             self.browser_close()
 
         try:
@@ -312,11 +322,43 @@ class PlaywrightBrowserService:
                 kwargs["viewport"] = {"width": width_height[0], "height": width_height[1]}
 
             self._playwright = sync_playwright().start()
-            self._context = self._playwright.chromium.launch_persistent_context(
-                str(profile_dir),
-                **kwargs,
-            )
+            if sys.platform == "darwin" and ".app/Contents/MacOS/" in executable:
+                # LaunchServices starts Chrome in the logged-in GUI security
+                # session. A direct SSH child cannot read Chrome Safe Storage
+                # and silently fails to persist cookies (errSecInteractionNotAllowed).
+                self._cdp_port = _find_free_port()
+                args = [
+                    executable,
+                    f"--user-data-dir={profile_dir}",
+                    f"--remote-debugging-port={self._cdp_port}",
+                    "--no-first-run", "--no-default-browser-check",
+                    *launch_args,
+                ]
+                if not headed:
+                    args.append("--headless=new")
+                if width_height is not None:
+                    args.append(f"--window-size={width_height[0]},{width_height[1]}")
+                self._chrome_proc = subprocess.Popen(
+                    _chrome_launch_command(executable, args),
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                if self._chrome_proc.wait(timeout=self.default_timeout) != 0:
+                    raise PlaywrightServiceError("macOS LaunchServices failed to start Chrome.")
+                endpoint = _wait_for_cdp(self._cdp_port, timeout=self.default_timeout)
+                self._browser = self._playwright.chromium.connect_over_cdp(
+                    endpoint, timeout=self.default_timeout * 1000,
+                )
+                if not self._browser.contexts:
+                    raise PlaywrightServiceError("Chrome did not expose its persistent browser context.")
+                self._context = self._browser.contexts[0]
+            else:
+                self._context = self._playwright.chromium.launch_persistent_context(
+                    str(profile_dir), **kwargs,
+                )
             self._page = self._context.pages[0] if self._context.pages else self._context.new_page()
+            if self._browser is not None and width_height is not None:
+                self._page.set_viewport_size(kwargs["viewport"])
             self._page.set_default_timeout(self.default_timeout * 1000)
             self._page.set_default_navigation_timeout(self.default_timeout * 1000)
             self._opened = True
@@ -324,18 +366,51 @@ class PlaywrightBrowserService:
                 self.page_goto(url)
             return self._page_info()
         except Exception as exc:
-            self._opened = False
             try:
-                if self._context is not None:
-                    self._context.close()
+                self._close_browser_locked()
             finally:
-                self._context = None
-                self._page = None
-                if self._playwright is not None:
-                    self._playwright.stop()
-                    self._playwright = None
-                self._release_profile_lifecycle_lock()
+                if self._chrome_proc is None:
+                    self._release_profile_lifecycle_lock()
             raise PlaywrightServiceError(f"Failed to open Playwright browser: {exc}") from exc
+
+    def _owned_chrome_processes(self, *, timeout: float = 5.0) -> List[ProcessCommand]:
+        """Match this launch by both exact profile and unique debugging port."""
+        if self._cdp_port is None or self._user_data_dir is None:
+            return []
+        return [proc for proc in profile_process_commands(
+            self._user_data_dir, processes=list_process_commands(timeout=timeout),
+        ) if f"--remote-debugging-port={self._cdp_port}" in shlex.split(proc.command)]
+
+    def _finish_external_chrome(self) -> None:
+        """Reap only this launch; keep the profile lock through process exit."""
+        if self._chrome_proc is None:
+            self._cdp_port = None
+            return
+        # open(1) is a launcher, not Chrome. Reap it before checking Chrome.
+        try:
+            self._chrome_proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self._chrome_proc.terminate()
+            self._chrome_proc.wait(timeout=5)
+        deadline = time.monotonic() + 5
+        while self._owned_chrome_processes() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        for proc in self._owned_chrome_processes():
+            terminate_process(
+                proc.pid, timeout=5, inspection_timeout=1,
+                ownership_check=lambda timeout, pid=proc.pid: any(
+                    row.pid == pid for row in self._owned_chrome_processes(timeout=timeout)
+                ),
+            )
+        deadline = time.monotonic() + 5
+        while self._session_process_pids() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if self._session_process_pids():
+            raise PlaywrightServiceError("Chrome still holds the profile after shutdown.")
+        # Keep launch identity and the lifecycle lock if any cleanup step fails,
+        # so a caller can retry close without allowing a concurrent owner in.
+        self._chrome_proc = None
+        self._cdp_port = None
 
     @staticmethod
     def _reset_tabs_for_restore(context, page) -> None:
@@ -356,9 +431,11 @@ class PlaywrightBrowserService:
         context = self._context
         page = self._page
         playwright = self._playwright
+        browser = self._browser
         self._context = None
         self._page = None
         self._playwright = None
+        self._browser = None
         self._opened = False
         try:
             if context is not None:
@@ -366,16 +443,28 @@ class PlaywrightBrowserService:
                     if page is not None:
                         self._reset_tabs_for_restore(context, page)
                 finally:
-                    context.close()
+                    if browser is None:
+                        context.close()
         finally:
-            if playwright is not None:
-                playwright.stop()
+            try:
+                if browser is not None:
+                    try:
+                        browser.new_browser_cdp_session().send("Browser.close")
+                    except Exception:
+                        # A browser can disconnect before acknowledging close.
+                        # Process inspection below proves exit or reaps only ours.
+                        pass
+                self._finish_external_chrome()
+            finally:
+                if playwright is not None:
+                    playwright.stop()
 
     def browser_close(self) -> Dict[str, Any]:
         try:
             self._close_browser_locked()
         finally:
-            self._release_profile_lifecycle_lock()
+            if self._chrome_proc is None:
+                self._release_profile_lifecycle_lock()
         return {"success": True, "message": "Browser closed"}
 
     def page_goto(self, url: str, wait_until: str | None = "domcontentloaded") -> Dict[str, Any]:

@@ -11,6 +11,13 @@ from cli_tools_shared.browser.processes import (
 )
 
 
+@pytest.fixture(autouse=True)
+def direct_launch_platform(monkeypatch):
+    """Keep direct-launch tests portable; macOS CDP cases opt in explicitly."""
+    from cli_tools_shared.browser import playwright_service as module
+    monkeypatch.setattr(module, "sys", types.SimpleNamespace(platform="linux"))
+
+
 class _FakePage:
     url = "about:blank"
 
@@ -395,3 +402,167 @@ def test_playwright_service_close_leaves_single_blank_tab_for_next_restore(tmp_p
         "goto:ours:about:blank",
         "context-close",
     ]
+
+
+@pytest.fixture
+def macos_launch(tmp_path, monkeypatch):
+    from cli_tools_shared.browser import playwright_service as module
+
+    events = []
+    playwright = _FakePlaywright()
+    context = _FakeContext()
+    cdp = types.SimpleNamespace(send=lambda method: events.append(method))
+    browser = types.SimpleNamespace(
+        contexts=[context], new_browser_cdp_session=lambda: cdp,
+    )
+    playwright.chromium.connect_over_cdp = lambda endpoint, **kwargs: (
+        events.append((endpoint, kwargs)) or browser
+    )
+    monkeypatch.setitem(sys.modules, "playwright.sync_api", types.SimpleNamespace(
+        sync_playwright=lambda: _FakeSyncPlaywright(playwright),
+    ))
+    monkeypatch.setattr(module, "sys", types.SimpleNamespace(platform="darwin"))
+    executable = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    monkeypatch.setattr(module, "_chrome_binary", lambda: executable)
+    monkeypatch.setattr(module, "_find_free_port", lambda: 19456)
+    monkeypatch.setattr(module, "_wait_for_cdp", lambda *args, **kwargs: "ws://127.0.0.1:19456/test")
+    launches = []
+    launcher = types.SimpleNamespace(wait=lambda **kwargs: 0)
+    monkeypatch.setattr(module.subprocess, "Popen", lambda args, **kwargs: (
+        launches.append(args) or launcher
+    ))
+    monkeypatch.setattr(module, "list_process_commands", lambda **kwargs: [])
+    return module, playwright, context, events, launches
+
+
+@pytest.mark.parametrize("headed", [False, True])
+def test_macos_launchservices_uses_real_keychain_and_persistent_context(macos_launch, tmp_path, headed):
+    module, playwright, context, events, launches = macos_launch
+    service = module.PlaywrightBrowserService("macos", timeout=7)
+    profile = tmp_path / "profile with spaces"
+    service.browser_open(persistent_profile_dir=profile, headed=headed, user_agent="Agent test")
+
+    assert launches[0][:4] == ["/usr/bin/open", "-na", "/Applications/Google Chrome.app", "--args"]
+    assert f"--user-data-dir={profile}" in launches[0]
+    assert "--remote-debugging-port=19456" in launches[0]
+    assert "--restore-last-session" in launches[0]
+    assert "--user-agent=Agent test" in launches[0]
+    assert ("--headless=new" in launches[0]) is not headed
+    assert "--use-mock-keychain" not in launches[0]
+    assert "--password-store=basic" not in launches[0]
+    assert playwright.chromium.launch_calls == []
+    assert service._context is context
+    assert events[0] == ("ws://127.0.0.1:19456/test", {"timeout": 7000})
+    service.browser_close()
+    assert "Browser.close" in events
+    assert context.closed is False
+    assert playwright.stopped
+    assert service._lifecycle_lock_file is None
+
+
+def test_macos_shutdown_holds_lock_until_owned_processes_exit(macos_launch, tmp_path, monkeypatch):
+    module, *_rest = macos_launch
+    service = module.PlaywrightBrowserService("first")
+    other = module.PlaywrightBrowserService("second")
+    profile = tmp_path / "profile"
+    service.browser_open(persistent_profile_dir=profile)
+    other._user_data_dir = profile
+    acquired = threading.Event()
+    worker = threading.Thread(target=lambda: (other._acquire_profile_lifecycle_lock(), acquired.set()))
+    original_finish = service._finish_external_chrome
+
+    def finish():
+        worker.start()
+        assert not acquired.wait(timeout=0.1)
+        assert service._lifecycle_lock_file is not None
+        original_finish()
+
+    monkeypatch.setattr(service, "_finish_external_chrome", finish)
+    service.browser_close()
+    assert acquired.wait(timeout=1)
+    other._release_profile_lifecycle_lock()
+    worker.join(timeout=1)
+
+
+def test_macos_failed_connection_reaps_only_exact_launch(macos_launch, tmp_path, monkeypatch):
+    module, playwright, _context, _events, _launches = macos_launch
+    profile = tmp_path / "profile"
+    processes = [
+        ProcessCommand(101, 1, "S", f'/Applications/Google Chrome --user-data-dir={profile} --remote-debugging-port=19456'),
+        ProcessCommand(102, 1, "S", f'/Applications/Google Chrome --user-data-dir={tmp_path / "other"} --remote-debugging-port=19456'),
+    ]
+    monkeypatch.setattr(module, "list_process_commands", lambda **kwargs: list(processes))
+    service = module.PlaywrightBrowserService("failed")
+    monkeypatch.setattr(service, "_cleanup_stale_profile_locks", lambda: None)
+    monkeypatch.setattr(playwright.chromium, "connect_over_cdp", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("connection failed")))
+    ticks = iter(range(0, 1000, 10))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    killed = []
+
+    def terminate(pid, *, ownership_check, **kwargs):
+        assert service._lifecycle_lock_file is not None
+        assert ownership_check(1) is True
+        killed.append(pid)
+        processes[:] = [proc for proc in processes if proc.pid != pid]
+
+    monkeypatch.setattr(module, "terminate_process", terminate)
+    with pytest.raises(module.PlaywrightServiceError, match="connection failed"):
+        service.browser_open(persistent_profile_dir=profile)
+    assert killed == [101]
+    assert [proc.pid for proc in processes] == [102]
+    assert service._lifecycle_lock_file is None
+    assert playwright.stopped
+
+
+def test_macos_failed_launch_never_signals_foreign_profile_owner(macos_launch, tmp_path, monkeypatch):
+    module, *_rest = macos_launch
+    service = module.PlaywrightBrowserService("failed")
+    profile = tmp_path / "profile"
+    monkeypatch.setattr(service, "_cleanup_stale_profile_locks", lambda: None)
+    monkeypatch.setattr(module, "_wait_for_cdp", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("no endpoint")))
+    monkeypatch.setattr(module, "list_process_commands", lambda **kwargs: [
+        ProcessCommand(111, 1, "S", f'/Applications/Google Chrome --user-data-dir={profile} --remote-debugging-port=19999'),
+    ])
+    monkeypatch.setattr(module, "terminate_process", lambda *args, **kwargs: pytest.fail("foreign owner signalled"))
+    ticks = iter(range(0, 1000, 10))
+    monkeypatch.setattr(module.time, "monotonic", lambda: next(ticks))
+    with pytest.raises(module.PlaywrightServiceError, match="still holds the profile"):
+        service.browser_open(persistent_profile_dir=profile)
+    assert service._lifecycle_lock_file is not None
+    assert service._cdp_port == 19456
+    assert service._chrome_proc is not None
+    monkeypatch.setattr(module, "list_process_commands", lambda **kwargs: [])
+    service.browser_close()
+    assert service._lifecycle_lock_file is None
+    assert service._cdp_port is None
+    assert service._chrome_proc is None
+
+
+def test_macos_shutdown_inspection_failure_retains_lock_and_ownership_for_retry(macos_launch, tmp_path, monkeypatch):
+    module, *_rest = macos_launch
+    service = module.PlaywrightBrowserService("first")
+    other = module.PlaywrightBrowserService("second")
+    profile = tmp_path / "profile"
+    service.browser_open(persistent_profile_dir=profile)
+    other._user_data_dir = profile
+    acquired = threading.Event()
+    worker = threading.Thread(target=lambda: (other._acquire_profile_lifecycle_lock(), acquired.set()))
+    original_launcher = service._chrome_proc
+    monkeypatch.setattr(module, "list_process_commands", lambda **kwargs: (
+        (_ for _ in ()).throw(ProcessTableUnavailableError("cannot inspect"))
+    ))
+    with pytest.raises(ProcessTableUnavailableError, match="cannot inspect"):
+        service.browser_close()
+    assert service._chrome_proc is original_launcher
+    assert service._cdp_port == 19456
+    assert service._lifecycle_lock_file is not None
+    worker.start()
+    assert not acquired.wait(timeout=0.1)
+    monkeypatch.setattr(module, "list_process_commands", lambda **kwargs: [])
+    service.browser_close()
+    assert acquired.wait(timeout=1)
+    other._release_profile_lifecycle_lock()
+    worker.join(timeout=1)
+    assert service._chrome_proc is None
+    assert service._cdp_port is None
+    assert service._lifecycle_lock_file is None

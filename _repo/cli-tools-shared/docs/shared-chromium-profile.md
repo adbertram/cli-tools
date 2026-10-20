@@ -22,6 +22,22 @@ Override the shared location with `CLI_TOOLS_SHARED_CHROME_PROFILE=/path/to/prof
 
 Chrome permits one live process per user-data-dir. Browser CLIs using the shared profile wait on one cross-backend lifecycle lock keyed by the resolved profile path, then run sequentially. A live Chrome process that did not take that lock is reported with its owner PID (and parent command when available) instead of being terminated. Use an isolated named profile or `CLI_TOOLS_ISOLATE_CHROME_PROFILE=1` when concurrent Chrome processes are required.
 
+On macOS, both browser backends launch a Chrome `.app` through LaunchServices
+(`/usr/bin/open -na`) and connect over CDP. This keeps Chrome in the logged-in
+desktop's security session when the CLI runs over SSH. Direct SSH launches can
+report `errSecInteractionNotAllowed` (`-25308`) while reading Chrome Safe Storage,
+leaving cookies usable in memory but unable to persist them. A logged-in macOS
+desktop and accessible Chrome Safe Storage item remain required.
+
+The Playwright backend explicitly requests `Browser.close` and waits for Chrome
+to release the profile before releasing its lifecycle lock. Failed launches are
+cleaned up only when both the exact profile and this launch's debugging port
+prove process ownership. It preserves the real OS encryption key: adding
+`--use-mock-keychain` would change the key and make existing cookies unreadable.
+Do not copy encrypted Chrome databases between hosts. Transfer service-scoped
+cookies/localStorage through a supported export/import path and let destination
+Chrome encrypt them with that host's key.
+
 On a demo host (one with `~/.tether/venv/bin/warden`), every engine launch of the real `/Applications/Google Chrome.app` first waits while `warden status --provider remote-bare` lists a UI lease in any state, because a demo on that desktop drives Chrome by app name and any Chrome from that bundle, headless included, can answer instead. It polls every 10 seconds and fails after 600 seconds naming the lease; a process inside that lease's own Tether session (`TETHER_SESSION`) is not held. See `cli_tools_shared/browser/desktop_lease.py`.
 
 ## Logout and reset
