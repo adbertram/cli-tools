@@ -1,16 +1,14 @@
-"""Roomba client using roombapy library (v2).
+"""Roomba client using the synchronous roombapy 1.9 API.
 
 Provides methods to discover, connect, and control Roomba vacuums.
-Adapted for roombapy 2.x async API with synchronous CLI wrappers.
+The dependency is constrained to the supported synchronous API.
 """
-import asyncio
 import time
 import threading
 from typing import List, Optional, Any, Dict
 
-from roombapy import RoombaDiscovery, RoombaPassword, RoombaInfo
+from roombapy import RoombaDiscovery, RoombaPassword, RoombaInfo, RoombaFactory
 from roombapy.roomba import (
-    RoombaClient as RoombaV2Client,
     RoombaConnectionError,
 )
 from roombapy.const import ROOMBA_ERROR_MESSAGES
@@ -32,13 +30,8 @@ class ClientError(Exception):
     pass
 
 
-def _run_async(coro):
-    """Run an async roombapy v2 coroutine in a synchronous context."""
-    return asyncio.get_event_loop().run_until_complete(coro)
-
-
 class RoombaClient:
-    """Client for interacting with Roomba vacuums via roombapy library (v2)."""
+    """Client for interacting with Roomba vacuums via roombapy 1.9."""
 
     def __init__(self):
         """Initialize Roomba client."""
@@ -114,8 +107,8 @@ class RoombaClient:
         )
 
     def _make_roomba(self, ip, blid, password):
-        """Create a roombapy v2 client instance."""
-        return RoombaV2Client(ip, blid, password)
+        """Create a synchronous client with its public factory."""
+        return RoombaFactory.create_roomba(ip, blid, password)
 
     def get_status(self, name_or_ip, timeout=10.0):
         """Get live status from a robot."""
@@ -124,61 +117,20 @@ class RoombaClient:
             raise ClientError(f"Robot '{name_or_ip}' not found in configuration")
 
         ip = robot_config["ip"]
-        blid = robot_config["blid"]
-        password = robot_config.get("password")
-        if not password:
-            raise ClientError(f"No password stored for robot '{name_or_ip}'")
-
-        roomba = self._make_roomba(ip, blid, password)
-
-        data_received = threading.Event()
-        status_data = {}
-
-        def on_message(message):
-            nonlocal status_data
-            if "state" in message and "reported" in message["state"]:
-                reported = message["state"]["reported"]
-                if "batPct" in reported or "cleanMissionStatus" in reported:
-                    status_data.update(reported)
-                    data_received.set()
-
-        roomba.register_on_message_callback(on_message)
-
-        try:
-            time.sleep(0.5)
-            _run_async(roomba.connect())
-            data_received.wait(timeout=timeout)
-
-            phase_str = "unknown"
-            error_code = None
-            error_message = None
-
-            if "cleanMissionStatus" in status_data:
-                cms = status_data["cleanMissionStatus"]
-                phase_str = cms.get("phase", "unknown")
-                error_code = cms.get("error")
-                if error_code and error_code in ROOMBA_ERROR_MESSAGES:
-                    error_message = ROOMBA_ERROR_MESSAGES[error_code]
-
-            bin_data = status_data.get("bin", {})
-
-            return RobotStatus(
-                name=robot_config["name"],
-                ip=ip,
-                battery_percent=status_data.get("batPct", 0),
-                phase=CleaningPhase(phase_str),
-                bin_present=bin_data.get("present", True),
-                bin_full=bin_data.get("full", False),
-                error_code=error_code,
-                error_message=error_message,
-            )
-        except RoombaConnectionError as e:
-            raise ClientError(f"Failed to connect to robot: {e}")
-        finally:
-            try:
-                roomba.disconnect()
-            except Exception:
-                pass
+        status_data = self._get_state_reported(name_or_ip, timeout=timeout)
+        cms = status_data.get("cleanMissionStatus", {})
+        error_code = cms.get("error")
+        bin_data = status_data.get("bin", {})
+        return RobotStatus(
+            name=robot_config["name"],
+            ip=ip,
+            battery_percent=status_data.get("batPct"),
+            phase=CleaningPhase(cms.get("phase", "unknown")),
+            bin_present=bin_data.get("present"),
+            bin_full=bin_data.get("full"),
+            error_code=error_code,
+            error_message=ROOMBA_ERROR_MESSAGES.get(error_code),
+        )
 
     def send_command(self, name_or_ip, command, params=None):
         """Send a command to a robot."""
@@ -202,9 +154,9 @@ class RoombaClient:
 
         try:
             time.sleep(0.5)
-            _run_async(roomba.connect())
+            roomba.connect()
             time.sleep(1.0)
-            _run_async(roomba.send_command(command, params or {}))
+            roomba.send_command(command, params or {})
             return CommandResult(
                 success=True,
                 robot=robot_config["name"],
@@ -253,17 +205,23 @@ class RoombaClient:
             if "state" in message and "reported" in message["state"]:
                 reported = message["state"]["reported"]
                 reported_data.update(reported)
-                data_received.set()
+                if "batPct" in reported or "cleanMissionStatus" in reported:
+                    data_received.set()
 
         roomba.register_on_message_callback(on_message)
 
         try:
             time.sleep(0.5)
-            _run_async(roomba.connect())
-            data_received.wait(timeout=timeout)
+            roomba.connect()
+            if not data_received.wait(timeout=timeout):
+                if roomba.client_error:
+                    raise ClientError("Robot MQTT connection rejected")
+                if not roomba.roomba_connected:
+                    raise ClientError("Robot MQTT connection not established before timeout")
+                raise ClientError("No reported telemetry received before timeout")
             return dict(reported_data)
-        except RoombaConnectionError:
-            return {}
+        except RoombaConnectionError as e:
+            raise ClientError("Failed to connect to robot") from e
         finally:
             try:
                 roomba.disconnect()
@@ -271,19 +229,10 @@ class RoombaClient:
                 pass
 
     def start_cleaning(self, name_or_ip):
-        """Start a cleaning mission (like 'tap on a job now' in the app).
+        """Dispatch start with the existing pmaps-derived parameters.
 
-        Fetches the robot's current state to extract map/region data from
-        pmaps, then sends a region-aware start command. This mimics what
-        the iRobot HOME app does when you tap on a cleaning job: it fetches
-        active map context and includes it with the start command so the
-        robot knows exactly which areas to clean.
-
-        Args:
-            name_or_ip: Robot name or IP address
-
-        Returns:
-            CommandResult with success status and details
+        This legacy map interpretation has not been verified against app room
+        selection. Dispatch does not confirm robot execution.
         """
         robot_config = self.config.get_robot(name_or_ip)
         if not robot_config:
@@ -320,16 +269,16 @@ class RoombaClient:
             if region_ids:
                 params["regions"] = [{"rid": rid} for rid in region_ids]
 
-        # Send start command with region context (like the app does)
+        # Dispatch the legacy parameters; robot execution is not confirmed.
         roomba = self._make_roomba(ip, blid, password)
         try:
             time.sleep(0.5)
-            _run_async(roomba.connect())
+            roomba.connect()
             time.sleep(1.0)
-            _run_async(roomba.send_command("start", params if params else None))
+            roomba.send_command("start", params if params else None)
 
             has_regions = bool(params.get("regions"))
-            msg = "Cleaning started with map context" if has_regions else "Cleaning started"
+            msg = "Start command sent with map context" if has_regions else "Start command sent"
             return CommandResult(
                 success=True,
                 robot=robot_config["name"],

@@ -73,10 +73,10 @@ class RobotStatus(CLIModel):
     ip: str
 
     # Status fields
-    battery_percent: int = 0
+    battery_percent: Optional[int] = None
     phase: CleaningPhase = CleaningPhase.UNKNOWN
-    bin_present: bool = True
-    bin_full: bool = False
+    bin_present: Optional[bool] = None
+    bin_full: Optional[bool] = None
 
     # Optional detail fields
     error_code: Optional[int] = None

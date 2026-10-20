@@ -315,3 +315,11 @@ MIT
 roomba cache status
 roomba cache clear
 ```
+
+## Runtime compatibility and verification
+
+The CLI uses the public synchronous `RoombaFactory` API and pins `roombapy==1.9.2`. Roombapy 2.x is a breaking asynchronous API; upgrading requires migrating the complete connection, discovery, callback and disconnect lifecycle together. A mismatched client import prevented startup; corrected and regression-tested on 2026-10-20.
+
+Status requires reported battery or mission telemetry. A silent or rejected connection fails explicitly; missing battery and bin fields remain null. The timeout controls telemetry waiting, not the complete transport retry duration.
+
+Basic command dispatch is implemented, but dispatch does not confirm execution. The legacy `rooms` and map-derived start parameters do not establish app room-selection parity. Mopping preferences, map editing/export and dock refill controls are not exposed.
