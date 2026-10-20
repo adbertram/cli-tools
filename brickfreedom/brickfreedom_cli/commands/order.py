@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from cli_tools_shared.activity_log import get_activity_logger
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.filter_map import FilterMap
 
@@ -35,6 +35,7 @@ app = typer.Typer(help="Manage Brickfreedom orders", no_args_is_help=True)
 
 
 @app.command("list")
+@command
 def order_list(
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status (PAID, PACKED, SHIPPED, etc.)"),
     platform: Optional[str] = typer.Option(None, "--platform", help="Filter by platform (bricklink, brickowl)"),
@@ -106,6 +107,7 @@ def order_list(
 
 
 @app.command("get")
+@command
 def order_get(
     order_id: str = typer.Argument(..., help="Marketplace order ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -148,6 +150,7 @@ def order_get(
 
 
 @app.command("processed")
+@command
 def order_processed(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum results"),
@@ -206,6 +209,7 @@ def order_processed(
 
 
 @app.command("process")
+@command
 def order_process(
     order_ids: List[str] = typer.Argument(..., help="Marketplace order IDs to mark as processed"),
 ):
@@ -229,6 +233,7 @@ def order_process(
 
 
 @app.command("post")
+@command
 def order_post(
     order_ids: List[str] = typer.Argument(..., help="Marketplace order IDs to post (mark as shipped)"),
 ):
@@ -254,6 +259,7 @@ def order_post(
 
 
 @app.command("tracking")
+@command
 def order_tracking(
     order_id: str = typer.Argument(..., help="Marketplace order ID"),
     tracking: str = typer.Argument(..., help="Tracking number to set"),

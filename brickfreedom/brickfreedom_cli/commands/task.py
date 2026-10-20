@@ -5,7 +5,7 @@ from enum import Enum
 
 from cli_tools_shared.activity_log import get_activity_logger
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import command, print_json, print_table, handle_error
 from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.filter_map import FilterMap
 
@@ -42,6 +42,7 @@ class TaskType(str, Enum):
 
 
 @app.command("list")
+@command
 def task_list(
     task_type: Optional[TaskType] = typer.Option(None, "--type", help="Filter by task type: customer-replacement-part, missing-part"),
     order_id: Optional[str] = typer.Option(None, "--order-id", "-o", help="Filter by order ID"),
@@ -226,6 +227,7 @@ def task_list(
 
 
 @app.command("get")
+@command
 def task_get(
     index: int = typer.Argument(..., help="Task index (1-based)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -269,6 +271,7 @@ def task_get(
 
 @app.command("create")
 @app.command("add", hidden=True)
+@command
 def task_create(
     text: Optional[str] = typer.Argument(None, help="Task text to create (not needed for --type)"),
     task_type: Optional[TaskType] = typer.Option(None, "--type", "-t", help="Task type: customer-replacement-part"),
@@ -403,6 +406,7 @@ def task_create(
 
 
 @app.command("complete")
+@command
 def task_complete(
     index: Optional[int] = typer.Argument(None, help="Task index (1-based) to mark complete"),
     bulk: bool = typer.Option(False, "--bulk", "-b", help="Mark all tasks as complete"),
@@ -655,6 +659,7 @@ def _complete_by_match(match_flags: dict, match_items_json: Optional[str] = None
 
 
 @app.command("delete")
+@command
 def task_delete(
     index: Optional[int] = typer.Argument(None, help="Task index (1-based) to delete"),
     completed: bool = typer.Option(False, "--completed", "-c", help="Delete all completed tasks"),
