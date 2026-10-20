@@ -5,8 +5,10 @@ COMMAND_CREDENTIALS = {
     "prices": ["oauth"],
     "gaps": ["no_auth"],
     "opportunities": ["no_auth"],
+    "current_inventory": ["no_auth"],
     # Nested under current_inventory (flat leaf lookup in command_registry)
     "list": ["no_auth"],
+    "get": ["no_auth"],
     "update": ["oauth"],
 }
 
@@ -14,7 +16,7 @@ from typing import Optional
 
 import typer
 
-from ..display import print_list
+from ..display import print_detail, print_list
 from ..buy.service import BuyService
 from ..buy.types import canonical_item_type
 from cli_tools_shared.output import command, print_json, handle_error
@@ -131,6 +133,16 @@ def current_inventory_list(
         print_list(data, table, properties, LOT_COLUMNS, LOT_HEADERS)
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+@current_inventory_app.command("get")
+@command
+def current_inventory_get(
+    inventory_id: int = typer.Argument(..., min=1, help="Inventory lot ID (id_inv) from current_inventory list"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display lot details as a table"),
+):
+    """Get one saved inventory lot by ID without refreshing remote data."""
+    print_detail(BuyService().get_lot(inventory_id).as_dict(), table)
 
 
 PRICE_COLUMNS = [

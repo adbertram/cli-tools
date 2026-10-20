@@ -313,12 +313,13 @@ class BuyStore:
             )
         return len(rows)
 
-    def query_lots(self, *, item_type: str | None = None, item_no: str | None = None, category_id: int | None = None, color_id: int | None = None, country: str | None = None, condition: str | None = None, max_price: float | None = None, min_qty: int | None = None, store: str | None = None, limit: int = 100) -> list[LotRow]:
+    def query_lots(self, *, id_inv: int | None = None, item_type: str | None = None, item_no: str | None = None, category_id: int | None = None, color_id: int | None = None, country: str | None = None, condition: str | None = None, max_price: float | None = None, min_qty: int | None = None, store: str | None = None, limit: int = 100) -> list[LotRow]:
         if limit is None or int(limit) < 1:
             raise ValueError("limit must be a positive integer")
         clauses: list[str] = []; params: list[Any] = []
         use_items_join = category_id is not None
         prefix = "lots." if use_items_join else ""
+        if id_inv is not None: clauses.append(f"{prefix}id_inv=?"); params.append(id_inv)
         if item_type: clauses.append(f"{prefix}item_type=?"); params.append(item_type.upper())
         if item_no: clauses.append(f"{prefix}item_no=?"); params.append(item_no)
         if category_id is not None: clauses.append("items.category_id=?"); params.append(int(category_id))

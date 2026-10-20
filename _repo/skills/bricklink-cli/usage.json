@@ -1,8 +1,8 @@
 {
   "tool": "bricklink",
   "description": "CLI interface for Bricklink API",
-  "discovered_at": "2026-09-26T23:55:17Z",
-  "total_commands": 68,
+  "discovered_at": "2026-10-20T18:05:10Z",
+  "total_commands": 69,
   "global_options": [
     {
       "name": "--version",
@@ -326,6 +326,33 @@
           "arguments": [],
           "options": [],
           "commands": {
+            "get": {
+              "help": "Get one saved inventory lot by ID without refreshing remote data.",
+              "arguments": [
+                {
+                  "name": "inventory_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "<int range>  Inventory lot ID (id_inv) from current_inventory list"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display lot details as a table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
             "list": {
               "help": "List/filter live lots already stored in local current_inventory.",
               "arguments": [],

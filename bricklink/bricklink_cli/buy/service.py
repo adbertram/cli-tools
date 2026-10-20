@@ -64,9 +64,16 @@ class BuyService:
     ):
         self.config = get_config()
         self.store = store or BuyStore(db_path or _default_db_path())
-        self.client = client or BrickLinkBuyHttpClient(
-            cookie_jar_path=str(_default_cookie_jar()),
-        )
+        self._client = client
+
+    @property
+    def client(self) -> BrickLinkBuyHttpClient:
+        """Create the cookie-backed HTTP client only for remote operations."""
+        if self._client is None:
+            self._client = BrickLinkBuyHttpClient(
+                cookie_jar_path=str(_default_cookie_jar()),
+            )
+        return self._client
 
     def ensure_seeded(self) -> int:
         return ensure_item_index(self.store)
@@ -196,6 +203,13 @@ class BuyService:
     def list_lots(self, **filters) -> list[LotRow]:
         self.ensure_seeded()
         return self.store.query_lots(**filters)
+
+    def get_lot(self, inventory_id: int) -> LotRow:
+        """Read one saved lot by ID without seeding or refreshing remote data."""
+        lots = self.store.query_lots(id_inv=inventory_id, limit=1)
+        if not lots:
+            raise ValueError(f"Inventory lot {inventory_id} was not found in local inventory.")
+        return lots[0]
 
 
     def list_items(

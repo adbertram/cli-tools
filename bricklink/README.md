@@ -415,12 +415,20 @@ for lots.
 bricklink buy item PART 3001
 bricklink buy item PART 3001 --color 11 --force-refresh
 
-# Query the local SQLite lot store (no network unless you re-run buy item)
+# Query the local SQLite lot store (seeds the item index if empty)
 bricklink buy current_inventory list --type PART --no 3001 --max-price 0.25 --country US --table
+
+# Read one saved lot using its id_inv from the list output (no remote refresh)
+bricklink buy current_inventory get 123456 --table
 ```
 
-On first buy use, if the local item index is empty, the CLI auto-seeds from
-`brickbuddy get /items` (no separate seed command). HTTP goes through the shared
+`current_inventory get` reads only the local lot store and reports an error if
+the ID is absent. Refresh the relevant item with `buy item` before retrieving a
+lot that has not been saved locally.
+
+`buy item` and `current_inventory list` auto-seed an empty local item index from
+`brickbuddy get /items` (no separate seed command). `current_inventory get`
+skips item-index seeding and remote refresh. HTTP goes through the shared
 `cli_tools_shared.http_session` long-lived session helpers with a host-wide
 concurrency-1 queue: empty HTTP 403 pauses the host and forever-retries with
 exponential backoff; after recovery the next ~10 requests are spaced ~1s apart.
