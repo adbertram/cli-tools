@@ -11,6 +11,19 @@ description: >-
 Execute codex-sessions operations using the `codex-sessions` CLI across the primary Codex home and all named profile homes. All Codex transcript inspection should use this CLI.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh codex-sessions-cli
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <quick_start>
 The `codex-sessions` CLI follows this pattern:
 ```bash
