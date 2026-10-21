@@ -78,6 +78,20 @@ List commands use `--filter`/`-f` with `field:op:value` syntax and `--properties
 - `skills` — `$skill` or `@agent` mentions in user prompts.
 - `timeline` — chronological event streams for one or more sessions.
 </principle>
+
+<principle name="Normalized Transcript Views">
+Session, conversation, tool-call, subagent, todo, skill, and timeline views use
+the same normalized transcript model. Function calls, custom tool calls,
+tool-search calls, legacy message events, response messages, and
+`item_completed` messages must not produce format-specific empty views.
+
+Treat `custom_tool_call` input as an object when supplied as one; otherwise
+preserve it as `{"input": <raw>}`. Use `tool_search` when a tool-search payload
+has no name. An output without `call_id` is a standalone timeline
+`tool_result`, not a parse failure. Conversation summaries skip injected
+context such as `AGENTS.md` instructions and use the first meaningful user
+prompt, falling back to the first assistant update.
+</principle>
 </principles>
 
 <reference_index>

@@ -190,6 +190,22 @@ Broad scan commands skip invalid rollout files and store their exact load errors
 on the client as `load_errors`. Valid transcript files continue to be returned.
 Direct parser errors include the file path and line number.
 
+Tool calls are normalized across
+`function_call`/`function_call_output`,
+`custom_tool_call`/`custom_tool_call_output`, and
+`tool_search_call`/`tool_search_output`. Custom string inputs are returned as
+`{"input": "<raw text>"}`; object inputs pass through unchanged. Tool-search
+calls without an explicit name use `tool_search`. Outputs without a `call_id`
+remain visible as standalone `tool_result` timeline events and are not paired
+with a call.
+
+Messages are normalized across response items, legacy `user_message` and
+`agent_message` events, and `item_completed` `UserMessage`/`AgentMessage`
+items. Equivalent copies are deduplicated, chronological order is preserved,
+and injected context such as `AGENTS.md` instructions is ignored when choosing
+a conversation summary. A conversation uses its first meaningful user prompt,
+falling back to the first assistant update when no user prompt was recorded.
+
 ## Output
 
 JSON is the default output for scripting. Use `--table` for human-readable tables.

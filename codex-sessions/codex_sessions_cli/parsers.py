@@ -12,6 +12,21 @@ SESSION_SUBDIRS = ("sessions", "archived_sessions")
 ROLLOUT_PREFIX = "rollout-"
 ROLLOUT_SUFFIX = ".jsonl"
 MESSAGE_ROLES = {"user", "assistant"}
+TOOL_CALL_TYPES = {"function_call", "custom_tool_call", "tool_search_call"}
+TOOL_OUTPUT_TYPES = {
+    "function_call_output",
+    "custom_tool_call_output",
+    "tool_search_output",
+}
+EVENT_MESSAGE_ROLES = {"user_message": "user", "agent_message": "assistant"}
+ITEM_MESSAGE_ROLES = {"UserMessage": "user", "AgentMessage": "assistant"}
+INJECTED_CONTEXT_PREFIXES = (
+    "# AGENTS.md instructions for ",
+    "<environment_context>",
+    "<permissions instructions>",
+    "<skills_instructions>",
+    "<user_instructions>",
+)
 ERROR_STATUSES = {"error", "failed", "timed_out", "timeout", "cancelled", "canceled"}
 SUBAGENT_TOOL_NAMES = {"spawn_agent", "Task"}
 SKILL_PREFIXES = ("$", "@")
@@ -40,6 +55,14 @@ class ParsedRollout:
     path: Path
     records: List[RolloutRecord]
     meta: Dict[str, Any]
+
+
+@dataclass(frozen=True)
+class NormalizedMessage:
+    record: RolloutRecord
+    role: str
+    text: str
+    phase: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -407,6 +430,33 @@ def parse_arguments(arguments: Any) -> Dict[str, Any]:
     raise ValueError("function_call arguments must be a JSON object")
 
 
+def tool_call_name(payload: Dict[str, Any]) -> str:
+    name = payload.get("name")
+    if isinstance(name, str) and name:
+        return name
+    payload_type = str(payload.get("type", ""))
+    for suffix in ("_call", "_output"):
+        if payload_type.endswith(suffix):
+            return payload_type[: -len(suffix)]
+    return payload_type or "tool"
+
+
+def tool_call_arguments(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if payload.get("type") == "tool_search_call" and "execution" in payload:
+        execution = payload["execution"]
+        return execution if isinstance(execution, dict) else {"input": execution}
+    if "input" in payload:
+        value = payload["input"]
+        return value if isinstance(value, dict) else {"input": value}
+    if "arguments" in payload:
+        value = payload["arguments"]
+        try:
+            return parse_arguments(value)
+        except (TypeError, ValueError):
+            return {"input": value}
+    return {}
+
+
 def parse_output(output: Any) -> Any:
     if isinstance(output, str) and output.strip() and output.strip()[0] in "[{":
         return json.loads(output)
@@ -427,28 +477,156 @@ def event_messages(parsed: ParsedRollout, event_type: Optional[str] = None) -> L
     return [record for record in items if record.payload.get("type") == event_type]
 
 
+def _message_candidate(record: RolloutRecord):
+    payload = record.payload
+    if record.record_type == "response_item" and payload.get("type") == "message":
+        role = payload.get("role")
+        if role not in MESSAGE_ROLES:
+            return None
+        text = text_from_content(payload.get("content"))
+        if not text.strip():
+            return None
+        return (2, role, text, payload.get("phase"))
+
+    if record.record_type != "event_msg":
+        return None
+
+    event_type = payload.get("type")
+    if event_type in EVENT_MESSAGE_ROLES:
+        role = EVENT_MESSAGE_ROLES[event_type]
+        text = str(payload.get("message", ""))
+        if not text.strip():
+            return None
+        return (1, role, text, payload.get("phase"))
+
+    if event_type != "item_completed":
+        return None
+    item = payload.get("item")
+    if not isinstance(item, dict) or item.get("type") not in ITEM_MESSAGE_ROLES:
+        return None
+    text = text_from_content(item.get("content"))
+    if not text.strip():
+        return None
+    return (0, ITEM_MESSAGE_ROLES[item["type"]], text, item.get("phase"))
+
+
+def is_message_record(record: RolloutRecord) -> bool:
+    return _message_candidate(record) is not None
+
+
+def normalized_messages(parsed: ParsedRollout) -> List[NormalizedMessage]:
+    """Return one chronological user/assistant message stream across formats."""
+    candidates = []
+    for record in parsed.records:
+        candidate = _message_candidate(record)
+        if candidate is not None:
+            candidates.append((record, candidate))
+
+    candidates.sort(
+        key=lambda entry: (
+            iso_to_epoch(entry[0].timestamp),
+            -entry[1][0],
+            entry[0].line_number,
+        )
+    )
+
+    messages: List[NormalizedMessage] = []
+    cluster_text = None
+    cluster_role = None
+    cluster_time = None
+    cluster_priority = -1
+    cluster_record = None
+    cluster_source_text = None
+    cluster_phase = None
+
+    def flush_cluster():
+        if cluster_record is None:
+            return
+        messages.append(
+            NormalizedMessage(
+                record=cluster_record,
+                role=cluster_role,
+                text=cluster_source_text,
+                phase=cluster_phase,
+            )
+        )
+
+    for record, (priority, role, text, phase) in candidates:
+        timestamp = iso_to_epoch(record.timestamp)
+        comparison_text = " ".join(text.split())
+        same_message = (
+            cluster_record is not None
+            and role == cluster_role
+            and comparison_text == cluster_text
+            and cluster_time is not None
+            and abs(timestamp - cluster_time) <= 1.0
+        )
+        if not same_message:
+            flush_cluster()
+            cluster_role = role
+            cluster_text = comparison_text
+            cluster_time = timestamp
+            cluster_priority = priority
+            cluster_record = record
+            cluster_source_text = text
+            cluster_phase = phase
+            continue
+        if priority > cluster_priority:
+            cluster_priority = priority
+            cluster_record = record
+            cluster_source_text = text
+            cluster_phase = phase
+            cluster_time = timestamp
+
+    flush_cluster()
+    messages.sort(
+        key=lambda message: (
+            iso_to_epoch(message.record.timestamp),
+            message.record.line_number,
+        )
+    )
+    return messages
+
+
 def message_records(parsed: ParsedRollout) -> List[RolloutRecord]:
-    return [
-        record
-        for record in response_items(parsed, "message")
-        if record.payload.get("role") in MESSAGE_ROLES
-    ]
+    return [message.record for message in normalized_messages(parsed)]
 
 
 def tool_call_records(parsed: ParsedRollout) -> List[RolloutRecord]:
-    return response_items(parsed, "function_call")
+    return [
+        record
+        for record in response_items(parsed)
+        if record.payload.get("type") in TOOL_CALL_TYPES
+    ]
 
 
 def tool_result_records(parsed: ParsedRollout) -> List[RolloutRecord]:
-    return response_items(parsed, "function_call_output")
+    return [
+        record
+        for record in response_items(parsed)
+        if record.payload.get("type") in TOOL_OUTPUT_TYPES
+    ]
+
+
+def tool_calls_by_call_id(parsed: ParsedRollout) -> Dict[str, RolloutRecord]:
+    records = {}
+    for record in tool_call_records(parsed):
+        call_id = record.payload.get("call_id")
+        if call_id:
+            records[call_id] = record
+    return records
 
 
 def output_records_by_call_id(parsed: ParsedRollout) -> Dict[str, RolloutRecord]:
     records = {}
     for record in tool_result_records(parsed):
-        records[record.payload["call_id"]] = record
+        call_id = record.payload.get("call_id")
+        if call_id:
+            records[call_id] = record
     for record in event_messages(parsed, "exec_command_end"):
-        records[record.payload["call_id"]] = record
+        call_id = record.payload.get("call_id")
+        if call_id:
+            records[call_id] = record
     return records
 
 
@@ -456,8 +634,12 @@ def status_for_output(record: Optional[RolloutRecord]) -> Optional[str]:
     if record is None:
         return None
     if record.record_type == "event_msg":
+        item = record.payload.get("item")
+        if isinstance(item, dict) and item.get("status"):
+            return item["status"]
         return record.payload.get("status")
-    return "completed"
+    value = record.payload.get("status")
+    return value if isinstance(value, str) and value else "completed"
 
 
 def output_for_record(record: Optional[RolloutRecord]) -> Any:
@@ -477,10 +659,12 @@ def output_for_record(record: Optional[RolloutRecord]) -> Any:
 def has_errors(parsed: ParsedRollout) -> bool:
     for record in event_messages(parsed):
         payload = record.payload
-        status = str(payload.get("status", "")).lower()
+        item = payload.get("item")
+        status_payload = item if isinstance(item, dict) else payload
+        status = str(status_payload.get("status", "")).lower()
         if status in ERROR_STATUSES:
             return True
-        exit_code = payload.get("exit_code")
+        exit_code = status_payload.get("exit_code")
         if isinstance(exit_code, int) and exit_code != 0:
             return True
     return False
@@ -516,17 +700,23 @@ def token_totals(parsed: ParsedRollout) -> Dict[str, int]:
 
 def session_text(parsed: ParsedRollout) -> str:
     chunks = []
+    for message in normalized_messages(parsed):
+        chunks.append(message.text)
     for record in parsed.records:
         payload = record.payload
-        if record.record_type == "event_msg" and "message" in payload:
-            chunks.append(str(payload["message"]))
         if record.record_type == "response_item":
-            chunks.append(text_from_content(payload.get("content")))
             if "arguments" in payload:
                 chunks.append(str(payload["arguments"]))
+            if "input" in payload:
+                chunks.append(str(payload["input"]))
             if "output" in payload:
                 chunks.append(str(payload["output"]))
     return "\n".join(chunk for chunk in chunks if chunk)
+
+
+def is_injected_context_text(text: str) -> bool:
+    stripped = text.lstrip()
+    return any(stripped.startswith(prefix) for prefix in INJECTED_CONTEXT_PREFIXES)
 
 
 def extract_skill_mentions(text: str) -> List[str]:
@@ -658,9 +848,8 @@ def extract_user_prompts(
 ) -> Dict[str, List[str]]:
     """Extract first/last user prompts from a Codex rollout JSONL file.
 
-    Reads the rollout, filters to record_type == "event_msg" AND payload.type ==
-    "user_message" records (reusing the event_messages() helper), extracts each
-    payload.message string, optionally cleans, truncates to max_chars, and returns
+    Reads the rollout, uses the normalized user-message stream, optionally
+    cleans, truncates to max_chars, and returns
     {"first_user_prompts": [...], "last_user_prompts": [...]}.
 
     Raises ValueError if the rollout cannot be parsed (no silent fallback).
@@ -672,10 +861,10 @@ def extract_user_prompts(
 
     parsed = load_rollout(rollout_path)
     prompts: List[str] = []
-    for record in event_messages(parsed, "user_message"):
-        message = record.payload.get("message")
-        if not isinstance(message, str):
+    for normalized in normalized_messages(parsed):
+        if normalized.role != "user":
             continue
+        message = normalized.text
         if clean:
             cleaned = _clean_prompt_text(message)
             if cleaned is None:
