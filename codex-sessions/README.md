@@ -210,7 +210,9 @@ ignored in conversation summaries, prompt extraction, and skill mentions.
 Non-message `item_completed` items do not become blank generic timeline events;
 their tool records come from the normalized response-item calls. A
 conversation uses its first meaningful user prompt, falling back to the first
-assistant update when no user prompt was recorded.
+assistant update when no user prompt was recorded. Session search applies the
+same injected-context filter to user messages while keeping assistant messages
+and tool inputs and outputs searchable.
 
 ## Output
 

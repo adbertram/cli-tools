@@ -713,6 +713,8 @@ def token_totals(parsed: ParsedRollout) -> Dict[str, int]:
 def session_text(parsed: ParsedRollout) -> str:
     chunks = []
     for message in normalized_messages(parsed):
+        if message.role == "user" and not is_meaningful_user_message(message):
+            continue
         chunks.append(message.text)
     for record in parsed.records:
         payload = record.payload

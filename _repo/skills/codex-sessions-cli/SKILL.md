@@ -94,7 +94,8 @@ parse failures. Non-message `item_completed` items do not become generic
 timeline events. Conversation summaries, prompt extraction, and skill mentions
 skip injected context such as `AGENTS.md` or environment instructions. A
 conversation uses its first meaningful user prompt, falling back to the first
-assistant update.
+assistant update. Session search applies the same filter to user messages
+while retaining assistant messages and tool inputs and outputs.
 </principle>
 </principles>
 

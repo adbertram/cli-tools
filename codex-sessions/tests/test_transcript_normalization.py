@@ -323,6 +323,102 @@ class TranscriptNormalizationTests(unittest.TestCase):
                 ],
             )
 
+    def test_session_search_skips_injected_user_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            cwd = str(Path(tmp) / "Project")
+            _write_rollout(
+                codex_home,
+                cwd,
+                [
+                    _meta(cwd),
+                    _turn(cwd),
+                    _item_completed(
+                        "2026-04-21T15:00:02.000Z",
+                        {
+                            "type": "UserMessage",
+                            "id": "agents-item",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "# AGENTS.md instructions for /tmp/project injected_agents_needle",
+                                }
+                            ],
+                        },
+                    ),
+                    _message(
+                        "2026-04-21T15:00:03.000Z",
+                        "user",
+                        "<environment_context>injected_env_needle</environment_context>",
+                    ),
+                    _message(
+                        "2026-04-21T15:00:04.000Z",
+                        "user",
+                        "real_prompt_needle",
+                    ),
+                    _message(
+                        "2026-04-21T15:00:05.000Z",
+                        "assistant",
+                        "assistant_needle",
+                    ),
+                    {
+                        "timestamp": "2026-04-21T15:00:06.000Z",
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "call_id": "tool-search-text",
+                            "name": "exec",
+                            "input": "tool_input_needle",
+                        },
+                    },
+                    {
+                        "timestamp": "2026-04-21T15:00:07.000Z",
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call_output",
+                            "call_id": "tool-search-text",
+                            "output": "tool_output_needle",
+                        },
+                    },
+                ],
+            )
+
+            runner = CliRunner()
+            with patch.dict(
+                "os.environ",
+                {
+                    "CODEX_HOME": str(codex_home),
+                    "CODEX_SESSIONS_CODEX_HOME": "",
+                    "CODEX_SESSIONS_CODEX_PROFILE": "",
+                },
+                clear=False,
+            ):
+                def search(query: str):
+                    result = runner.invoke(
+                        app,
+                        [
+                            "sessions",
+                            "search",
+                            query,
+                            "--limit",
+                            "10",
+                            "--properties",
+                            "id",
+                        ],
+                    )
+                    self.assertEqual(result.exit_code, 0, result.output)
+                    return json.loads(result.output)
+
+                self.assertEqual(search("injected_agents_needle"), [])
+                self.assertEqual(search("injected_env_needle"), [])
+                for query in (
+                    "real_prompt_needle",
+                    "assistant_needle",
+                    "tool_input_needle",
+                    "tool_output_needle",
+                ):
+                    self.assertEqual(search(query), [{"id": SESSION_ID}])
+
     def test_call_status_precedes_output_status_and_marks_errors(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"
