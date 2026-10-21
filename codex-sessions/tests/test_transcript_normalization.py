@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 from codex_sessions_cli.client import CodexSessionsClient
 from codex_sessions_cli.main import app
 from codex_sessions_cli.models import TimelineEventType
+from codex_sessions_cli.parsers import extract_user_prompts
 
 
 SESSION_ID = "019dc111-1111-7111-8111-111111111111"
@@ -199,7 +200,8 @@ class TranscriptNormalizationTests(unittest.TestCase):
                         "payload": {
                             "type": "tool_search_call",
                             "call_id": "search-1",
-                            "execution": {"query": "calendar", "limit": 2},
+                            "arguments": {"query": "calendar"},
+                            "execution": "client",
                         },
                     },
                     {
@@ -217,14 +219,195 @@ class TranscriptNormalizationTests(unittest.TestCase):
 
             call = client.get_tool_call("search-1")
             timeline = client.get_timeline(SESSION_ID)
+            call_event = next(
+                event for event in timeline if event.event_type == TimelineEventType.TOOL_CALL
+            )
 
             self.assertEqual(call.name, "tool_search")
-            self.assertEqual(call.arguments, {"query": "calendar", "limit": 2})
+            self.assertEqual(call.arguments, {"query": "calendar", "execution": "client"})
             self.assertEqual(call.output, {"tools": [{"name": "calendar"}]})
+            self.assertEqual(call_event.input, {"query": "calendar", "execution": "client"})
             self.assertEqual(
                 [event.name for event in timeline if event.event_type.value in {"tool_call", "tool_result"}],
                 ["tool_search", "tool_search"],
             )
+
+    def test_prompt_and_skill_views_skip_injected_context(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            cwd = str(Path(tmp) / "Project")
+            rollout_path = _write_rollout(
+                codex_home,
+                cwd,
+                [
+                    _meta(cwd),
+                    _turn(cwd),
+                    _item_completed(
+                        "2026-04-21T15:00:02.000Z",
+                        {
+                            "type": "UserMessage",
+                            "id": "agents-item",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "# AGENTS.md instructions for /tmp/project $agents-skill",
+                                }
+                            ],
+                        },
+                    ),
+                    _message(
+                        "2026-04-21T15:00:03.000Z",
+                        "user",
+                        "<environment_context>cwd=$env-skill</environment_context>",
+                    ),
+                    _message(
+                        "2026-04-21T15:00:04.000Z",
+                        "user",
+                        "$visible-skill run the task",
+                    ),
+                ],
+            )
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            prompts = extract_user_prompts(
+                rollout_path,
+                first_n=5,
+                last_n=5,
+                max_chars=400,
+                clean=False,
+            )
+            skills = client.list_skills()
+
+            self.assertEqual(
+                prompts,
+                {
+                    "first_user_prompts": ["$visible-skill run the task"],
+                    "last_user_prompts": ["$visible-skill run the task"],
+                },
+            )
+            self.assertEqual([skill.name for skill in skills], ["visible-skill"])
+
+            runner = CliRunner()
+            with patch.dict(
+                "os.environ",
+                {
+                    "CODEX_HOME": str(codex_home),
+                    "CODEX_SESSIONS_CODEX_HOME": "",
+                    "CODEX_SESSIONS_CODEX_PROFILE": "",
+                },
+                clear=False,
+            ):
+                result = runner.invoke(
+                    app,
+                    [
+                        "sessions",
+                        "list",
+                        "--filter",
+                        f"id:eq:{SESSION_ID}",
+                        "--include-prompts",
+                        "first:5,last:5",
+                        "--properties",
+                        "id,first_user_prompts,last_user_prompts",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(
+                json.loads(result.output),
+                [
+                    {
+                        "id": SESSION_ID,
+                        "first_user_prompts": ["$visible-skill run the task"],
+                        "last_user_prompts": ["$visible-skill run the task"],
+                    }
+                ],
+            )
+
+    def test_call_status_precedes_output_status_and_marks_errors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            cwd = str(Path(tmp) / "Project")
+            _write_rollout(
+                codex_home,
+                cwd,
+                [
+                    _meta(cwd),
+                    _turn(cwd),
+                    {
+                        "timestamp": "2026-04-21T15:00:02.000Z",
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call",
+                            "call_id": "function-failed",
+                            "name": "exec_command",
+                            "arguments": {"cmd": "false"},
+                            "status": "failed",
+                        },
+                    },
+                    {
+                        "timestamp": "2026-04-21T15:00:03.000Z",
+                        "type": "response_item",
+                        "payload": {
+                            "type": "function_call_output",
+                            "call_id": "function-failed",
+                            "output": "failed",
+                        },
+                    },
+                    {
+                        "timestamp": "2026-04-21T15:00:04.000Z",
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call",
+                            "call_id": "custom-failed",
+                            "name": "exec",
+                            "input": "throw new Error()",
+                            "status": "failed",
+                        },
+                    },
+                    {
+                        "timestamp": "2026-04-21T15:00:05.000Z",
+                        "type": "response_item",
+                        "payload": {
+                            "type": "custom_tool_call_output",
+                            "call_id": "custom-failed",
+                            "output": "failed",
+                            "status": "completed",
+                        },
+                    },
+                    {
+                        "timestamp": "2026-04-21T15:00:06.000Z",
+                        "type": "response_item",
+                        "payload": {
+                            "type": "tool_search_call",
+                            "call_id": "search-failed",
+                            "arguments": {"query": "calendar"},
+                            "execution": "client",
+                            "status": "failed",
+                        },
+                    },
+                    {
+                        "timestamp": "2026-04-21T15:00:07.000Z",
+                        "type": "response_item",
+                        "payload": {
+                            "type": "tool_search_output",
+                            "call_id": "search-failed",
+                            "output": None,
+                            "status": "completed",
+                        },
+                    },
+                ],
+            )
+            client = CodexSessionsClient(codex_home=codex_home)
+
+            calls = client.list_tool_calls()
+            timeline = client.get_timeline(SESSION_ID)
+            call_events = [
+                event for event in timeline if event.event_type == TimelineEventType.TOOL_CALL
+            ]
+
+            self.assertEqual([call.status for call in calls], ["failed", "failed", "failed"])
+            self.assertEqual([event.status for event in call_events], ["failed", "failed", "failed"])
+            self.assertTrue(client.list_sessions()[0].has_errors)
 
     def test_item_completed_messages_fill_gaps_and_do_not_duplicate(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -357,6 +540,17 @@ class TranscriptNormalizationTests(unittest.TestCase):
                     },
                 }
             )
+            records.append(
+                _item_completed(
+                    "2026-04-21T15:02:31.000Z",
+                    {
+                        "type": "CommandExecution",
+                        "id": "exec-item-only",
+                        "status": "completed",
+                        "aggregated_output": "ignored by the generic timeline",
+                    },
+                )
+            )
             _write_rollout(codex_home, cwd, records)
             client = CodexSessionsClient(codex_home=codex_home)
 
@@ -383,6 +577,9 @@ class TranscriptNormalizationTests(unittest.TestCase):
                     for event in timeline
                 ),
                 1,
+            )
+            self.assertFalse(
+                any(event.name == "item_completed" for event in timeline)
             )
 
             runner = CliRunner()

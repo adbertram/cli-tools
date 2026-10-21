@@ -39,7 +39,7 @@ from .parsers import (
     event_messages,
     extract_skill_mentions,
     has_errors,
-    is_injected_context_text,
+    is_meaningful_user_message,
     is_message_record,
     iter_rollout_paths,
     last_turn_model,
@@ -53,6 +53,7 @@ from .parsers import (
     parse_arguments,
     project_name,
     session_text,
+    status_for_call,
     status_for_output,
     token_totals,
     tool_call_arguments,
@@ -313,7 +314,7 @@ class CodexSessionsClient:
                 "time": record.timestamp,
                 "tool": name,
                 "name": name,
-                "status": status_for_output(output_record),
+                "status": status_for_call(record, output_record),
                 "arguments": arguments,
                 "output": output_for_record(output_record),
                 "cwd": self._tool_cwd(arguments, output_record),
@@ -335,7 +336,7 @@ class CodexSessionsClient:
                 "agent_type": arguments.get("agent_type"),
                 "name": output_data.get("nickname") or arguments.get("description"),
                 "message": arguments.get("message") or arguments.get("prompt"),
-                "status": status_for_output(output_record),
+                "status": status_for_call(record, output_record),
                 "agent_id": output_data.get("agent_id"),
                 "output": output,
             }
@@ -481,7 +482,7 @@ class CodexSessionsClient:
         skills: List[SkillInvocation] = []
         for parsed in self._matching_rollouts(project, project_path, session_id, since):
             for message in normalized_messages(parsed):
-                if message.role != "user":
+                if not is_meaningful_user_message(message):
                     continue
                 record = message.record
                 text = message.text
@@ -507,7 +508,7 @@ class CodexSessionsClient:
         session_id, line_number_text, skill_name = self._parse_skill_id(skill_id)
         parsed = self._get_rollout(session_id)
         for message in normalized_messages(parsed):
-            if message.role != "user":
+            if not is_meaningful_user_message(message):
                 continue
             record = message.record
             if str(record.line_number) != line_number_text:
@@ -675,6 +676,8 @@ class CodexSessionsClient:
                 }
             )
         if record.record_type == "event_msg":
+            if payload.get("type") == "item_completed":
+                return None
             return self._event_msg_timeline_event(record, base)
         if record.record_type == "response_item" and payload.get("type") in TOOL_CALL_TYPES:
             call_id = self._tool_call_id(payload)
@@ -685,7 +688,7 @@ class CodexSessionsClient:
                     "id": call_id,
                     "event_type": TimelineEventType.TOOL_CALL,
                     "name": tool_call_name(payload),
-                    "status": status_for_output(output_record),
+                    "status": status_for_call(record, output_record),
                     "input": tool_call_arguments(payload),
                     "output": output_for_record(output_record),
                 }
@@ -778,7 +781,7 @@ class CodexSessionsClient:
         user_prompts = [
             message.text
             for message in messages
-            if message.role == "user" and not is_injected_context_text(message.text)
+            if is_meaningful_user_message(message)
         ]
         assistant_updates = [
             message.text for message in messages if message.role == "assistant"

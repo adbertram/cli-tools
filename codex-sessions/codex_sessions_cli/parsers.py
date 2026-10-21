@@ -442,19 +442,20 @@ def tool_call_name(payload: Dict[str, Any]) -> str:
 
 
 def tool_call_arguments(payload: Dict[str, Any]) -> Dict[str, Any]:
-    if payload.get("type") == "tool_search_call" and "execution" in payload:
-        execution = payload["execution"]
-        return execution if isinstance(execution, dict) else {"input": execution}
-    if "input" in payload:
-        value = payload["input"]
-        return value if isinstance(value, dict) else {"input": value}
+    arguments: Dict[str, Any] = {}
     if "arguments" in payload:
         value = payload["arguments"]
         try:
-            return parse_arguments(value)
+            arguments = dict(parse_arguments(value))
         except (TypeError, ValueError):
-            return {"input": value}
-    return {}
+            arguments = {"input": value}
+    elif "input" in payload:
+        value = payload["input"]
+        arguments = value if isinstance(value, dict) else {"input": value}
+
+    if payload.get("type") == "tool_search_call" and "execution" in payload:
+        arguments.setdefault("execution", payload["execution"])
+    return arguments
 
 
 def parse_output(output: Any) -> Any:
@@ -642,6 +643,13 @@ def status_for_output(record: Optional[RolloutRecord]) -> Optional[str]:
     return value if isinstance(value, str) and value else "completed"
 
 
+def status_for_call(record: RolloutRecord, output_record: Optional[RolloutRecord]) -> Optional[str]:
+    value = record.payload.get("status")
+    if isinstance(value, str) and value:
+        return value
+    return status_for_output(output_record)
+
+
 def output_for_record(record: Optional[RolloutRecord]) -> Any:
     if record is None:
         return None
@@ -657,6 +665,10 @@ def output_for_record(record: Optional[RolloutRecord]) -> Any:
 
 
 def has_errors(parsed: ParsedRollout) -> bool:
+    for record in tool_call_records(parsed):
+        status = str(record.payload.get("status", "")).lower()
+        if status in ERROR_STATUSES:
+            return True
     for record in event_messages(parsed):
         payload = record.payload
         item = payload.get("item")
@@ -717,6 +729,10 @@ def session_text(parsed: ParsedRollout) -> str:
 def is_injected_context_text(text: str) -> bool:
     stripped = text.lstrip()
     return any(stripped.startswith(prefix) for prefix in INJECTED_CONTEXT_PREFIXES)
+
+
+def is_meaningful_user_message(message: NormalizedMessage) -> bool:
+    return message.role == "user" and not is_injected_context_text(message.text)
 
 
 def extract_skill_mentions(text: str) -> List[str]:
@@ -862,7 +878,7 @@ def extract_user_prompts(
     parsed = load_rollout(rollout_path)
     prompts: List[str] = []
     for normalized in normalized_messages(parsed):
-        if normalized.role != "user":
+        if not is_meaningful_user_message(normalized):
             continue
         message = normalized.text
         if clean:

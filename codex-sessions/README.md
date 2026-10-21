@@ -195,16 +195,22 @@ Tool calls are normalized across
 `custom_tool_call`/`custom_tool_call_output`, and
 `tool_search_call`/`tool_search_output`. Custom string inputs are returned as
 `{"input": "<raw text>"}`; object inputs pass through unchanged. Tool-search
-calls without an explicit name use `tool_search`. Outputs without a `call_id`
-remain visible as standalone `tool_result` timeline events and are not paired
-with a call.
+calls without an explicit name use `tool_search`; their parsed `arguments` are
+preserved and the execution surface is added as an `execution` key when
+present. Outputs without a `call_id` remain visible as standalone
+`tool_result` timeline events and are not paired with a call. A call's own
+`status` takes precedence over its output status, and failed calls set the
+session error flag.
 
 Messages are normalized across response items, legacy `user_message` and
 `agent_message` events, and `item_completed` `UserMessage`/`AgentMessage`
 items. Equivalent copies are deduplicated, chronological order is preserved,
-and injected context such as `AGENTS.md` instructions is ignored when choosing
-a conversation summary. A conversation uses its first meaningful user prompt,
-falling back to the first assistant update when no user prompt was recorded.
+and injected context such as `AGENTS.md` or environment instructions is
+ignored in conversation summaries, prompt extraction, and skill mentions.
+Non-message `item_completed` items do not become blank generic timeline events;
+their tool records come from the normalized response-item calls. A
+conversation uses its first meaningful user prompt, falling back to the first
+assistant update when no user prompt was recorded.
 
 ## Output
 

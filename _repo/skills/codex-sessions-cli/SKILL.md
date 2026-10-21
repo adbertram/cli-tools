@@ -87,10 +87,14 @@ tool-search calls, legacy message events, response messages, and
 
 Treat `custom_tool_call` input as an object when supplied as one; otherwise
 preserve it as `{"input": <raw>}`. Use `tool_search` when a tool-search payload
-has no name. An output without `call_id` is a standalone timeline
-`tool_result`, not a parse failure. Conversation summaries skip injected
-context such as `AGENTS.md` instructions and use the first meaningful user
-prompt, falling back to the first assistant update.
+has no name. Preserve tool-search `arguments` and include its `execution`
+surface when present. A call's own status takes precedence over output status.
+Outputs without `call_id` are standalone timeline `tool_result` events, not
+parse failures. Non-message `item_completed` items do not become generic
+timeline events. Conversation summaries, prompt extraction, and skill mentions
+skip injected context such as `AGENTS.md` or environment instructions. A
+conversation uses its first meaningful user prompt, falling back to the first
+assistant update.
 </principle>
 </principles>
 
