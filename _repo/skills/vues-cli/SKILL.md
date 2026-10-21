@@ -33,7 +33,8 @@ vues <command-group> <action> [arguments] [options]
 | Check authentication status across profiles | `vues auth status` |
 | Test authentication by verifying credentials work across profiles | `vues auth test` |
 | Get one campaign in full (CPM, max payout, budget, platforms, brief and rules, exactly as the API returns it) | `vues campaigns get <CAMPAIGN_ID>` |
-| Apply to / join a campaign (POST /clipper/campaigns/{id}/apply) | `vues campaigns join <CAMPAIGN_ID>` |
+| Read back the applications gating a campaign as {campaign_id, teaser, applications} (empty list: none) | `vues campaigns applications <CAMPAIGN_ID>` |
+| Reach a campaign: a member gets status existing; a gated one applies to its organization once | `vues campaigns join <CAMPAIGN_ID>` |
 | List the clipper campaigns the signed-in creator can see (all pages up to --limit) | `vues campaigns list` |
 | Get the wallet balance (micro-dollars) and lifetime clipper stats as {balance, stats} | `vues earnings get` |
 | Get one discoverable organization (description, auto_approve_applications, is_member) | `vues organizations get <ORG_ID>` |
@@ -82,10 +83,24 @@ the task names; `--yes` on a manual-approval org also affirms the Terms of
 Service and that org's rules.
 </principle>
 
+<principle name="Campaign Applications Are Organization Applications">
+Vues has no per-campaign application: a campaign is reachable when it is public
+or its organization admitted the creator, and otherwise is gated behind that
+organization. `vues campaigns applications CAMPAIGN_ID` reads back
+`{campaign_id, teaser, applications}`: `teaser.outcome` is `member` or `teaser`,
+and `applications` holds the creator's application rows (`id`, `status`
+pending/approved/denied, `created_at`, `reviewed_at`, `organization`) for the
+campaign's organization. An empty list with exit 0 means no application; exit 1
+means the read failed (including teaser outcome `not_available`), never "none".
+`vues campaigns join CAMPAIGN_ID` returns `status: existing` for a reachable
+campaign and otherwise applies once to its organization, like
+`organizations join`.
+</principle>
+
 <principle name="Command Groups">
 - **account** -- Current Vues creator account (subcommands: get)
 - **auth** -- Manage vues authentication (subcommands: login, logout, profiles, seed-shared-chromium-profile, status, test)
-- **campaigns** -- Vues campaigns (subcommands: get, join, list)
+- **campaigns** -- Vues campaigns (subcommands: applications, get, join, list)
 - **earnings** -- Balance and earnings (subcommands: get)
 - **organizations** -- Vues organizations (a clipper only sees campaigns of orgs they belong to) (subcommands: applications, get, join, list)
 - **social-accounts** -- Linked social accounts (subcommands: list)

@@ -110,9 +110,35 @@ vues campaigns list --filter type:eq:CLIPPING   # -f: field:op:value (local)
 vues campaigns list --properties id,name        # -p: only these fields
 vues campaigns get CAMPAIGN_ID           # one campaign in full (cpm, max/min payout, budget, platforms, brief)
 vues campaigns get CAMPAIGN_ID --table
-vues campaigns join CAMPAIGN_ID --dry-run   # show the join request without sending
-vues campaigns join CAMPAIGN_ID --yes       # apply to / join the campaign
+vues campaigns applications CAMPAIGN_ID     # read back the applications gating the campaign (JSON)
+vues campaigns applications CAMPAIGN_ID --table
+vues campaigns join CAMPAIGN_ID --dry-run   # show what joining would send, sending nothing
+vues campaigns join CAMPAIGN_ID --yes       # reach the campaign (applies to its organization when gated)
 ```
+
+Vues has no per-campaign application. A campaign is reachable when it is public
+or its organization has admitted the creator; otherwise it is gated behind its
+organization, and the web app's "Join" applies to that organization. The
+backend has no `/clipper/campaigns/{id}/apply` or `/clipper/campaigns/{id}/application`
+route (both answer the router's own 404 for every method, verified 2026-10-20).
+Both commands start from `GET /clipper/campaigns/{id}/teaser`, whose `outcome` is
+`member` (reachable), `teaser` (gated) or `not_available`.
+
+`campaigns applications` returns `{campaign_id, teaser, applications}`:
+`teaser` is the teaser object verbatim and `applications` holds the creator's
+`/clipper/applications` rows for the campaign's organization (matched on the
+campaign's `organization_id` when reachable, on the teaser's
+`organization.short_id` when gated), each with `id`, `status`
+(`pending`/`approved`/`denied`), `message`, `created_at`, `reviewed_at` and
+`organization`. No application is an empty list with exit 0; a campaign that is
+`not_available`, unknown, or whose organization cannot be identified exits 1
+with the reason on stderr, so a failed read is never mistaken for "none".
+
+`campaigns join` never sends twice: `member` returns `status: existing,
+reason: member` and sends nothing; a gated campaign runs `organizations join`
+for its organization and returns that result (`joined`, `applied`, `existing`
+or `dry_run`) plus `campaign_id` and `teaser`. `--yes` on a manual-approval
+organization also affirms the Terms of Service and that organization's rules.
 
 ### social-accounts
 
@@ -179,7 +205,7 @@ live responses on 2026-10-15):
 
 Routes used (all under `https://api.evrgreen.ai/api/v1`, the same ones the
 signed-in vues.app clipper pages call): `/users/me`, `/clipper/campaigns`,
-`/clipper/campaigns/{id}`, `/clipper/campaigns/{id}/apply`,
+`/clipper/campaigns/{id}`, `/clipper/campaigns/{id}/teaser`,
 `/organizations/discoverable`, `/clipper/orgs`, `/clipper/applications`,
 `/organizations/{id}/apply`,
 `/clipper/bundle/accounts?grouped=true`, `/clipper/submissions`,

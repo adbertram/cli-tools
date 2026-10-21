@@ -12,7 +12,7 @@ module and live calls (verified 2026-10-15):
   * success: {"status":"success","code":200,"message":...,"data":...}
   * errors:  {"status":"error","code":N,"message":"..."}
   * clipper routes: GET /users/me, /clipper/campaigns (offset/limit paging),
-    /clipper/campaigns/{id or short_id}, POST /clipper/campaigns/{id}/apply,
+    /clipper/campaigns/{id or short_id}, /clipper/campaigns/{id or short_id}/teaser,
     GET /clipper/bundle/accounts?grouped=true, GET /clipper/submissions
     (offset/limit/campaign_id), POST /clipper/submissions
     {campaign_id, post_links} then GET /clipper/submissions/batches/{batch_id},
@@ -22,6 +22,14 @@ module and live calls (verified 2026-10-15):
     GET /clipper/applications, POST /organizations/{id}/apply {"message": str|null}
     (the web app's own "Join now" / "Send application" call, from its JS bundle).
 There is no single-submission GET route (405), so `submission()` pages the list.
+Campaigns have no applications of their own (verified 2026-10-20): the web app's
+API module still lists POST /clipper/campaigns/{id}/apply and GET
+/clipper/campaigns/{id}/application, but the backend answers both, for every
+method, with the router's own 404 {"detail":"Not Found"} (a real POST-only route
+such as /organizations/{id}/apply answers GET with 405). The teaser says whether
+the creator can reach a campaign: outcome "member" (public, or its organization
+admitted the creator), "teaser" (organization-gated; the web app then applies to
+that organization) or "not_available".
 The brand-side /campaigns route answers 403 "Enterprise access required" for a
 clipper, and /api/openapi.json answers 401 even with a valid session.
 """
@@ -54,6 +62,7 @@ BATCH_POLL_START = 0.8
 BATCH_POLL_MAX = 5.0
 PENDING_BATCH_STATUSES = {"queued", "processing"}
 TIKTOK_PLATFORM = "TIKTOK"
+TEASER_OUTCOMES = {"member", "teaser", "not_available"}
 APP_URL = "https://vues.app/clipper"
 SESSION_COOKIE = f"sb-{SUPABASE_REF}-auth-token"
 NO_ACCOUNT_HELP = (
@@ -292,14 +301,47 @@ class VuesClient:
         """One campaign by its id or short_id."""
         return self._data("GET", f"/clipper/campaigns/{campaign_id}")
 
+    def campaign_teaser(self, campaign_id: str) -> dict:
+        """Whether the creator can reach a campaign, as GET .../teaser states it."""
+        teaser = self._data("GET", f"/clipper/campaigns/{campaign_id}/teaser")
+        if not isinstance(teaser, dict) or teaser.get("outcome") not in TEASER_OUTCOMES:
+            raise ClientError(f"Vues campaign {campaign_id} teaser returned no known outcome: {teaser}")
+        if teaser["outcome"] == "not_available":
+            raise ClientError(f"Vues campaign {campaign_id} is not available to this account (teaser outcome "
+                              "not_available), so its organization and application cannot be read")
+        return teaser
+
+    def _teaser_organization(self, campaign_id: str, teaser: dict) -> str:
+        organization = teaser.get("organization")
+        short_id = organization.get("short_id") if isinstance(organization, dict) else None
+        if not isinstance(short_id, str) or not short_id:
+            raise ClientError(f"Vues campaign {campaign_id} teaser names no organization: {teaser}")
+        return short_id
+
+    def campaign_applications(self, campaign_id: str) -> dict:
+        """The creator's applications that gate one campaign.
+
+        Vues applies to a campaign's organization, never to the campaign, so these are
+        that organization's rows from /clipper/applications (empty when none exists)."""
+        teaser = self.campaign_teaser(campaign_id)
+        if teaser["outcome"] == "member":
+            field, organization = "id", self.get_campaign(campaign_id).get("organization_id")
+            if not isinstance(organization, str) or not organization:
+                raise ClientError(f"Vues campaign {campaign_id} names no organization_id")
+        else:
+            field, organization = "short_id", self._teaser_organization(campaign_id, teaser)
+        rows = [row for row in self.organization_applications(None)
+                if (row.get("organization") or {}).get(field) == organization]
+        return {"campaign_id": campaign_id, "teaser": teaser, "applications": rows}
+
     def join_campaign(self, campaign_id: str, dry_run: bool) -> dict:
-        campaign = self.get_campaign(campaign_id)
-        path = f"/clipper/campaigns/{campaign['id']}/apply"
-        request = {"method": "POST", "url": f"{self.base_url}{API_PREFIX}{path}", "body": {}}
-        if dry_run:
-            return {"status": "dry_run", "campaign_id": campaign["id"], "request": request}
-        data = self._data("POST", path, body={})
-        return {"status": "applied", "campaign_id": campaign["id"], "application": data}
+        """Reach a campaign the way the web app does: a member already can (status
+        existing, nothing sent); an organization-gated one applies to its organization once."""
+        teaser = self.campaign_teaser(campaign_id)
+        if teaser["outcome"] == "member":
+            return {"status": "existing", "reason": "member", "campaign_id": campaign_id, "teaser": teaser}
+        result = self.join_organization(self._teaser_organization(campaign_id, teaser), None, dry_run)
+        return {**result, "campaign_id": campaign_id, "teaser": teaser}
 
     # ==================== Organizations ====================
 

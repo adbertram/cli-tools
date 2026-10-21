@@ -1,8 +1,8 @@
 {
   "tool": "vues",
   "description": "CLI interface for vues",
-  "discovered_at": "2026-10-15T16:36:11Z",
-  "total_commands": 25,
+  "discovered_at": "2026-10-21T03:49:14Z",
+  "total_commands": 26,
   "global_options": [],
   "commands": {
     "account": {
@@ -311,6 +311,40 @@
       "arguments": [],
       "options": [],
       "commands": {
+        "applications": {
+          "help": "Read back the applications gating a campaign as {campaign_id, teaser, applications} (empty list: none).",
+          "arguments": [
+            {
+              "name": "campaign_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Campaign id or short_id"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
         "get": {
           "help": "Get one campaign in full (CPM, max payout, budget, platforms, brief and rules, exactly as the API returns it).",
           "arguments": [
@@ -346,7 +380,7 @@
           ]
         },
         "join": {
-          "help": "Apply to / join a campaign (POST /clipper/campaigns/{id}/apply).",
+          "help": "Reach a campaign: a member gets status existing; a gated one applies to its organization once.",
           "arguments": [
             {
               "name": "campaign_id",
@@ -360,7 +394,7 @@
               "name": "--yes",
               "type": "bool",
               "required": false,
-              "help": "Authorize the change",
+              "help": "Authorize the change; for a manual-approval organization it also affirms the Terms of Service and the organization's rules",
               "takes_value": false
             },
             {

@@ -240,21 +240,84 @@ def test_get_campaign_route(api):
     assert api.get_campaign("XeccWu")["id"] == "7672e5ce-uuid"
 
 
-def test_join_dry_run_uses_campaign_uuid(api):
-    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok(CAMPAIGN)
-    result = api.join_campaign("XeccWu", dry_run=True)
-    assert result["request"]["url"].endswith("/api/v1/clipper/campaigns/7672e5ce-uuid/apply")
-    assert ("POST", "/clipper/campaigns/7672e5ce-uuid/apply", None, {}) not in api.calls
-
-
 ORG = {"id": "org-uuid", "short_id": "3gItXm", "name": "Vues", "auto_approve_applications": True, "is_member": False}
 APPLY_ROUTE = ("POST", "/organizations/org-uuid/apply")
+TEASER_ROUTE = ("GET", "/clipper/campaigns/XeccWu/teaser")
+# Row shape verified live from GET /clipper/applications (2026-10-20).
+APPLICATION = {"id": "app-1", "status": "approved", "message": None, "created_at": "2026-10-16T03:06:43+00:00",
+               "reviewed_at": "2026-10-18T15:45:42+00:00",
+               "organization": {"id": "org-uuid", "name": "Vues", "short_id": "3gItXm"}}
+OTHER_APPLICATION = {**APPLICATION, "id": "app-2", "organization": {"id": "other", "short_id": "zzz"}}
 
 
 def org_routes(api, org=ORG, members=(), applications=()):
     api.routes[("GET", "/organizations/discoverable")] = ok({"items": [org], "total": 1, "offset": 0, "limit": 100})
     api.routes[("GET", "/clipper/orgs")] = ok(list(members))
     api.routes[("GET", "/clipper/applications")] = ok(list(applications))
+
+
+def gated(application_status=None):
+    """A teaser for an organization-gated campaign (fields the web app reads)."""
+    return {"outcome": "teaser", "campaign": {"name": "Camp"}, "application_status": application_status,
+            "organization": {"short_id": "3gItXm", "auto_approve_applications": False}}
+
+
+@pytest.mark.parametrize("applications,expected", [([APPLICATION, OTHER_APPLICATION], [APPLICATION]),
+                                                   ([OTHER_APPLICATION], [])])
+def test_campaign_applications_member_matches_campaign_organization(api, applications, expected):
+    api.routes[TEASER_ROUTE] = ok({"outcome": "member"})
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok({**CAMPAIGN, "organization_id": "org-uuid"})
+    org_routes(api, applications=applications)
+    assert api.campaign_applications("XeccWu") == {"campaign_id": "XeccWu", "teaser": {"outcome": "member"},
+                                                    "applications": expected}
+
+
+def test_campaign_applications_gated_matches_teaser_organization(api):
+    pending = {**APPLICATION, "status": "pending", "reviewed_at": None}
+    api.routes[TEASER_ROUTE] = ok(gated("pending"))
+    org_routes(api, applications=[OTHER_APPLICATION, pending])
+    assert api.campaign_applications("XeccWu")["applications"] == [pending]
+    assert ("GET", "/clipper/campaigns/XeccWu", None, None) not in api.calls
+
+
+@pytest.mark.parametrize("teaser,message", [({"outcome": "not_available"}, "not available"),
+                                            ({"outcome": "other"}, "no known outcome"),
+                                            ({"outcome": "teaser"}, "names no organization")])
+def test_campaign_applications_unreadable_raises(api, teaser, message):
+    api.routes[TEASER_ROUTE] = ok(teaser)
+    org_routes(api)
+    with pytest.raises(ClientError, match=message):
+        api.campaign_applications("XeccWu")
+
+
+def test_campaign_applications_member_without_organization_raises(api):
+    api.routes[TEASER_ROUTE] = ok({"outcome": "member"})
+    api.routes[("GET", "/clipper/campaigns/XeccWu")] = ok(CAMPAIGN)
+    with pytest.raises(ClientError, match="organization_id"):
+        api.campaign_applications("XeccWu")
+
+
+def test_join_campaign_member_sends_nothing(api):
+    api.routes[TEASER_ROUTE] = ok({"outcome": "member"})
+    result = api.join_campaign("XeccWu", dry_run=False)
+    assert result["status"] == "existing" and result["reason"] == "member"
+    assert [call[0] for call in api.calls] == ["GET"]
+
+
+def test_join_campaign_gated_applies_to_its_organization(api):
+    api.routes[TEASER_ROUTE] = ok(gated())
+    org_routes(api, org={**ORG, "auto_approve_applications": False})
+    api.routes[APPLY_ROUTE] = ok({"id": "app-1", "status": "pending"})
+    result = api.join_campaign("XeccWu", dry_run=False)
+    assert result["status"] == "applied" and result["campaign_id"] == "XeccWu"
+    assert ("POST", "/organizations/org-uuid/apply", None, {"message": None}) in api.calls
+
+
+def test_join_campaign_gated_never_applies_twice(api):
+    api.routes[TEASER_ROUTE] = ok(gated("pending"))
+    org_routes(api, applications=[APPLICATION])
+    assert api.join_campaign("XeccWu", dry_run=False)["status"] == "existing"
+    assert not any(call[:2] == APPLY_ROUTE for call in api.calls)
 
 
 def test_organization_lists(api):

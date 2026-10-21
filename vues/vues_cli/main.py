@@ -138,16 +138,35 @@ def get_campaign(
     _record(_client(profile).get_campaign(campaign_id), table, properties)
 
 
+@campaigns_app.command("applications")
+@command
+def campaign_applications(
+    campaign_id: str = typer.Argument(..., help="Campaign id or short_id"),
+    table: bool = TABLE,
+    properties: Optional[str] = PROPERTIES,
+    profile: Optional[str] = PROFILE,
+):
+    """Read back the applications gating a campaign as {campaign_id, teaser, applications} (empty list: none)."""
+    result = _client(profile).campaign_applications(campaign_id)
+    if table:
+        _render(result["applications"], True, properties, "No applications found.", APPLICATION_COLUMNS)
+        return
+    if _property_fields(properties):
+        result["applications"] = apply_properties_filter(result["applications"], properties)
+    print_json(result)
+
+
 @campaigns_app.command("join")
 @command
 def join_campaign(
     campaign_id: str = typer.Argument(..., help="Campaign id or short_id"),
-    yes: bool = YES,
+    yes: bool = typer.Option(False, "--yes", help="Authorize the change; for a manual-approval organization it also "
+                                                 "affirms the Terms of Service and the organization's rules"),
     dry_run: bool = DRY_RUN,
     table: bool = TABLE,
     profile: Optional[str] = PROFILE,
 ):
-    """Apply to / join a campaign (POST /clipper/campaigns/{id}/apply)."""
+    """Reach a campaign: a member gets status existing; a gated one applies to its organization once."""
     _guard(yes, dry_run, "join a campaign")
     _record(_client(profile).join_campaign(campaign_id, dry_run), table, None)
 
