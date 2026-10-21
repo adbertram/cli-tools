@@ -2,11 +2,36 @@
 import os
 import shutil
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, List, Optional
 
 from dotenv import set_key
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
+
+from .parsers import SESSION_SUBDIRS
+
+
+def dedupe_codex_roots(roots: Iterable[Path]) -> List[Path]:
+    """Return normalized Codex roots in first-seen order."""
+    deduped = []
+    seen = set()
+    for path in roots:
+        absolute = Path(os.path.abspath(Path(path).expanduser()))
+        key = os.path.normcase(str(absolute.resolve()))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(absolute)
+    return deduped
+
+
+def _codex_base_home(codex_home: Path) -> Path:
+    """Treat a configured profile home as a child of its base Codex home."""
+    parts = codex_home.expanduser().parts
+    for index, part in enumerate(parts):
+        if part == "profiles" and index + 2 == len(parts):
+            return Path(*parts[:index])
+    return codex_home.expanduser()
 
 
 class Config(BaseConfig):
@@ -31,21 +56,47 @@ class Config(BaseConfig):
 
     @property
     def codex_home(self) -> Path:
-        """Get the Codex home directory containing sessions and config."""
-        configured = os.getenv("CODEX_SESSIONS_CODEX_HOME") or os.getenv("CODEX_HOME")
-        if configured:
-            return Path(configured).expanduser()
-        return Path.home() / ".codex"
+        """Return the first discovered Codex root."""
+        return self.codex_roots[0]
+
+    @property
+    def codex_roots(self) -> List[Path]:
+        """Return the Codex roots read by the CLI in deterministic order."""
+        explicit_home = os.getenv("CODEX_SESSIONS_CODEX_HOME", "").strip()
+        if explicit_home:
+            return dedupe_codex_roots([Path(explicit_home)])
+
+        configured_home = os.getenv("CODEX_HOME", "").strip()
+        base_home = _codex_base_home(
+            Path(configured_home) if configured_home else Path.home() / ".codex"
+        )
+
+        profile = os.getenv("CODEX_SESSIONS_CODEX_PROFILE", "").strip()
+        if profile:
+            return dedupe_codex_roots([base_home / "profiles" / profile])
+
+        roots = [base_home]
+        profiles_dir = base_home / "profiles"
+        if profiles_dir.is_dir():
+            for profile_home in sorted(profiles_dir.iterdir(), key=lambda path: path.name):
+                if profile_home.is_dir() and any(
+                    (profile_home / subdir).exists() for subdir in SESSION_SUBDIRS
+                ):
+                    roots.append(profile_home)
+        return dedupe_codex_roots(roots)
 
     def test_connection(self) -> dict:
         """Verify the local Codex transcript store is readable."""
-        codex_home = self.codex_home
+        roots = self.codex_roots
+        codex_home = roots[0]
         sessions_dir = codex_home / "sessions"
-        exists = codex_home.exists()
+        exists = any(root.exists() for root in roots)
         return {
             "api_test": "passed" if exists else f"failed: {codex_home} does not exist",
             "codex_home": str(codex_home),
+            "codex_roots": [str(root) for root in roots],
             "sessions_dir": str(sessions_dir),
+            "sessions_dirs": [str(root / "sessions") for root in roots],
             "cli_command": self.cli_command,
             "cli_available": self.is_cli_available(),
             "cli_version": self.get_cli_version(),

@@ -3,12 +3,12 @@ name: codex-sessions-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   MANDATORY: Execute codex-sessions operations using the `codex-sessions` CLI tool.
-  Query and analyze OpenAI Codex session transcripts from ~/.codex.
+  Query and analyze OpenAI Codex session transcripts across the primary Codex home and all named Codex profiles.
   Triggers: codex-sessions, codex-sessions cli, codex session history, Codex transcripts, Codex sessions, list Codex sessions, search Codex sessions, Codex tool calls, Codex subagents, Codex timeline, Codex todos
 ---
 
 <objective>
-Execute codex-sessions operations using the `codex-sessions` CLI. All Codex transcript inspection should use this CLI.
+Execute codex-sessions operations using the `codex-sessions` CLI across the primary Codex home and all named profile homes. All Codex transcript inspection should use this CLI.
 </objective>
 
 <quick_start>
@@ -21,7 +21,7 @@ Common commands:
 
 | Task | Command |
 |---|---|
-| Check local Codex transcript access | `codex-sessions auth status` |
+| Check the discovered Codex roots | `codex-sessions auth status` |
 | List Codex projects | `codex-sessions projects list --limit 20` |
 | List recent Codex sessions | `codex-sessions sessions list --limit 20` |
 | Search transcript content | `codex-sessions sessions search "query" --limit 20` |
@@ -32,6 +32,15 @@ Common commands:
 </quick_start>
 
 <principles>
+<principle name="Root Scope">
+Every read command searches the primary Codex home plus named profile homes that
+contain `sessions` or `archived_sessions`. `CODEX_SESSIONS_CODEX_PROFILE` scopes
+to one profile; `CODEX_SESSIONS_CODEX_HOME` scopes to one explicit root and takes
+precedence. A profile-valued `CODEX_HOME` still produces the default all-profile
+search. The command-group `--profile` option is a CLI-tools auth profile, not a
+Codex profile selector.
+</principle>
+
 <principle name="Usage Reference">
 **MANDATORY: Consult the adjacent `usage.json` at `<cli-tools-root>/_repo/skills/<tool>-cli/usage.json` before executing ANY `codex-sessions` command.**
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.

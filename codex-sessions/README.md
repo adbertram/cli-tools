@@ -2,7 +2,7 @@
 
 ## DESCRIPTION
 
-The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts from ~/.codex.
+The `codex-sessions` CLI lets you query and analyze OpenAI Codex session transcripts across the primary Codex home and every named Codex profile.
 
 Use it when you need scriptable reads, exports, or evidence collection without opening the service UI.
 
@@ -150,17 +150,39 @@ Many commands also support:
 
 ## Configuration
 
-Configuration is optional. By default, the CLI reads from `~/.codex` and checks
-for the `codex` executable on `PATH`.
+Configuration is optional. By default, the CLI checks for the `codex` executable
+on `PATH` and reads:
+
+1. The primary Codex home, such as `~/.codex`
+2. Every immediate profile home under `<primary>/profiles/<name>` that contains
+   `sessions` or `archived_sessions`
+
+Profile roots are searched in directory-name order after the primary home.
+Duplicate roots and rollout paths are removed, and `auth status` reports the
+resolved roots in its `codex_roots` field.
 
 ```bash
 ACTIVE=true
 CLI_COMMAND=codex
 CODEX_HOME=~/.codex
-CODEX_SESSIONS_CODEX_HOME=~/.codex
+# Optional: search only one named Codex profile
+CODEX_SESSIONS_CODEX_PROFILE=deepseek
+# Optional: search one explicit root, with higher precedence than the profile
+CODEX_SESSIONS_CODEX_HOME=~/.codex/profiles/work
 ```
 
-`CODEX_SESSIONS_CODEX_HOME` takes precedence over `CODEX_HOME` when both are set.
+`CODEX_HOME` sets the primary Codex home. If it points at
+`<primary>/profiles/<name>`, the CLI derives `<primary>` and still performs the
+default all-profile search.
+
+`CODEX_SESSIONS_CODEX_PROFILE` scopes reads to
+`<primary>/profiles/<name>`. `CODEX_SESSIONS_CODEX_HOME` scopes reads to one
+explicit root and takes precedence over the profile selector. These variables
+are Codex root selectors; the command-group `--profile` option is the separate
+CLI-tools authentication profile and does not change Codex session scope.
+
+Callers that construct `CodexSessionsClient(codex_home=...)` keep the explicit
+single-root behavior.
 
 ## Transcript Handling
 
@@ -195,6 +217,7 @@ Client methods return Pydantic models:
 
 ## Requirements
 
-- Python 3.9+
-- Local Codex transcripts in `~/.codex/sessions` or `~/.codex/archived_sessions`
+- Python 3.11+
+- Local Codex transcripts in the primary home or profile homes, under
+  `sessions` or `archived_sessions`
 - Optional: `codex` CLI installed and available on `PATH`

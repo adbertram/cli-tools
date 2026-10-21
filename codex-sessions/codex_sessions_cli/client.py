@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .config import get_config
+from .config import dedupe_codex_roots, get_config
 from .models import (
     ConversationSummary,
     Project,
@@ -30,9 +30,6 @@ from .models import (
 from .parsers import (
     ParsedRollout,
     RolloutIndex,
-    ROLLOUT_PREFIX,
-    ROLLOUT_SUFFIX,
-    SESSION_SUBDIRS,
     conversation_count,
     conversation_id_for_record,
     encode_project_path,
@@ -70,21 +67,33 @@ class CodexSessionsClient:
 
     def __init__(self, codex_home: Optional[Path] = None):
         self.config = get_config()
-        self.codex_home = Path(codex_home).expanduser() if codex_home else self.config.codex_home
+        roots = (
+            [Path(codex_home)]
+            if codex_home is not None
+            else self.config.codex_roots
+        )
+        self.codex_roots = dedupe_codex_roots(roots)
+        self.codex_home = self.codex_roots[0]
         self.load_errors: List[str] = []
         self._session_names: Optional[Dict[str, str]] = None
 
     def _get_session_names(self) -> Dict[str, str]:
         if self._session_names is None:
-            self._session_names = load_session_names(self.codex_home)
+            names = {}
+            for root in self.codex_roots:
+                for session_id, name in load_session_names(root).items():
+                    names.setdefault(session_id, name)
+            self._session_names = names
         return self._session_names
 
     def auth_status(self) -> Dict[str, Any]:
-        exists = self.codex_home.exists()
+        exists = any(root.exists() for root in self.codex_roots)
         return {
             "authenticated": exists,
             "codex_home": str(self.codex_home),
+            "codex_roots": [str(root) for root in self.codex_roots],
             "sessions_dir": str(self.codex_home / "sessions"),
+            "sessions_dirs": [str(root / "sessions") for root in self.codex_roots],
             "cli_command": self.config.cli_command,
             "cli_available": self.config.is_cli_available(),
             "cli_version": self.config.get_cli_version(),
@@ -352,7 +361,7 @@ class CodexSessionsClient:
         tool_names: Optional[set[str]] = None,
     ) -> Optional[ParsedRollout]:
         self.load_errors = []
-        if not self.codex_home.exists():
+        if not any(root.exists() for root in self.codex_roots):
             return None
         for path in self._rollout_paths_by_mtime_desc():
             try:
@@ -374,12 +383,27 @@ class CodexSessionsClient:
         return tool_names is None or record.payload["name"] in tool_names
 
     def _rollout_paths_by_mtime_desc(self) -> List[Path]:
-        paths: List[Path] = []
-        for subdir in SESSION_SUBDIRS:
-            root = self.codex_home / subdir
-            if root.exists():
-                paths.extend(root.rglob(f"{ROLLOUT_PREFIX}*{ROLLOUT_SUFFIX}"))
-        return sorted(paths, key=self._path_mtime, reverse=True)
+        paths = list(self._rollout_paths())
+        return sorted(
+            paths,
+            key=lambda path: (self._path_mtime(path), str(path)),
+            reverse=True,
+        )
+
+    def _rollout_paths(
+        self,
+        session_ids: Optional[List[str]] = None,
+    ):
+        seen = set()
+        for root in self.codex_roots:
+            if not root.exists():
+                continue
+            for path in iter_rollout_paths(root, session_ids):
+                normalized = path.resolve()
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                yield path
 
     def _path_mtime(self, path: Path) -> float:
         try:
@@ -524,7 +548,7 @@ class CodexSessionsClient:
         if project is None and project_path is None and session_id is None and since is None:
             self.load_errors = []
             events: List[TimelineEvent] = []
-            for path in sorted(iter_rollout_paths(self.codex_home), reverse=True):
+            for path in self._rollout_paths_by_mtime_desc():
                 parsed = self._load_rollout_or_record_error(path)
                 if parsed is None:
                     continue
@@ -769,10 +793,10 @@ class CodexSessionsClient:
 
     def _load_rollouts(self) -> List[ParsedRollout]:
         self.load_errors = []
-        if not self.codex_home.exists():
+        if not any(root.exists() for root in self.codex_roots):
             return []
         rollouts = []
-        for path in iter_rollout_paths(self.codex_home):
+        for path in self._rollout_paths():
             parsed = self._load_rollout_or_record_error(path)
             if parsed is not None:
                 rollouts.append(parsed)
@@ -781,10 +805,10 @@ class CodexSessionsClient:
 
     def _load_rollout_indexes(self, session_ids: Optional[List[str]] = None) -> List[RolloutIndex]:
         self.load_errors = []
-        if not self.codex_home.exists():
+        if not any(root.exists() for root in self.codex_roots):
             return []
         indexes = []
-        for path in iter_rollout_paths(self.codex_home, session_ids):
+        for path in self._rollout_paths(session_ids):
             try:
                 indexes.append(load_rollout_index(path))
             except FileNotFoundError:
@@ -849,20 +873,14 @@ class CodexSessionsClient:
             yield index
 
     def _get_rollout_path(self, session_id: str) -> Path:
-        pattern = f"{ROLLOUT_PREFIX}*{session_id}{ROLLOUT_SUFFIX}"
-        for subdir in SESSION_SUBDIRS:
-            root = self.codex_home / subdir
-            if not root.exists():
-                continue
-            matches = list(root.rglob(pattern))
-            if not matches:
-                continue
-            if len(matches) != 1:
-                rendered = ", ".join(str(path) for path in matches)
-                raise ClientError(
-                    f"Multiple rollouts found for session {session_id}: {rendered}"
-                )
+        matches = list(self._rollout_paths([session_id]))
+        if len(matches) == 1:
             return matches[0]
+        if len(matches) > 1:
+            rendered = ", ".join(str(path) for path in matches)
+            raise ClientError(
+                f"Multiple rollouts found for session {session_id}: {rendered}"
+            )
         raise ClientError(f"Session not found: {session_id}")
 
     def _matches_project(
