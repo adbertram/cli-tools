@@ -5,6 +5,7 @@ POST requests use application/x-www-form-urlencoded.
 """
 import os
 import random
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Optional
@@ -32,6 +33,15 @@ DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 30.0
 DEFAULT_JITTER = 0.1
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+
+# (connect, read) timeout in seconds. Without this, `requests` has no default
+# and a dead/unreachable host (e.g. BrickOwl maintenance dropping TCP 443)
+# hangs indefinitely per attempt, compounding across retries.
+DEFAULT_TIMEOUT = (10, 60)
+
+# Matches the `key=<value>` query/body parameter so it can be scrubbed from
+# any error text before it reaches stdout/stderr or an agent transcript.
+_KEY_PARAM_PATTERN = re.compile(r"(key=)[^&\s'\")]+")
 
 # Concurrent enrichment configuration
 DEFAULT_ENRICH_WORKERS = 10
@@ -121,6 +131,19 @@ class BrickowlClient:
         delay += random.uniform(-jitter_range, jitter_range)
         return min(delay, self.max_delay)
 
+    def _redact_api_key(self, text: str) -> str:
+        """Strip the live API key out of error/exception text.
+
+        `requests` connection errors embed the full request URL (including the
+        `key=<API_KEY>` query parameter) in their exception message. That text
+        is surfaced to stdout/stderr via `ClientError`, so it must never contain
+        the real key.
+        """
+        if not text:
+            return text
+        redacted = text.replace(self.api_key, "***") if self.api_key else text
+        return _KEY_PARAM_PATTERN.sub(r"\1***", redacted)
+
     def _is_retryable(self, response: Optional[requests.Response], exception: Optional[Exception]) -> bool:
         """Determine if a request should be retried."""
         if exception is not None:
@@ -182,6 +205,7 @@ class BrickowlClient:
                     headers=headers,
                     params=params if method == "GET" else None,
                     data=data if method == "POST" else None,
+                    timeout=DEFAULT_TIMEOUT,
                 )
                 last_response = response
 
@@ -203,13 +227,14 @@ class BrickowlClient:
                 break
 
         if last_exception is not None and last_response is None:
-            raise ClientError(f"Request failed: {last_exception}")
+            raise ClientError(f"Request failed: {self._redact_api_key(str(last_exception))}")
 
         if last_response is None:
             raise ClientError("Request failed: no response received")
 
         if not last_response.ok:
             error_text = last_response.text[:500] if last_response.text else "Unknown error"
+            error_text = self._redact_api_key(error_text)
             # Check if this is a 403 on an approval-required endpoint
             if last_response.status_code == 403:
                 # Extract endpoint from URL
