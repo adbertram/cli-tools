@@ -284,15 +284,25 @@ def run(command, timeout=None):
     subprocess.run(command, check=True, timeout=timeout)
 
 
+class CapturedCommandError(subprocess.CalledProcessError):
+    """CalledProcessError whose message names the command's stderr."""
+
+    def __str__(self):
+        message = super().__str__()
+        detail = (self.stderr or "").strip()
+        return f"{message} stderr: {detail}" if detail else message
+
+
 def capture(command, timeout=None):
     completed = subprocess.run(
         command,
-        check=True,
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         timeout=timeout,
     )
+    if completed.returncode != 0:
+        raise CapturedCommandError(completed.returncode, command, completed.stdout, completed.stderr)
     return completed.stdout.strip()
 
 
@@ -1585,17 +1595,9 @@ def press_space():
     }])
 
 
-def parse_screen_point_size(output):
-    parts = [part.strip() for part in output.split(",")]
-    if len(parts) != 4:
-        raise ValueError(f"Unexpected desktop bounds response: {output}")
-    left, top, right, bottom = (int(part) for part in parts)
-    return right - left, bottom - top
-
-
 def screen_point_size():
-    output = capture_osascript('tell application "Finder" to get bounds of window of desktop')
-    return parse_screen_point_size(output)
+    mode = current_display_mode()
+    return mode["width"], mode["height"]
 
 
 def force_slideshow_fullscreen():
@@ -1712,28 +1714,27 @@ def powerpoint_is_running():
 
 
 def presentation_is_open(deck_path):
-    resolved_deck_path = str(Path(deck_path).expanduser().resolve())
+    requested_path = os.path.realpath(Path(deck_path).expanduser())
     output = capture_osascript(
         "on run argv",
-        "set requestedPath to item 1 of argv",
-        'if application "Microsoft PowerPoint" is not running then return "false"',
+        'if application "Microsoft PowerPoint" is not running then return ""',
+        "set openPaths to {}",
         'tell application "Microsoft PowerPoint"',
         "with timeout of 10 seconds",
         "repeat with presentationIndex from 1 to count of presentations",
         "try",
-        "set currentPath to full name of presentation presentationIndex as text",
-        "if currentPath is requestedPath then return \"true\"",
+        "set end of openPaths to full name of presentation presentationIndex as text",
         "end try",
         "end repeat",
         "end timeout",
         "end tell",
-        "return \"false\"",
+        "set AppleScript's text item delimiters to linefeed",
+        "return openPaths as text",
         "end run",
-        args=[resolved_deck_path],
     )
-    if output not in ["true", "false"]:
-        raise RuntimeError(f"Unexpected presentation open response: {output}")
-    return output == "true"
+    # PowerPoint reports symlink-free-looking paths such as /tmp/x while the caller may
+    # pass /private/tmp/x; compare real paths, not literal strings.
+    return any(os.path.realpath(path) == requested_path for path in output.splitlines() if path)
 
 
 def is_applescript_open_poll_failure(error):

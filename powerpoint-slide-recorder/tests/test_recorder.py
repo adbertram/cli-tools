@@ -1046,12 +1046,68 @@ Input #0, avfoundation, from '3':
         self.assertNotIn("Play from Start", script)
         self.assertNotIn("key code 36", script)
 
-    def test_parse_screen_point_size_reads_desktop_bounds(self):
-        self.assertEqual(record.parse_screen_point_size("0, 0, 2056, 1329"), (2056, 1329))
+    def test_screen_point_size_reads_main_display_points_without_apple_events(self):
+        payload = json.dumps({"width": 2056, "height": 1329, "pixel_width": 4112, "pixel_height": 2658})
 
-    def test_parse_screen_point_size_rejects_unexpected_bounds(self):
-        with self.assertRaisesRegex(ValueError, "Unexpected desktop bounds response"):
-            record.parse_screen_point_size("0, 0, 2056")
+        with mock.patch.object(record, "run_macos_display_helper", return_value=payload) as helper, \
+                mock.patch.object(record, "capture_osascript") as capture_osascript, \
+                mock.patch.object(record, "capture") as capture:
+            size = record.screen_point_size()
+
+        self.assertEqual(size, (2056, 1329))
+        helper.assert_called_once_with("current")
+        capture_osascript.assert_not_called()
+        capture.assert_not_called()
+
+    def test_screen_point_size_does_not_reference_finder(self):
+        import inspect
+
+        self.assertNotIn("Finder", inspect.getsource(record.screen_point_size))
+        self.assertFalse(hasattr(record, "parse_screen_point_size"))
+
+    def test_capture_failure_message_includes_stderr(self):
+        failed = subprocess.CompletedProcess(
+            ["osascript", "-e", "x"],
+            1,
+            stdout="",
+            stderr="Not authorized to send Apple events to Finder. (-1743)",
+        )
+
+        with mock.patch.object(subprocess, "run", return_value=failed):
+            with self.assertRaises(subprocess.CalledProcessError) as raised:
+                record.capture(["osascript", "-e", "x"])
+
+        self.assertIn("(-1743)", str(raised.exception))
+        self.assertIn("returned non-zero exit status 1", str(raised.exception))
+        self.assertEqual(raised.exception.returncode, 1)
+        self.assertEqual(raised.exception.stderr, "Not authorized to send Apple events to Finder. (-1743)")
+
+    def test_capture_failure_without_stderr_keeps_plain_message(self):
+        failed = subprocess.CompletedProcess(["false"], 1, stdout="", stderr="")
+
+        with mock.patch.object(subprocess, "run", return_value=failed):
+            with self.assertRaises(subprocess.CalledProcessError) as raised:
+                record.capture(["false"])
+
+        self.assertNotIn("stderr", str(raised.exception))
+
+    def test_capture_returns_stripped_stdout_on_success(self):
+        completed = subprocess.CompletedProcess(["echo"], 0, stdout="true\n", stderr="")
+
+        with mock.patch.object(subprocess, "run", return_value=completed):
+            self.assertEqual(record.capture(["echo"]), "true")
+
+    def test_capture_osascript_failure_is_still_an_open_poll_failure(self):
+        failed = subprocess.CompletedProcess(
+            ["osascript"],
+            1,
+            stdout="",
+            stderr="Microsoft PowerPoint got an error: AppleEvent timed out. (-1712)",
+        )
+
+        with mock.patch.object(subprocess, "run", return_value=failed), \
+                mock.patch.object(record, "log_warning"):
+            self.assertFalse(record.presentation_is_open_during_open("/tmp/deck.pptx"))
 
     def test_fullscreen_action_treats_screen_coverage_as_ready(self):
         lines = record.render_fullscreen_window_action({
@@ -1756,14 +1812,42 @@ Input #0, avfoundation, from '3':
             "crop=3000:1688:0:156,scale=1920:1080",
         )
 
-    def test_presentation_open_check_uses_full_deck_path(self):
-        deck_path = "/tmp/course-a/m1.pptx"
+    def test_presentation_open_check_matches_real_path_of_reported_name(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            real_dir = Path(temp_dir).resolve() / "real"
+            real_dir.mkdir()
+            deck = real_dir / "m1_raw.pptx"
+            deck.write_bytes(b"")
+            link_dir = Path(temp_dir).resolve() / "link"
+            link_dir.symlink_to(real_dir)
 
-        with mock.patch.object(record, "capture", return_value="false") as capture:
-            result = record.presentation_is_open(deck_path)
+            # PowerPoint reports the name through the symlink; the caller passes the real path.
+            reported = str(link_dir / "m1_raw.pptx")
+            with mock.patch.object(record, "capture_osascript", return_value=reported):
+                self.assertTrue(record.presentation_is_open(deck))
+            # And the reverse: reported real path, caller passes the symlinked path.
+            with mock.patch.object(record, "capture_osascript", return_value=str(deck)):
+                self.assertTrue(record.presentation_is_open(link_dir / "m1_raw.pptx"))
 
-        self.assertFalse(result)
-        self.assertEqual(capture.call_args.args[0][-1], str(Path(deck_path).expanduser().resolve()))
+    def test_presentation_open_check_matches_private_tmp_alias(self):
+        # macOS: /tmp is a symlink to /private/tmp; PowerPoint reports /tmp/...
+        if not os.path.islink("/tmp"):
+            self.skipTest("/tmp is not a symlink on this platform")
+
+        with mock.patch.object(record, "capture_osascript", return_value="/tmp/x/m1_raw.pptx"):
+            self.assertTrue(record.presentation_is_open("/private/tmp/x/m1_raw.pptx"))
+
+    def test_presentation_open_check_finds_deck_among_several_open_presentations(self):
+        reported = "/tmp/other.pptx\n/tmp/course-a/m1.pptx"
+
+        with mock.patch.object(record, "capture_osascript", return_value=reported):
+            self.assertTrue(record.presentation_is_open("/tmp/course-a/m1.pptx"))
+
+    def test_presentation_open_check_is_false_for_other_decks_or_none(self):
+        with mock.patch.object(record, "capture_osascript", return_value="/tmp/other.pptx"):
+            self.assertFalse(record.presentation_is_open("/tmp/course-a/m1.pptx"))
+        with mock.patch.object(record, "capture_osascript", return_value=""):
+            self.assertFalse(record.presentation_is_open("/tmp/course-a/m1.pptx"))
 
     def test_open_poll_treats_applescript_timeout_as_not_open_yet(self):
         error = subprocess.CalledProcessError(
