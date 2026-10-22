@@ -11,6 +11,19 @@ description: >-
 Execute claude-code-sessions operations using the `claude-code-sessions` CLI. All Claude transcript inspection should use this CLI.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh claude-code-sessions-cli
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <quick_start>
 The `claude-code-sessions` CLI follows this pattern:
 ```bash
@@ -46,6 +59,10 @@ Use JSON output by default for automation. Add `--table`/`-t` only when the user
 List commands use `--filter`/`-f` with `field:op:value` syntax and `--properties` for field projection. Prefer `--project`, `--project-path`, `--session-id`/`-S`, and `--since`/`-s` before broad scans when the user gives scope.
 </principle>
 
+<principle name="Child Recovery">
+For bounded child recovery, use `tool-calls list --project <project> --session-id <uuid> --subagent-id <launch-tool-id> --limit 8`. `agent_id` identifies the child, and `parent_tool_call_id` identifies its launch. Session/subagent/generic filters run before result limits. `subagent-activity get` uses the same identity/status as list. `unknown` means no terminal evidence; preserve failures even if a child wrote a report.
+</principle>
+
 <principle name="Command Groups">
 - `auth` — local transcript access checks; no real login is required.
 - `projects` — project directories with Claude session rollouts.
@@ -53,7 +70,7 @@ List commands use `--filter`/`-f` with `field:op:value` syntax and `--properties
 - `search` — cross-session transcript search.
 - `conversations` — turn-level summaries inside sessions.
 - `tool-calls` — Claude tool invocations and outputs.
-- `subagent-activity` — subagent launches captured from Task invocations.
+- `subagent-activity` — launches captured from current Agent and legacy Task invocations. Exact result/notification identity links child activity; ambiguous legacy prompts stay unmatched. Terminal notifications determine execution status; a saved report does not prove completion. Failed notifications include their reason in `errors`.
 - `todos` — `update_plan` items captured in transcripts.
 - `skills` — `$skill` or `@agent` mentions in user prompts.
 - `timeline` — chronological event streams for one or more sessions.

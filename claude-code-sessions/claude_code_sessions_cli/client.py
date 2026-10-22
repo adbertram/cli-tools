@@ -24,6 +24,8 @@ from .parsers import (
     scan_session_titles,
     format_local_time,
 )
+from cli_tools_shared.filters import apply_filters
+
 from .models import (
     Project,
     Session,
@@ -682,9 +684,10 @@ class ClaudeCodeSessionsClient:
     def list_subagent_activity(
         self,
         project: str,
-        limit: int = 100,
+        limit: Optional[int] = 100,
         since: Optional[str] = None,
         filters: Optional[List[str]] = None,
+        session_id: Optional[str] = None,
     ) -> List[SubagentSummary]:
         """
         List all subagent invocations for a project.
@@ -708,7 +711,10 @@ class ClaudeCodeSessionsClient:
 
         subagents = []
 
-        for session_file in project_dir.glob('*.jsonl'):
+        session_files = [project_dir / f'{session_id}.jsonl'] if session_id else project_dir.glob('*.jsonl')
+        for session_file in session_files:
+            if not session_file.is_file():
+                continue
             # Skip if file is too old
             if cutoff_time:
                 mtime = datetime.fromtimestamp(session_file.stat().st_mtime)
@@ -753,6 +759,8 @@ class ClaudeCodeSessionsClient:
         # Sort by timestamp (most recent first)
         subagents.sort(key=lambda s: s.timestamp or '', reverse=True)
 
+        if filters:
+            subagents = [SubagentSummary(**item) for item in apply_filters([item.model_dump() for item in subagents], filters)]
         return subagents[:limit]
 
     def get_subagent(self, subagent_id: str, project: str) -> Dict[str, Any]:
@@ -766,20 +774,13 @@ class ClaudeCodeSessionsClient:
         Returns:
             Full subagent data with messages
         """
-        # Find the subagent in sessions
-        all_subagents = self.list_subagent_activity(project, limit=10000)
-
-        for sa in all_subagents:
-            if sa.id == subagent_id:
-                # Get the full session to extract subagent messages
+        for sa in self.list_subagent_activity(project, limit=None):
+            if sa.id == subagent_id or sa.agent_id == subagent_id:
                 session = self.get_session(sa.session_id)
-                subagent_data = session.subagents.get(subagent_id)
-
-                if subagent_data:
-                    return subagent_data.model_dump()
-
-                # Return summary if full data not available
-                return sa.model_dump()
+                embedded = session.subagents.get(sa.id)
+                details = embedded.model_dump() if embedded else {}
+                details.update(sa.model_dump())
+                return details
 
         raise ClientError(f"Subagent not found: {subagent_id}")
 
@@ -788,10 +789,12 @@ class ClaudeCodeSessionsClient:
     def list_tool_calls(
         self,
         project: str,
-        limit: int = 100,
+        limit: Optional[int] = 100,
         since: Optional[str] = None,
         filters: Optional[List[str]] = None,
         include_subagents: bool = False,
+        session_id: Optional[str] = None,
+        subagent_id: Optional[str] = None,
     ) -> List[ToolCallSummary]:
         """
         List all tool calls for a project.
@@ -816,7 +819,10 @@ class ClaudeCodeSessionsClient:
 
         tool_calls = []
 
-        for session_file in project_dir.glob('*.jsonl'):
+        session_files = [project_dir / f'{session_id}.jsonl'] if session_id else project_dir.glob('*.jsonl')
+        for session_file in session_files:
+            if not session_file.is_file():
+                continue
             # Skip if file is too old
             if cutoff_time:
                 mtime = datetime.fromtimestamp(session_file.stat().st_mtime)
@@ -824,12 +830,14 @@ class ClaudeCodeSessionsClient:
                     continue
 
             # Use appropriate extraction function
-            if include_subagents:
+            if include_subagents or subagent_id:
                 session_tool_calls = extract_tool_calls_with_subagents(session_file, project_name)
             else:
                 session_tool_calls = extract_tool_calls_from_session(session_file, project_name)
 
             for tc in session_tool_calls:
+                if subagent_id and tc.get('parent_tool_call_id') != subagent_id:
+                    continue
                 # Time filtering
                 if cutoff_time and tc.get('timestamp'):
                     try:
@@ -850,6 +858,7 @@ class ClaudeCodeSessionsClient:
                     status=tc['status'],
                     is_sidechain=tc['is_sidechain'],
                     parent_tool_call_id=tc.get('parent_tool_call_id'),
+                    agent_id=tc.get('agent_id'),
                     input=tc.get('input'),
                     result=tc.get('result'),
                     error=tc.get('error'),
@@ -858,6 +867,8 @@ class ClaudeCodeSessionsClient:
         # Sort by timestamp (most recent first)
         tool_calls.sort(key=lambda t: t.timestamp or '', reverse=True)
 
+        if filters:
+            tool_calls = [ToolCallSummary(**item) for item in apply_filters([item.model_dump() for item in tool_calls], filters)]
         return tool_calls[:limit]
 
     def get_tool_call(self, tool_call_id: str, project: str) -> ToolCallSummary:

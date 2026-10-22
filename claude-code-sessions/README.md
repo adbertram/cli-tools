@@ -138,8 +138,16 @@ claude-code-sessions subagent-activity list --project ExampleProject
 claude-code-sessions subagent-activity list --project ExampleProject --since 1d
 
 # Filter by agent type
-claude-code-sessions subagent-activity list --project ExampleProject --filter "agent_type:eq:Explore"
+claude-code-sessions subagent-activity list --project ExampleProject --filter "type:eq:Explore"
 ```
+
+Subagents launched with current `Agent` or legacy `Task` tools are linked to
+child activity by the parent result's agent ID or task notification. For older
+records without identity metadata, only a unique complete prompt can link them.
+Ambiguous children stay separate. `status` is `unknown` without terminal evidence;
+background launch acknowledgments and saved reports do not prove completion.
+Failure notifications preserve their reason in `errors` (for example HTTP 429).
+`subagent-activity get` uses the same identity and status as the list command.
 
 ### Tool Calls
 
@@ -151,6 +159,11 @@ claude-code-sessions tool-calls list --project ExampleProject --since 1d
 # Filter by tool name
 claude-code-sessions tool-calls list --project ExampleProject --filter "tool:eq:Read"
 ```
+
+Use `--session-id <uuid> --subagent-id <launch-tool-id> --limit 8` to retrieve
+one child's own tool activity. `agent_id` identifies the child and
+`parent_tool_call_id` identifies its launch. Both activity and tool-call lists
+apply session, subagent, and `--filter` constraints before `--limit`.
 
 ### Todos
 

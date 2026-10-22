@@ -1028,7 +1028,7 @@ def parse_full_session(session_path: Path, project_name: str) -> Optional[Sessio
                     type='unknown',  # Will be determined from Task tool call
                     parent_tool_call_id=parent_uuid,
                     prompt='',
-                    status='completed',
+                    status='unknown',
                     created_at=timestamp or '',
                     messages=[],
                 )
@@ -1187,48 +1187,24 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
     session_id = session_path.stem
     subagents = []
 
-    # Track Task/Agent tool calls from main session (these create subagents).
-    # "Agent" is the current tool name; "Task" is the legacy name in older sessions.
+    agent_to_task, task_states, launches = _subagent_identity(session_path)
     task_calls = {}
+    for tool_id, launch in launches.items():
+        tool_input = launch['input']
+        task_calls[tool_id] = {
+            'id': tool_id, 'session_id': session_id, 'project': project_name,
+            'timestamp': launch['timestamp'],
+            'type': tool_input.get('subagent_type', 'unknown'),
+            'name': tool_input.get('name'), 'prompt': tool_input.get('prompt', ''),
+            'description': tool_input.get('description', ''), 'model': tool_input.get('model'),
+            'status': 'unknown', 'message_count': 0, 'tool_calls': [], 'errors': [],
+            'total_input_tokens': 0, 'total_output_tokens': 0,
+            'total_cache_read_tokens': 0, 'total_cache_creation_tokens': 0,
+        }
 
-    for entry in iter_session_lines(session_path):
-        entry_type = entry.get('type', '')
-        timestamp = entry.get('timestamp', '')
-
-        # Find Task/Agent tool calls
-        if entry_type == 'assistant':
-            message = entry.get('message', {})
-            content = message.get('content', '')
-
-            if isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get('type') == 'tool_use':
-                        if block.get('name') in ('Task', 'Agent'):
-                            tool_id = block.get('id', '')
-                            tool_input = block.get('input', {})
-                            task_calls[tool_id] = {
-                                'id': tool_id,
-                                'session_id': session_id,
-                                'project': project_name,
-                                'timestamp': timestamp,
-                                'type': tool_input.get('subagent_type', 'unknown'),
-                                'name': tool_input.get('name'),
-                                'prompt': tool_input.get('prompt', ''),
-                                'description': tool_input.get('description', ''),
-                                'model': tool_input.get('model'),
-                                'status': 'completed',
-                                'message_count': 0,
-                                'tool_calls': [],
-                                'errors': [],
-                                'total_input_tokens': 0,
-                                'total_output_tokens': 0,
-                                'total_cache_read_tokens': 0,
-                                'total_cache_creation_tokens': 0,
-                            }
-
-    # Check for subagent files in <session_id>/subagents/ directory
     subagents_dir = session_path.parent / session_id / 'subagents'
-    subagent_data = {}  # Map prompt prefix to subagent stats
+    subagent_data = {}  # Preserve every child, including identical prompts.
+    task_to_agent = {task: agent for agent, task in agent_to_task.items()}
 
     if subagents_dir.exists():
         for subagent_file in subagents_dir.glob('agent-*.jsonl'):
@@ -1238,21 +1214,8 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
             if not entries:
                 continue
 
-            # First entry contains the prompt
             first_entry = entries[0]
-            prompt_content = first_entry.get('message', {}).get('content', '')
-            # Handle content as list of content blocks or string
-            if isinstance(prompt_content, list):
-                # Extract text from content blocks
-                prompt_parts = []
-                for block in prompt_content:
-                    if isinstance(block, dict) and block.get('type') == 'text':
-                        prompt_parts.append(block.get('text', ''))
-                    elif isinstance(block, str):
-                        prompt_parts.append(block)
-                prompt = ' '.join(prompt_parts)
-            else:
-                prompt = prompt_content if isinstance(prompt_content, str) else str(prompt_content)
+            prompt = _extract_text_content(first_entry.get('message', {}).get('content', ''))
             timestamp = first_entry.get('timestamp', '')
 
             # Count messages, tool calls, errors, and tokens
@@ -1319,7 +1282,8 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
                                         'content': tc.error.get('message', '')[:500],
                                     })
 
-            subagent_data[prompt[:100]] = {
+            subagent_data[agent_id] = {
+                'prompt': prompt,
                 'agent_id': agent_id,
                 'message_count': message_count,
                 'tool_calls': tool_calls,
@@ -1331,26 +1295,22 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
                 'total_cache_creation_tokens': total_cache_creation_tokens,
             }
 
-    # Match Task calls to subagent data using prompt prefix
     for task_id, task_info in task_calls.items():
-        prompt_prefix = task_info['prompt'][:100]
-        if prompt_prefix in subagent_data:
-            data = subagent_data[prompt_prefix]
-            task_info['message_count'] = data['message_count']
-            task_info['tool_calls'] = data['tool_calls']
-            task_info['errors'] = data['errors']
-            task_info['agent_id'] = data['agent_id']
-            task_info['total_input_tokens'] = data['total_input_tokens']
-            task_info['total_output_tokens'] = data['total_output_tokens']
-            task_info['total_cache_read_tokens'] = data['total_cache_read_tokens']
-            task_info['total_cache_creation_tokens'] = data['total_cache_creation_tokens']
-            # Remove matched entry
-            del subagent_data[prompt_prefix]
+        status, reason = task_states.get(task_id, ('unknown', None))
+        task_info['status'] = status
+        agent_id = task_to_agent.get(task_id)
+        if agent_id:
+            task_info['agent_id'] = agent_id
+        if agent_id in subagent_data:
+            data = subagent_data.pop(agent_id)
+            task_info.update({key: value for key, value in data.items() if key not in ('timestamp', 'prompt')})
+        if reason:
+            task_info['errors'].append({'source': 'parent_notification', 'content': reason})
 
         subagents.append(task_info)
 
     # Add any unmatched subagent files (orphaned subagents)
-    for prompt_prefix, data in subagent_data.items():
+    for agent_id, data in subagent_data.items():
         subagents.append({
             'id': f"agent-{data['agent_id']}",
             'session_id': session_id,
@@ -1358,10 +1318,10 @@ def extract_subagents_from_session(session_path: Path, project_name: str) -> Lis
             'timestamp': data['timestamp'],
             'type': 'unknown',
             'name': None,
-            'prompt': prompt_prefix,
+            'prompt': data['prompt'],
             'description': '',
             'model': None,
-            'status': 'completed',
+            'status': 'unknown',
             'message_count': data['message_count'],
             'tool_calls': data['tool_calls'],
             'errors': data['errors'],
@@ -1502,74 +1462,71 @@ def extract_tool_calls_with_subagents(session_path: Path, project_name: str) -> 
     return tool_calls
 
 
-def _build_agent_to_task_mapping(session_path: Path) -> Dict[str, str]:
-    """
-    Build a mapping from agent_id to parent Task tool call ID.
-
-    Matches Task tool calls from the main session to subagent files
-    by comparing prompt prefixes.
-
-    Args:
-        session_path: Path to the session .jsonl file
-
-    Returns:
-        Dict mapping agent_id to Task tool call ID
-    """
-    session_id = session_path.stem
-    subagents_dir = session_path.parent / session_id / 'subagents'
-
-    if not subagents_dir.exists():
-        return {}
-
-    # Collect Task tool calls with their prompts
-    task_calls = {}  # prompt_prefix -> task_id
-    for entry in iter_session_lines(session_path):
-        if entry.get('type') != 'assistant':
-            continue
-
-        message = entry.get('message', {})
-        content = message.get('content', '')
-
+def _subagent_identity(session_path: Path):
+    """Resolve launches from parent results/notifications; legacy prompts must be unique."""
+    entries = list(iter_session_lines(session_path))
+    launches, identities, states = {}, {}, {}
+    for entry in entries:
+        content = entry.get('message', {}).get('content', '')
         if isinstance(content, list):
             for block in content:
-                if isinstance(block, dict) and block.get('type') == 'tool_use':
-                    if block.get('name') == 'Task':
-                        tool_id = block.get('id', '')
-                        tool_input = block.get('input', {})
-                        prompt = tool_input.get('prompt', '')
-                        prompt_prefix = prompt[:100]
-                        task_calls[prompt_prefix] = tool_id
+                if entry.get('type') == 'assistant' and isinstance(block, dict) and block.get('id') and block.get('type') == 'tool_use' and block.get('name') in ('Task', 'Agent'):
+                    launches[block['id']] = {'input': block.get('input', {}), 'timestamp': entry.get('timestamp', '')}
+    for entry in entries:
+        content = entry.get('message', {}).get('content', '')
+        if isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict) or block.get('type') != 'tool_result':
+                    continue
+                task_id = block.get('tool_use_id')
+                if task_id not in launches:
+                    continue
+                text = _extract_text_content(block.get('content', ''))
+                match = re.search(r'agentId:\s*([\w-]+)', text)
+                metadata = entry.get('toolUseResult', {})
+                result_count = sum(isinstance(item, dict) and item.get('type') == 'tool_result' for item in content)
+                if not isinstance(metadata, dict) or (result_count != 1 and metadata.get('tool_use_id') != task_id):
+                    metadata = {}
+                agent_id = metadata.get('agentId') if isinstance(metadata, dict) else None
+                agent_id = agent_id or (match.group(1) if match else None)
+                if agent_id:
+                    identities[agent_id] = task_id
+                if block.get('is_error'):
+                    states[task_id] = ('failed', text[:2000])
+                elif metadata.get('status') in ('completed', 'failed', 'cancelled', 'stopped'):
+                    status = metadata['status']
+                    states[task_id] = (status, text[:2000] if status != 'completed' else None)
+                elif metadata.get('status'):
+                    states[task_id] = ('unknown', None)
+                elif launches[task_id]['input'].get('run_in_background') not in (True, 'true'):
+                    # A synchronous launch returns its final result; async acknowledgments do not.
+                    states[task_id] = ('completed', None)
+        text = content if isinstance(content, str) else '\n'.join(b.get('text', '') for b in content if isinstance(b, dict))
+        for notification in re.findall(r'<task-notification>(.*?)</task-notification>', text, re.S):
+            def field(name):
+                match = re.search(fr'<{name}>(.*?)</{name}>', notification, re.S)
+                return match.group(1).strip() if match else None
+            task_id, agent_id, status = field('tool-use-id'), field('task-id'), field('status')
+            if task_id in launches:
+                if agent_id:
+                    identities[agent_id] = task_id
+                if status in ('completed', 'failed', 'cancelled', 'stopped'):
+                    states[task_id] = (status, (field('summary') or notification)[:2000] if status != 'completed' else None)
+    directory = session_path.parent / session_path.stem / 'subagents'
+    prompts = {}
+    for child in directory.glob('agent-*.jsonl'):
+        first = next(iter_session_lines(child), {})
+        prompt = _extract_text_content(first.get('message', {}).get('content', ''))
+        prompts.setdefault(prompt, []).append(child.stem.removeprefix('agent-'))
+    for prompt, agents in prompts.items():
+        candidates = [task for task, value in launches.items() if value['input'].get('prompt') == prompt]
+        if prompt and len(agents) == len(candidates) == 1 and agents[0] not in identities and candidates[0] not in identities.values():
+            identities[agents[0]] = candidates[0]
+    return identities, states, launches
 
-    # Match subagent files to Task calls by prompt
-    agent_to_task = {}
-    for subagent_file in subagents_dir.glob('agent-*.jsonl'):
-        agent_id = subagent_file.stem.replace('agent-', '')
-        entries = list(iter_session_lines(subagent_file))
 
-        if not entries:
-            continue
-
-        # Get prompt from first entry
-        first_entry = entries[0]
-        prompt_content = first_entry.get('message', {}).get('content', '')
-
-        if isinstance(prompt_content, list):
-            prompt_parts = []
-            for block in prompt_content:
-                if isinstance(block, dict) and block.get('type') == 'text':
-                    prompt_parts.append(block.get('text', ''))
-                elif isinstance(block, str):
-                    prompt_parts.append(block)
-            prompt = ' '.join(prompt_parts)
-        else:
-            prompt = prompt_content if isinstance(prompt_content, str) else str(prompt_content)
-
-        prompt_prefix = prompt[:100]
-
-        if prompt_prefix in task_calls:
-            agent_to_task[agent_id] = task_calls[prompt_prefix]
-
-    return agent_to_task
+def _build_agent_to_task_mapping(session_path: Path) -> Dict[str, str]:
+    return _subagent_identity(session_path)[0]
 
 
 def calculate_turn_cost(
@@ -1901,7 +1858,7 @@ def extract_timeline_from_session(
                             if prompt:
                                 subagent_launch_calls.append({
                                     'prompt': prompt,
-                                    'prompt_prefix': prompt[:100],
+                                    'id': tool_id,
                                     'subagent_type': subagent_type,
                                     'turn_id': row_turn_id,
                                 })
@@ -1990,21 +1947,21 @@ def extract_timeline_from_session(
                             ))
 
     # Build a mapping from agent_id to agent_name (subagent_type)
-    # by matching subagent launch prompts to subagent files.
+    # using the same parent result identity as activity and tool-call queries.
     agent_id_to_name = {}
     agent_id_to_turn_id = {}
     subagent_file_starts = []
+    agent_to_task = _build_agent_to_task_mapping(session_path)
     subagents_dir = session_path.parent / session_id / 'subagents'
 
     if subagents_dir.exists():
-        # Match subagent files to launch calls by prompt, preserving parallel launches.
+        # Match subagent files to the canonical invocation identity.
         for subagent_file in subagents_dir.glob('agent-*.jsonl'):
             agent_id = subagent_file.stem.replace('agent-', '')
             subagent_entries = list(iter_session_lines(subagent_file))
             if subagent_entries:
                 first_entry = subagent_entries[0]
                 prompt = _extract_text_content(first_entry.get('message', {}).get('content', ''))
-                prompt_prefix = prompt[:100]
                 subagent_file_starts.append({
                     'agent_id': agent_id,
                     'timestamp': first_entry.get('timestamp', ''),
@@ -2012,7 +1969,7 @@ def extract_timeline_from_session(
                     'prompt': prompt,
                 })
                 for launch_call in subagent_launch_calls:
-                    if prompt == launch_call['prompt'] or prompt_prefix == launch_call['prompt_prefix']:
+                    if agent_to_task.get(agent_id) == launch_call['id']:
                         agent_id_to_name[agent_id] = launch_call['subagent_type']
                         agent_id_to_turn_id[agent_id] = launch_call['turn_id']
                         break
