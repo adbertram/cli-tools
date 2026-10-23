@@ -467,6 +467,29 @@ class AirtableClient:
             data["typecast"] = True
         return self._make_request("PATCH", endpoint, data=data)
 
+    def update_records(self, base_id: str, table_id: str, records: List[Dict[str, Any]],
+                       typecast: bool = False) -> List[Dict[str, Any]]:
+        """PATCH at most ten records per request; validate the complete input first."""
+        if not isinstance(records, list) or not records:
+            raise ClientError("records must be a nonempty array of {id, fields} objects")
+        for record in records:
+            if not isinstance(record, dict) or not isinstance(record.get("fields"), dict) or not record["fields"]:
+                raise ClientError("each record must have id and nonempty fields")
+            _validate_record_id(record.get("id"))
+        if len({record["id"] for record in records}) != len(records):
+            raise ClientError("duplicate record ids in update-many")
+        updated = []
+        for start in range(0, len(records), 10):
+            data = {"records": records[start:start + 10]}
+            if typecast:
+                data["typecast"] = True
+            response = self._make_request("PATCH", f"/{base_id}/{table_id}", data=data)
+            rows = response.get("records")
+            if not isinstance(rows, list):
+                raise ClientError("update-many response has no records array; read back before retrying")
+            updated.extend(rows)
+        return updated
+
     def replace_record(
         self,
         base_id: str,

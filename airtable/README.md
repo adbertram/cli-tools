@@ -211,6 +211,14 @@ airtable records update "Tasks" recXXX "Completed=true" "Count=5" --typecast
 airtable records update "Tasks" recXXX 'Tags=["urgent","work"]'
 ```
 
+#### Update Several Records
+
+`update-many` validates every record before sending PATCH requests of at most ten records each. Values keep their JSON types, including an empty string or null for a clear. A failed batch stops later batches; read back the intended records before retrying.
+
+```bash
+airtable records update-many "Tasks" '[{"id":"recAAA","fields":{"Status":"Complete"}},{"id":"recBBB","fields":{"Notes":""}}]' --typecast
+```
+
 #### Create a Record
 
 ```bash

@@ -11,6 +11,19 @@ description: >-
 Execute airtable operations using the `airtable` CLI. All Airtable interactions should use this CLI.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh airtable-cli
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <quick_start>
 The `airtable` CLI follows this pattern:
 ```bash
@@ -134,7 +147,7 @@ Measured live against base `app9uzzru5KZOImYQ` on 2026-09-11: `multipleLookupVal
 
 **Symptom:** A field created with wrong options (for example a lookup pointing at the wrong `fieldIdInLinkedTable`) cannot be deleted or corrected by API. `DELETE /v0/meta/bases/{base}/tables/{table}/fields/{id}` returns 404, and `PATCH .../fields/{id}` with `recordLinkFieldId` or `fieldIdInLinkedTable` returns 422.
 
-**Cause:** Airtable exposes no delete-field endpoint, and the update-field endpoint accepts only `name` and `description`. Verified in the same live pass on 2026-09-11.
+**Cause:** Airtable exposes no delete-field endpoint. `fields update --options` supports editable configuration such as formula expressions; it cannot repoint lookup links or change select choices.
 
 **Correct path:** Verify the `--options` payload before creating — field IDs resolved from `airtable fields list <linked table>` — because the only way to remove a mistake is Airtable's web UI. `airtable fields create` prints this warning on every successful create, and `airtable fields delete` refuses before making a request.
 

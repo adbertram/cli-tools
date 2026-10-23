@@ -2,8 +2,8 @@
   "tool": "airtable",
   "description": "CLI interface for Airtable API",
   "usage_instructions": "Use `airtable auth login` first to configure credentials for the default or named profile, then use `tables list`, `tables get`, `fields list`, `fields get`, and `records list` against the configured base. Base ID defaults to `AIRTABLE_BASE_ID`; override with `--base/-b` when the target base matters. Table-name arguments are Airtable table names inside the selected base, not project CLI resource names such as CourseCraft `modules`.",
-  "discovered_at": "2026-10-09T17:42:35Z",
-  "total_commands": 30,
+  "discovered_at": "2026-10-23T19:04:10Z",
+  "total_commands": 31,
   "global_options": [
     {
       "name": "--version",
@@ -1039,6 +1039,45 @@
               "type": "bool",
               "required": false,
               "help": "Replace entire record (PUT) instead of updating (PATCH)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update-many": {
+          "help": "Update records in batches of ten. Values keep their JSON types. Example: airtable records update-many Tasks '[{\"id\":\"recABC\",\"fields\":{\"Name\":\"New\"}}]'",
+          "arguments": [
+            {
+              "name": "table_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The table ID or name"
+            },
+            {
+              "name": "records_json",
+              "type": "TEXT",
+              "required": true,
+              "help": "JSON array of {\"id\":\"rec...\",\"fields\":{...}}"
+            }
+          ],
+          "options": [
+            {
+              "name": "--base",
+              "type": "TEXT",
+              "required": false,
+              "help": "The base ID",
+              "short": "-b"
+            },
+            {
+              "name": "--typecast",
+              "type": "bool",
+              "required": false,
+              "help": "Enable automatic type conversion",
               "takes_value": false
             },
             {

@@ -18,6 +18,7 @@ COMMAND_CREDENTIALS = {
     "update": [
         "personal_access_token"
     ],
+    "update-many": ["personal_access_token"],
     "upload-attachment": [
         "personal_access_token"
     ]
@@ -316,6 +317,23 @@ def records_update(
         result = client.update_record(resolved_base_id, table_id, record_id, fields, typecast)
         print_success(f"Record {record_id} updated successfully")
 
+    print_json(result)
+
+
+@app.command("update-many")
+@command
+def records_update_many(
+    table_id: str = typer.Argument(..., help="The table ID or name"),
+    records_json: str = typer.Argument(..., help='JSON array of {"id":"rec...","fields":{...}}'),
+    base_id: Optional[str] = typer.Option(None, "--base", "-b", help="The base ID"),
+    typecast: bool = typer.Option(False, "--typecast", help="Enable automatic type conversion"),
+):
+    """Update records in batches of ten. Values keep their JSON types.
+
+    Example: airtable records update-many Tasks '[{"id":"recABC","fields":{"Name":"New"}}]'
+    """
+    records = json.loads(records_json)
+    result = get_client().update_records(resolve_base_id(base_id), table_id, records, typecast)
     print_json(result)
 
 
