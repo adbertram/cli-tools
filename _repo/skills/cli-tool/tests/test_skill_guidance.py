@@ -60,6 +60,14 @@ def test_skill_places_usage_json_in_cli_skill_folder():
     assert "do not import `cli_test_utils` from ad-hoc Python" in text
 
 
+def test_skill_documents_external_project_usage_json_path():
+    text = _read("SKILL.md")
+
+    assert "For a project-owned CLI whose service skill lives outside `cli-tools`" in text
+    assert "--usage-json <canonical-skill-path>/usage.json" in text
+    assert "Do not create an in-repo skill folder merely to use the default path." in text
+
+
 def test_service_skills_reference_adjacent_usage_json_path():
     skills_root = SKILL_ROOT.parent
     service_skills = sorted(skills_root.glob("*-cli/SKILL.md"))
@@ -112,6 +120,28 @@ def test_service_router_requires_wrapper_contract_before_raw_syntax():
     assert "prove the wrapper command shape first" in text_words
 
 
+def test_service_router_resolves_exact_cli_bundle_including_symlinks():
+    """Every service skill bundle is `<tool>-cli`; project-scoped ones are symlinks.
+
+    `coursecraft-cli` links into the CourseCraft project, so the router resolves
+    exactly `<normalized-name>-cli` and its fallback listing must follow
+    symlinks (`find -L`) or it hides that bundle.
+    """
+    text = _read("workflows/skill-router.md")
+    skills_root = SKILL_ROOT.parent
+
+    assert "Resolve exactly to `<cli-tools-root>/_repo/skills/<normalized-name>/SKILL.md`" in text
+    assert "find -L" in text
+    assert "-name '*-cli'" in text
+
+    coursecraft_skill = skills_root / "coursecraft-cli"
+    assert (coursecraft_skill / "SKILL.md").is_file()
+    assert (coursecraft_skill / "usage.json").is_file()
+
+    discovered = sorted(path.parent.name for path in skills_root.glob("*/usage.json"))
+    assert all(name.endswith("-cli") for name in discovered)
+
+
 def test_notion_pages_get_out_file_is_not_json_stdout():
     notion_skill = (SKILL_ROOT.parent / "notion-cli" / "SKILL.md").read_text()
     notion_words = _words(notion_skill)
@@ -129,7 +159,7 @@ def test_skill_documents_find_cli_tools_json_array_contract():
     text_words = _words(text)
 
     assert "one JSON array of records" in text_words
-    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`" in text
+    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json notion`" in text
     assert "the output is still a JSON array" in text_words
     assert 'jq -e \'.[] | select(.name == "google")\' <file>' in text
     assert "Do not treat the output as JSONL records" in text_words
@@ -142,7 +172,7 @@ def test_update_workflow_discovers_source_directory_before_reads():
     assert "Resolve and Navigate to CLI Source Directory" in text
     assert "Do not assume `<cli-tools-root>/<name>` exists" in text
     assert "Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh`" in text
-    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`" in text
+    assert "`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json notion`" in text
     assert "derive the source directory from the matching record's `readme` parent" in text_words
     assert "Only after the source directory is proven" in text_words
 

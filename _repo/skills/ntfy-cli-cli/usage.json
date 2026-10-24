@@ -1,0 +1,759 @@
+{
+  "tool": "ntfy-cli",
+  "description": "CLI interface for ntfy-cli",
+  "discovered_at": "2026-09-30T15:15:42Z",
+  "total_commands": 23,
+  "global_options": [],
+  "commands": {
+    "auth": {
+      "help": "Inspect upstream readiness; credentials remain upstream-owned",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "status": {
+          "help": "Report local executable readiness without mutating credentials.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "messages": {
+      "help": "Publish and receive ntfy messages",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "poll": {
+          "help": "Fetch cached messages and return a JSON array.",
+          "arguments": [
+            {
+              "name": "topic",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-c",
+              "takes_value": false
+            },
+            {
+              "name": "--since",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-s",
+              "takes_value": false
+            },
+            {
+              "name": "--scheduled",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-S",
+              "takes_value": false
+            },
+            {
+              "name": "--user",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-u",
+              "takes_value": false
+            },
+            {
+              "name": "--token",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-k",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "publish": {
+          "help": "Publish a message with current upstream ntfy publish options.",
+          "arguments": [
+            {
+              "name": "topic",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "body",
+              "type": "BODY",
+              "required": false,
+              "help": "Message body; sent to upstream stdin"
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-c",
+              "takes_value": false
+            },
+            {
+              "name": "--message",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message body; sent to upstream stdin",
+              "short": "-m"
+            },
+            {
+              "name": "--title",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--priority",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--tags",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-T",
+              "takes_value": false
+            },
+            {
+              "name": "--delay",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-D",
+              "takes_value": false
+            },
+            {
+              "name": "--click",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-U",
+              "takes_value": false
+            },
+            {
+              "name": "--icon",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-i",
+              "takes_value": false
+            },
+            {
+              "name": "--actions",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-A",
+              "takes_value": false
+            },
+            {
+              "name": "--attach",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-a",
+              "takes_value": false
+            },
+            {
+              "name": "--template",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            },
+            {
+              "name": "--filename",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-n",
+              "takes_value": false
+            },
+            {
+              "name": "--sequence-id",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-S",
+              "takes_value": false
+            },
+            {
+              "name": "--file",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-f",
+              "takes_value": false
+            },
+            {
+              "name": "--email",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-e",
+              "takes_value": false
+            },
+            {
+              "name": "--user",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-u",
+              "takes_value": false
+            },
+            {
+              "name": "--token",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-k",
+              "takes_value": false
+            },
+            {
+              "name": "--wait-pid",
+              "type": "bool",
+              "required": false,
+              "help": "<int>",
+              "takes_value": false
+            },
+            {
+              "name": "--no-cache",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-C",
+              "takes_value": false
+            },
+            {
+              "name": "--no-firebase",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-F",
+              "takes_value": false
+            },
+            {
+              "name": "--quiet",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-q",
+              "takes_value": false
+            }
+          ]
+        },
+        "subscribe": {
+          "help": "Stream upstream NDJSON without buffering or normalization.",
+          "arguments": [
+            {
+              "name": "topic",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--config",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-c",
+              "takes_value": false
+            },
+            {
+              "name": "--since",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-s",
+              "takes_value": false
+            },
+            {
+              "name": "--scheduled",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-S",
+              "takes_value": false
+            },
+            {
+              "name": "--user",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-u",
+              "takes_value": false
+            },
+            {
+              "name": "--token",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-k",
+              "takes_value": false
+            }
+          ]
+        },
+        "subscribe-config": {
+          "help": "Run subscriptions defined in upstream client configuration.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--config",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-c",
+              "takes_value": false
+            }
+          ]
+        },
+        "trigger": {
+          "help": "Send ntfy's topic-only trigger message.",
+          "arguments": [
+            {
+              "name": "topic",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": []
+        }
+      }
+    },
+    "server": {
+      "help": "Administer a local ntfy server when upstream supports it",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "access": {
+          "help": "Manage local server access rules",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "username",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "reset": {
+              "help": "",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--username",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--topic",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "set": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "username",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "topic",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "permission",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            }
+          }
+        },
+        "serve": {
+          "help": "Run upstream ntfy server in the foreground.",
+          "arguments": [],
+          "options": []
+        },
+        "tokens": {
+          "help": "Manage local server tokens",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "username",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--expires",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--label",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "delete": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "username",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                },
+                {
+                  "name": "token",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "generate": {
+              "help": "",
+              "arguments": [],
+              "options": []
+            },
+            "get": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "username",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--username",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            }
+          }
+        },
+        "users": {
+          "help": "Manage local server users",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "username",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--role",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "takes_value": false
+                }
+              ]
+            },
+            "delete": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "username",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "",
+              "arguments": [
+                {
+                  "name": "username",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": ""
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "bool",
+                  "required": false,
+                  "help": "<str>",
+                  "short": "-p",
+                  "takes_value": false
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "password": {
+              "help": "Manage user passwords",
+              "arguments": [],
+              "options": []
+            },
+            "role": {
+              "help": "Manage user roles",
+              "arguments": [],
+              "options": []
+            }
+          }
+        }
+      }
+    },
+    "upstream": {
+      "help": "Pass arguments to ntfy unchanged, preserving stdout, stderr, and exit code.",
+      "arguments": [],
+      "options": []
+    }
+  },
+  "usage_instructions": "Use the `ntfy-cli` CLI. Run `ntfy-cli --help` to discover command groups and `--help` on any subcommand for its options."
+}

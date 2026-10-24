@@ -33,6 +33,7 @@ DEFAULT_BASE_DELAY = 1.0
 DEFAULT_MAX_DELAY = 30.0
 DEFAULT_JITTER = 0.1
 RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+SPOT_MARGIN_VALUES = frozenset({"SPOT", "MARGIN"})
 
 activity = get_activity_logger("cryptocom")
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -228,7 +229,10 @@ class CryptocomClient:
 
         url = f"{self.base_url}/{method_name}"
         activity.info("Calling private method %s", method_name)
-        response_body = self._request_json("POST", url, json_body=body)
+        # A failed mutation can already have reached the exchange. Its caller
+        # must reconcile the persisted client order ID before doing more work.
+        retry = method_name.startswith("private/get-") or method_name == "private/user-balance"
+        response_body = self._request_json("POST", url, json_body=body, retry=retry)
         return self._extract_result(response_body, method_name)
 
     def _filter_models(
@@ -428,6 +432,7 @@ class CryptocomClient:
         limit_price: Optional[str] = None,
         time_in_force: Optional[str] = None,
         client_oid: Optional[str] = None,
+        spot_margin: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create a new order via private/create-order."""
         params: Dict[str, Any] = {
@@ -446,15 +451,61 @@ class CryptocomClient:
             params["time_in_force"] = time_in_force
         if client_oid:
             params["client_oid"] = client_oid
+        if spot_margin is not None:
+            if spot_margin not in SPOT_MARGIN_VALUES:
+                valid = ", ".join(sorted(SPOT_MARGIN_VALUES))
+                raise ClientError(f"Invalid spot margin: {spot_margin}. Valid values: {valid}")
+            params["spot_margin"] = spot_margin
         return self._make_private_request("private/create-order", params=params)
 
-    def get_order_detail(self, order_id: str) -> OpenOrder:
-        """Get one order by ID via private/get-order-detail."""
+    def get_order_detail(self, order_id: Optional[str] = None, *, client_oid: Optional[str] = None) -> OpenOrder:
+        """Get one order using exactly one venue or client identifier."""
+        if (order_id is None) == (client_oid is None):
+            raise ClientError("Specify exactly one of ORDER_ID or --client-oid")
+        identifier = order_id if order_id is not None else client_oid
+        if not identifier.strip():
+            raise ClientError("Order identifier must not be blank")
         result = self._make_private_request(
             "private/get-order-detail",
-            params={"order_id": order_id},
+            params={"order_id" if order_id is not None else "client_oid": identifier},
         )
         return OpenOrder(**result)
+
+    def get_fee_rate(self) -> Dict[str, Any]:
+        """Return account fee rates in the venue's basis-point units."""
+        return self._make_private_request("private/get-fee-rate")
+
+    def get_instrument_fee_rate(self, instrument_name: str) -> Dict[str, Any]:
+        """Return effective instrument fee rates in basis points."""
+        return self._make_private_request(
+            "private/get-instrument-fee-rate", params={"instrument_name": instrument_name}
+        )
+
+    def get_history_page(
+        self, method_name: str, *, instrument_name: Optional[str] = None,
+        start_time: Optional[int] = None, end_time: Optional[int] = None,
+        limit: int = 100, filters: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return one explicit order/trade history page without invented fields."""
+        if method_name not in {"private/get-order-history", "private/get-trades"}:
+            raise ClientError("Unsupported history method")
+        if not 1 <= limit <= 100:
+            raise ClientError("History page limit must be between 1 and 100")
+        if any(value is not None and value < 0 for value in (start_time, end_time)):
+            raise ClientError("History timestamps must not be negative")
+        if start_time is not None and end_time is not None and start_time >= end_time:
+            raise ClientError("History start time must be earlier than end time")
+        if filters:
+            validate_filters(filters)
+        params = {"limit": limit}
+        params.update({key: value for key, value in {
+            "instrument_name": instrument_name, "start_time": start_time, "end_time": end_time
+        }.items() if value is not None})
+        result = self._make_private_request(method_name, params=params)
+        rows = result.get("data")
+        if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+            raise ClientError(f"{method_name} response must contain a data array of objects")
+        return apply_filters(rows, filters) if filters else rows
 
     def cancel_order(self, order_id: str) -> Dict[str, Any]:
         """Cancel one order by ID via private/cancel-order."""

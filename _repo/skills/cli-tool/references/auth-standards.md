@@ -349,7 +349,11 @@ Wrapper CLIs that wrap local tools with no auth (e.g., `cliclick`, `ffmpeg`, `im
 - The underlying CLI has no authentication concept
 - The wrapper is purely a convenience/formatting layer
 
-**Hard rule (applies to every CLI, not just wrappers):** every `commands/auth.py` must be a thin `create_auth_app(...)` mount. Hand-rolled `@app.command("status")` / `@app.command("login")` / `@app.command("logout")` functions are disallowed unless the CLI is genuinely exceptional (document the exception when introducing it).
+**Hard rule (applies to every credential-owning CLI, not just wrappers):** every `commands/auth.py` must be a thin `create_auth_app(...)` mount. Hand-rolled `@app.command("status")` / `@app.command("login")` / `@app.command("logout")` functions are disallowed unless the CLI is genuinely exceptional (document the exception when introducing it).
+
+A read-only local-state inspector may expose a hand-written `auth status` solely as a conventional readiness check when it owns no credentials and must never create profiles or configuration. Such a CLI must expose no `login`, `logout`, `refresh`, `test`, or `profiles` mutation surface; must return the canonical `{profiles: [...]}` status shape; and must be named in both `no_auth_clis` and `read_only_status_auth_clis` in `tests/cli_test_config.toml`. The latter list is the narrow exemption from the `create_auth_app()` source check; it must not be used for remote services, wrappers over authenticated tools, or legacy custom authentication.
+
+A browser-session CLI whose login hands a rotating-refresh-token session (for example Supabase) to the CLI for HTTP use must not re-open the site for `auth status`: the page would replay a refresh token the CLI has already rotated, and the provider then revokes the whole session. Such a CLI keeps its `BrowserAutomation` subclass declarative with `AUTH_CHECK_URL` empty, saves the session in a post-login `_on_authenticated` hook declared as a class attribute, overrides `Config.has_saved_session()` to report the saved tokens, sets `BROWSER_SESSION_REQUIRES_API_TEST = True` with a live HTTP `test_connection()`, and is named in `http_session_browser_clis` in `tests/cli_test_config.toml`. `vues` is the reference implementation.
 
 **Wrapper pattern (recommended):**
 

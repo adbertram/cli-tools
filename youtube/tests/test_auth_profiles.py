@@ -1,5 +1,7 @@
 """Auth profile creation tests for the YouTube CLI."""
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
@@ -8,6 +10,11 @@ from youtube_cli.config import YOUTUBE_PROFILE_AUTH_TYPE, reset_config
 
 
 RUNNER = CliRunner()
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _plain(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +45,12 @@ def _configure_temp_profile_store(monkeypatch, tmp_path):
         "cli_tools_shared.profiles.get_profiles_base_dir",
         lambda _tool_name: profiles_dir,
     )
+    # Profile creation should verify placeholder generation, not exercise the
+    # host's real CLI-tools Keychain backend.
+    monkeypatch.setattr(
+        "cli_tools_shared.config._set_secret_value",
+        lambda _secret_name, _value, _profile_path: None,
+    )
     return profiles_dir
 
 
@@ -47,7 +60,7 @@ def test_profiles_create_requires_auth_type(monkeypatch, tmp_path):
     result = RUNNER.invoke(app, ["profiles", "create", "demo-profile"])
 
     assert result.exit_code == 2, result.output
-    assert "Missing option '--auth-type'" in result.output
+    assert "Missing option '--auth-type'" in _plain(result.output)
 
 
 def test_profiles_create_prompts_for_client_credentials(monkeypatch, tmp_path):

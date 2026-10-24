@@ -1,5 +1,6 @@
 import json
 import random
+import re
 
 import pytest
 from typer.testing import CliRunner
@@ -16,6 +17,11 @@ from youtube_cli.banner_images import (
 
 
 runner = CliRunner()
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _plain(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 def _save_image(path, size, image_format, color="navy", data=None):
@@ -213,7 +219,7 @@ def test_channels_update_help_lists_banner_option():
     result = runner.invoke(app, ["channels", "update", "--help"])
 
     assert result.exit_code == 0
-    assert "--banner-image" in result.stdout
+    assert "--banner-image" in _plain(result.stdout)
 
 
 def test_prepare_banner_image_rejects_too_small_image(tmp_path):

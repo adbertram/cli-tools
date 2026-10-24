@@ -39,6 +39,9 @@ notion <command-group> <action> [arguments] [options]
 | Notify a person in a comment | `notion comments create "text" -p PAGE_ID --mention someone@example.com` |
 | Add shell-sensitive comment text | `notion comments create --text-file comment.md --discussion-id DISCUSSION_ID` |
 | List workspace users | `notion users list --table` |
+| List accessible Custom Agents | `notion agents list --table` |
+| Run a Custom Agent | `notion agents sessions send "Your question" --agent-id AGENT_ID` |
+| List Enterprise workspace agents | `notion admin-agents list SPACE_ID --table` |
 | Find a user by email | `notion users list --filter "person.email:eq:someone@example.com"` |
 | Get one user | `notion users get USER_ID --table` |
 | Append markdown as toggle headings | `notion pages content append PAGE_ID -f outline.md --is-toggleable` |
@@ -496,19 +499,14 @@ span. Asterisk emphasis (`*text*`) intentionally still allows intraword spans,
 matching CommonMark.
 </principle>
 
-<principle name="Markdown Round-Trip: Code Inside Bold Is Code-Only">
-A `` `code` `` token nested inside a `**bold**` (or `*italic*`/`***bold
-italic***`) span is emitted **code-only** — the code run is never also marked
-bold/italic. Markdown has no syntax for a run that is simultaneously code and
-bold, so a bold+code run used to export as `` **`code`** `` and the adjacent
-bold delimiters collided into `****`, corrupting input like
-`` **Grounding (`clip-slide-plan.1`):** `` into
-`` **Grounding (****`clip-slide-plan.1`****):** ``. This is **fixed**: a label
-such as `` **Grounding (`clip-slide-plan.1`):** `` now survives
-`pages content set --file` → `pages export -f md` (or `pages blocks list -m`)
-with **no `****`**. The surrounding text stays bold; the code token stays code.
-Pass such labels verbatim — no manual escaping or splitting the bold around the
-code is needed.
+<principle name="Markdown Round-Trip: Inline Code Keeps Outer Emphasis">
+A `` `code` `` token nested inside a `**bold**`, `*italic*`, or `***bold
+italic***` span keeps every enclosing annotation. The exporter preserves the
+shared outer span around the code run, so a label such as
+`` ***Grounding (`clip-slide-plan.1`):*** `` survives `pages content set
+--file` → `pages get --include-blocks --markdown` with the code token and its
+bold/italic formatting intact. Pass such labels verbatim — no manual escaping
+or splitting the emphasis around the code is needed.
 </principle>
 
 <principle name="Command Groups">

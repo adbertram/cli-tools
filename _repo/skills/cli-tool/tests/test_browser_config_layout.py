@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import ast
 
+from cli_test_utils import get_pkg_dir
 import pytest
 
 DEAD_CONFIG_ATTRS = ("LOGIN_URL", "SESSION_NAME")
@@ -23,7 +24,7 @@ def test_browser_cli_config_has_no_dead_browser_attrs(cli_name, cli_dir, command
     if not is_browser_cli:
         pytest.skip(f"{cli_name} is not a browser automation CLI")
 
-    config_file = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "config.py"
+    config_file = get_pkg_dir(cli_dir, cli_name) / "config.py"
     if not config_file.exists():
         pytest.fail(f"config.py not found at {config_file}")
 

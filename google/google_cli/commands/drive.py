@@ -6,6 +6,7 @@ COMMAND_CREDENTIALS = {
     "download": ["custom"],
 }
 
+import re
 import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
@@ -16,22 +17,44 @@ from ..filter_translator import translate_drive_filters
 
 app = typer.Typer(help="Manage Google Drive files")
 
+# Google Drive IDs are URL-safe base64-ish tokens; anything else would build a
+# malformed ``q`` clause, so reject it before the API request is made.
+_FOLDER_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{10,}$')
+
 @app.command("list")
 @command
 def drive_list(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of files to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)"),
+    folder: Optional[str] = typer.Option(None, "--folder", "-F", help="Only list direct children of this Google Drive folder ID"),
     properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Properties to include in output"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """List files in Google Drive."""
     try:
+        if folder is not None and not _FOLDER_ID_PATTERN.match(folder):
+            raise typer.BadParameter(
+                f"Invalid value for '--folder' / '-F': {folder!r} is not a valid "
+                f"Google Drive folder ID (expected at least 10 characters from [A-Za-z0-9_-])",
+                param_hint="'--folder' / '-F'",
+            )
+
         client = get_client(profile=profile)
         service = client.get_drive_service()
 
         # Build query from filters (supports both standard and native formats)
-        query = translate_drive_filters(filter) if filter else ""
+        filter_query = translate_drive_filters(filter) if filter else ""
+
+        # Restrict to one folder's direct children via the Drive API parents clause.
+        if folder is not None:
+            parents_query = f"'{folder}' in parents"
+            if filter_query:
+                query = f"({parents_query}) and ({filter_query})"
+            else:
+                query = parents_query
+        else:
+            query = filter_query
 
         # Build fields based on requested properties
         all_fields = ['id', 'name', 'mimeType', 'createdTime', 'modifiedTime', 'size', 'parents', 'webViewLink', 'shortcutDetails']

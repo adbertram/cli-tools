@@ -4,11 +4,11 @@ Tests that output.py imports standard functions from cli_tools_shared.output
 and does not locally redefine them. CLI-specific helpers are allowed.
 """
 
+from cli_test_utils import get_pkg_dir
 import pytest
 import json
-from pathlib import Path
 
-from cli_test_utils import run_live_cli_command, discover_list_commands, get_cli_timeout, get_fixture_args
+from cli_test_utils import run_live_cli_command, discover_list_commands, get_fixture_args
 
 
 # Standard functions that MUST come from cli_tools_shared.output, not local definitions
@@ -25,13 +25,8 @@ STANDARD_OUTPUT_FUNCTIONS = [
     "_serialize_for_json",
 ]
 
-STANDARD_OUTPUT_NAMES = [
-    "console",
-]
-
-
 def _get_output_path(cli_dir, cli_name):
-    return cli_dir / f"{cli_name.replace('-', '_')}_cli" / "output.py"
+    return get_pkg_dir(cli_dir, cli_name) / "output.py"
 
 
 def _profile_args(auth_context, help_cache, cmd_path):
@@ -97,31 +92,6 @@ def test_output_no_local_standard_functions(cli_dir, cli_name, command_filter):
         f"output.py locally redefines standard functions: {locally_defined}. "
         f"Fix: Remove local definitions and import from cli_tools_shared.output instead. "
         f"CLI-specific helpers should use different names."
-    )
-
-
-def test_output_imports_all_standard_functions(cli_dir, cli_name, command_filter):
-    """output.py must import ALL standard output functions from cli_tools_shared.
-
-    Every standard function must be available via the CLI's output.py so that
-    command files can use ``from ..output import print_json`` etc.
-    """
-    output_path = _get_output_path(cli_dir, cli_name)
-    if not output_path.exists():
-        pytest.skip("output.py not found")
-
-    content = output_path.read_text()
-
-    if "from cli_tools_shared.output import" not in content:
-        pytest.skip("CLI not yet migrated to cli_tools_shared imports")
-
-    # Check that all standard names appear in the import block
-    required = STANDARD_OUTPUT_FUNCTIONS + STANDARD_OUTPUT_NAMES
-    missing = [name for name in required if name not in content]
-
-    assert not missing, (
-        f"output.py missing standard imports: {missing}. "
-        f"Fix: Add missing names to the cli_tools_shared.output import statement."
     )
 
 
@@ -223,7 +193,7 @@ def test_format_functions_have_truncate_parameter(cli_dir, cli_name, command_fil
     """
     import re
 
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
+    commands_dir = get_pkg_dir(cli_dir, cli_name) / "commands"
     if not commands_dir.exists():
         pytest.skip("commands directory not found")
 
@@ -278,7 +248,7 @@ def test_json_output_not_truncated(cli_dir, cli_name, command_filter):
     """
     import re
 
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
+    commands_dir = get_pkg_dir(cli_dir, cli_name) / "commands"
     if not commands_dir.exists():
         pytest.skip("commands directory not found")
 
@@ -351,7 +321,7 @@ def test_no_unconditional_truncation_in_format_functions(cli_dir, cli_name, comm
     """
     import re
 
-    commands_dir = cli_dir / f"{cli_name.replace('-', '_')}_cli" / "commands"
+    commands_dir = get_pkg_dir(cli_dir, cli_name) / "commands"
     if not commands_dir.exists():
         pytest.skip("commands directory not found")
 

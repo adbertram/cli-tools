@@ -28,6 +28,7 @@ slack <command-group> <action> [arguments] [options]
 | Read DMs | `slack dm read @user --table` |
 | Check notifications | `slack notifications list --table` |
 | Upload a file | `slack files upload file.pdf --channels CHANNEL_ID` |
+| Upload several files as ONE message (max 10) | `slack files upload a.pptx b.pptx --channels CHANNEL_ID --comment "..."` |
 | List users | `slack users list --table` |
 | Set your profile photo | `slack users set-photo avatar.png` |
 </quick_start>

@@ -25,6 +25,8 @@ elevenlabs models list --table
 elevenlabs history list --limit 10
 elevenlabs pronunciation-dictionaries list --table
 elevenlabs speech create VOICE_ID "The first move is what sets everything in motion." --output speech.mp3
+elevenlabs sound-effects create "Glass shattering" --output shatter.mp3
+elevenlabs music compose "Calm lo-fi beat" --seconds 30 --output lofi.mp3
 ```
 
 ## Commands
@@ -125,6 +127,34 @@ elevenlabs speech create VOICE_ID "Hello sysadmins." --output hello.mp3 --pronun
 # Output result metadata as a table
 elevenlabs speech create VOICE_ID "Hello." --output hello.mp3 --table
 ```
+
+### Sound Effects
+
+```bash
+# Generate a sound effect (POST /v1/sound-generation); prints a JSON result {output, bytes, format, ...request params}
+elevenlabs sound-effects create "Glass shattering on concrete" --output shatter.mp3
+
+# Control duration (0.5-30s), prompt influence (0-1), looping, model, and format
+elevenlabs sound-effects create "Rain on a tin roof" --output rain.mp3 --duration 4 --prompt-influence 0.5 --loop --model eleven_text_to_sound_v2 --output-format mp3_44100_128
+
+# Overwrite an existing file (refused without --force)
+elevenlabs sound-effects create "Door slam" --output door.mp3 --force
+```
+
+### Music
+
+```bash
+# Compose a 10-second instrumental clip (POST /v1/music); --seconds is validated 3-600 and sent as music_length_ms
+elevenlabs music compose "Upbeat corporate tech intro, light synths" --seconds 10 --instrumental --output intro.mp3
+
+# Choose model (music_v1, music_v2, music_v2_5), seed, and output format
+elevenlabs music compose "Calm lo-fi beat" --seconds 30 --model music_v2 --seed 42 --output-format mp3_44100_128 --output lofi.mp3
+
+# Overwrite an existing file (refused without --force)
+elevenlabs music compose "Calm lo-fi beat" --seconds 30 --output lofi.mp3 --force
+```
+
+Both commands refuse to overwrite an existing output without `--force`, reject empty audio, and (for `mp3_*` formats, when `ffprobe` is installed) verify the file decodes and add `probed_duration_seconds` to the result. Errors go to stderr with a non-zero exit code.
 
 ### History
 

@@ -2,11 +2,12 @@
 
 Extends BaseConfig from cli_tools_shared for profile and credential management.
 Robot-specific credentials (blid, password per robot) are stored in a separate
-robots.json config file.
+robots.json config file with restricted permissions.
 """
 import json
+import os
+import stat
 from pathlib import Path
-from typing import Dict, Optional
 
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
@@ -16,6 +17,8 @@ class Config(BaseConfig):
     """Configuration for Roomba CLI.
 
     Robot discovery data is stored in a separate robots.json file.
+    Each robot has a 'selected' field (true/false). The selected robot
+    is used when no robot name is specified.
     """
 
     DIST_NAME = "roomba-cli"
@@ -28,7 +31,7 @@ class Config(BaseConfig):
             tool_dir = resolve_tool_dir(self.DIST_NAME)
         super().__init__(tool_dir, profile=profile)
         self._robots_path = self.get_profile_data_dir() / "robots.json"
-        self._robots: Dict[str, dict] = {}
+        self._robots: dict[str, dict] = {}
         self._load_robots()
 
     def _load_robots(self):
@@ -42,10 +45,16 @@ class Config(BaseConfig):
                 self._robots = {}
 
     def _save_robots(self):
-        """Save robot credentials to JSON file."""
-        self._robots_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self._robots_path, "w") as f:
-            json.dump({"robots": self._robots}, f, indent=2)
+        """Save robot credentials to JSON file with restricted permissions."""
+        parent = self._robots_path.parent
+        parent.mkdir(parents=True, exist_ok=True)
+        fd = open(self._robots_path, "w")
+        try:
+            os.fchmod(fd.fileno(), stat.S_IRUSR | stat.S_IWUSR)
+        except (OSError, AttributeError):
+            pass  # fchmod not supported on all platforms
+        json.dump({"robots": self._robots}, fd, indent=2)
+        fd.close()
 
     def has_credentials(self) -> bool:
         """Check if any robot credentials are configured."""
@@ -64,7 +73,7 @@ class Config(BaseConfig):
         return {"api_test": "failed: No robots configured"}
 
     @property
-    def robots(self) -> Dict[str, dict]:
+    def robots(self) -> dict[str, dict]:
         """Get all configured robots."""
         return self._robots.copy()
 
@@ -73,7 +82,7 @@ class Config(BaseConfig):
         """Get robots config file path."""
         return self._robots_path
 
-    def get_robot(self, name_or_ip: str) -> Optional[dict]:
+    def get_robot(self, name_or_ip: str) -> dict | None:
         """Get robot credentials by name or IP."""
         if name_or_ip in self._robots:
             robot = self._robots[name_or_ip].copy()
@@ -86,15 +95,28 @@ class Config(BaseConfig):
                 return result
         return None
 
+    def get_default_robot(self) -> str | None:
+        """Return the first robot with selected=true, or None."""
+        for name, data in self._robots.items():
+            if data.get("selected") is True:
+                return name
+        return None
+
+    def set_selected(self, name: str):
+        """Mark a robot as selected. All others are deselected."""
+        for rname in self._robots:
+            self._robots[rname]["selected"] = (rname == name)
+        self._save_robots()
+
     def add_robot(
         self,
         name: str,
         ip: str,
         blid: str,
         password: str,
-        mac: Optional[str] = None,
-        sku: Optional[str] = None,
-        software_ver: Optional[str] = None,
+        mac: str | None = None,
+        sku: str | None = None,
+        software_ver: str | None = None,
     ):
         """Add or update a robot's credentials."""
         self._robots[name] = {"ip": ip, "blid": blid, "password": password}
@@ -104,6 +126,13 @@ class Config(BaseConfig):
             self._robots[name]["sku"] = sku
         if software_ver:
             self._robots[name]["software_ver"] = software_ver
+        # Set as selected only if this is the first robot
+        if len(self._robots) == 1:
+            self._robots[name]["selected"] = True
+        else:
+            # Deselect all others to make this one the default
+            for rname in self._robots:
+                self._robots[rname]["selected"] = (rname == name)
         self._save_robots()
 
     def remove_robot(self, name: str) -> bool:
@@ -125,7 +154,7 @@ class Config(BaseConfig):
 
 
 # Global config instance
-_config: Optional[Config] = None
+_config: Config | None = None
 
 
 def get_config(profile: str = None) -> Config:

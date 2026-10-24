@@ -1,1 +1,0 @@
-"""FreshBooks CLI commands."""

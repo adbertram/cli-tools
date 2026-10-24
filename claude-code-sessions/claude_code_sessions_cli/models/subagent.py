@@ -13,7 +13,7 @@ class Subagent(CLIModel):
     parent_tool_call_id: str
     model: Optional[str] = None
     prompt: str
-    status: str = "completed"
+    status: str = "unknown"
     created_at: str
     completed_at: Optional[str] = None
     messages: List[Message] = []
@@ -31,7 +31,7 @@ class SubagentSummary(CLIModel):
     prompt: str
     description: Optional[str] = None
     model: Optional[str] = None
-    status: str = "completed"
+    status: str = "unknown"
     message_count: int = 0
     agent_id: Optional[str] = None
     tool_calls: List[dict] = []

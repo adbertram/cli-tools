@@ -168,6 +168,38 @@ youtube auth profiles select myprofile
 youtube auth profiles delete myprofile
 ```
 
+### Analytics (`youtube analytics report`)
+
+Per-video YouTube Analytics (views, watch time, avg. view duration/percentage,
+subscribers gained, likes, comments, shares) for the authenticated user's
+channel via the YouTube Analytics API v2. Default date range is the last
+28 days.
+
+```bash
+# Per-video report for all your uploads (last 28 days)
+youtube analytics report --table
+
+# Specific videos only (IDs or URLs)
+youtube analytics report -v VIDEO_ID -v https://www.youtube.com/watch?v=OTHER_ID
+
+# Channel-level totals by day
+youtube analytics report --channel --table
+
+# Custom date range and metrics
+youtube analytics report --start-date 2026-01-01 --end-date 2026-06-30 \
+    --metrics views,estimatedMinutesWatched,subscribersGained
+
+# Top videos by views, daily breakdown per video
+youtube analytics report --dimensions video,day --sort -views --max-results 100
+
+# Filter and pick fields
+youtube analytics report --filter views:gt:1000 --properties title,views
+```
+
+Requires the `yt-analytics.readonly` OAuth scope (added automatically on your
+next `youtube auth login --force`) and the YouTube Analytics API enabled in
+the same Google Cloud project as your OAuth client.
+
 ### Channel Management (`youtube channel videos ...`)
 
 All commands below operate on the authenticated user's own channel.
@@ -188,6 +220,10 @@ youtube channel videos upload ./my-video.mp4 \
     --category-id 22 \
     --privacy private \
     --thumbnail ./thumb.png
+
+# Attach a caption track to an existing video you own (upload has no caption flags;
+# upload first, read `id` from the output JSON, then run captions add)
+youtube channel videos captions add VIDEO_ID ./my-video.srt --language en --name "" --profile CHANNEL_PROFILE
 
 # Ask the calling AI agent to add recommended Video Chapters before upload
 youtube channel videos upload ./my-video.mp4 \
@@ -378,3 +414,75 @@ For full list of supported languages, check yt-dlp documentation.
 ## License
 
 MIT
+
+
+## YouTube Shorts
+
+Shorts use the same YouTube Data API video upload endpoint as ordinary videos. The
+shorts command is a thin interface over the authenticated channel uploader so the
+metadata and OAuth behavior stay in one implementation.
+
+```bash
+youtube shorts upload short.mp4 --title "Title" --description "Description" --privacy public --profile CHANNEL_PROFILE
+```
+
+Upload prints its result JSON (`id`, `url`, `thumbnail_uploaded`) as soon as the video
+exists. If the optional thumbnail step then fails, the JSON is still printed and the
+command exits 1, so callers never need to re-upload. Add captions afterwards with
+`youtube channel videos captions add VIDEO_ID short.srt`; `captions.insert` requires
+`snippet.name` to be present (an empty string is valid), so `--name` defaults to an
+empty string rather than being omitted.
+
+## Bounded source metadata SDK
+
+`YoutubeClient.get_source_metadata(url, timeout_seconds=30, max_bytes=65536)`
+reads only exact video ID, title, duration, channel name/ID and upload date through
+the owning yt-dlp wrapper. It avoids the interactive/unbounded client constructor,
+format inventories, playback URLs and caption URLs. Reported manual/automatic
+language codes describe extractor availability; they do not prove a usable transcript
+or authorize reuse. The 0.75-second process cleanup allowance is reserved inside the
+caller deadline. Failures expose sanitized code/category/status/retry_after_seconds.
+
+
+## Bounded full-source and timed-caption SDK
+
+`YoutubeClient.read_source_transcript(url, expected_video_id=..., duration_seconds=...,
+language="en", timeout_seconds=..., max_caption_bytes=..., max_cues=...,
+max_result_bytes=...)` reads provider automatic English JSON3 captions through
+the tool's declared yt-dlp dependency. It returns original full-video timestamps,
+the raw response SHA-256/byte count, and an explicit normalization version.
+Same-window continuation events are merged only at the measured 1ms precision
+boundary; unsupported speaker changes or speech overlaps fail explicitly.
+Caption timestamps describe provider display timing, not forced alignment. A
+terminal caption display tail may run up to five seconds past the reported
+duration; that bounded tail is shortened to the exact video end, while a larger
+mismatch still fails as outside-video evidence. Large
+transcripts require caller-owned fair time windows; the SDK does not truncate.
+
+`YoutubeClient.acquire_source_media(url, expected_video_id=..., duration_seconds=...,
+output_dir=..., max_source_bytes=..., max_stage_bytes=..., max_resolution=...,
+timeout_seconds=...)` downloads a complete audiovisual source to the fixed
+`source.mp4` in an existing empty caller-owned private directory. Resolution is
+240, 360, or 480; the supported format is HTTPS AVC video plus MP4A audio merged
+to MP4. It verifies actual full duration and audio with ffprobe, then returns
+the real regular-file SHA-256 and byte count. No selected segment is labeled
+as a full source. ffmpeg and ffprobe must be available before download starts.
+
+The caller must hold its existing workspace lock or byte reservation and pass
+an available stage allowance covering three maximum-sized files plus 1MiB
+headroom (input tracks plus merged output). Initial physical free space must
+cover that allowance plus the 1GiB reserve. Bounded progress/supervisor checks
+inspect at most 16 stage files and current free space. Per-file RLIMIT_FSIZE
+and 64KiB transfer buffers constrain writes; these checks do not promise zero
+overshoot or enforce a separate caller's concurrent writes. Preflight, child
+work, kill/reap cleanup, probe, and hashing share one caller deadline. Failed
+acquisition retains the exact caller-owned partial stage for caller cleanup;
+the SDK never deletes a foreign file or selects the last file in a directory.
+
+Failures expose sanitized `code`, `category`, `status`, and
+`retry_after_seconds`; provider Retry-After is preserved without a one-day cap.
+No signed playback/caption URLs or provider response bodies are returned.
+
+### Owned acquisition recovery
+
+`YoutubeClient.acquire_source_media` optionally accepts `ownership_path`, the private canonical sibling marker for its fixed output stage. The marker records request binding, stage identity and exact child PID/start before provider work. `YoutubeClient.recover_source_media` accepts the same request arguments under the caller's workspace lock. It only recovers an exact ended worker with an empty owned process group: a completed file is remeasured against its immutable receipt; exact partial files are durably retired before a new acquisition. Unknown ownership, replaced bytes, foreign files or live processes refuse recovery. Neither API adopts arbitrary files or kills unrelated processes.

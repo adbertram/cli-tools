@@ -7,7 +7,6 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import command, print_json, print_table, handle_error
 from ..parsers import format_local_time
 from .session_arg import resolve_session_arg
@@ -49,37 +48,11 @@ def list_tool_calls(
         if conversation_id and not session_id:
             raise ClientError("--conversation-id requires --session-id or --session-name")
 
-        # If subagent_id is provided, automatically include subagents
-        # and fetch more results since we'll filter after
-        fetch_limit = limit
-        if subagent_id or session_id or conversation_id:
-            fetch_limit = 10000  # Fetch all, filter after
-        if subagent_id:
-            include_subagents = True
-
-        tool_calls = client.list_tool_calls(project=project, limit=fetch_limit, since=since, include_subagents=include_subagents)
-
-        # Convert to dicts for filtering/output
+        tool_calls = client.list_tool_calls(
+            project=project, limit=limit, since=since, include_subagents=include_subagents,
+            session_id=session_id, subagent_id=subagent_id, filters=filter,
+        )
         items = [tc.model_dump() for tc in tool_calls]
-
-        # Filter by session
-        if session_id:
-            items = [item for item in items if item.get('session_id') == session_id]
-
-        # Filter by conversation (tool calls don't have conversation_id directly,
-        # but we can add it later if needed - for now just filter session)
-        # Note: Full conversation filtering would require extending the data model
-
-        # Filter by specific subagent if requested
-        if subagent_id:
-            items = [item for item in items if item.get('parent_tool_call_id') == subagent_id]
-
-        # Apply limit after all filters
-        items = items[:limit]
-
-        # Apply client-side filters
-        if filter:
-            items = apply_filters(items, filter)
 
         # Apply property selection
         if properties:

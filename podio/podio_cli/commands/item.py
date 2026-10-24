@@ -114,6 +114,7 @@ def list_items(
 
     Examples:
         podio item list 12345
+        podio item list 12345 --filter 'title:contains:report'
         podio item list 12345 --filter '{"status": "active"}'
         podio item list 12345 --limit 50 --offset 0
         podio item list 12345 --sort-by "created_on" --desc
@@ -129,14 +130,22 @@ def list_items(
             "offset": offset,
         }
 
-        # Parse JSON filters if provided
+        client_filters = None
+
+        # Preserve JSON object filters as Podio API filters, while accepting the
+        # documented field:op:value grammar for filters the API cannot express.
         if filter:
-            try:
-                filter_dict = json.loads(filter)
+            if filter.lstrip().startswith("{"):
+                try:
+                    filter_dict = json.loads(filter)
+                except json.JSONDecodeError as e:
+                    print_error(f"Invalid JSON in --filter: {e}")
+                    raise typer.Exit(1)
+
                 attributes["filters"] = filter_dict
-            except json.JSONDecodeError as e:
-                print_error(f"Invalid JSON in --filter: {e}")
-                raise typer.Exit(1)
+            else:
+                client_filters = [filter]
+                validate_filters(client_filters)
 
         # Add sorting if specified
         if sort_by:
@@ -145,6 +154,13 @@ def list_items(
 
         result = client.Item.filter(app_id=app_id, attributes=attributes)
         formatted = format_response(result)
+
+        if client_filters:
+            if not isinstance(formatted, dict) or not isinstance(formatted.get("items"), list):
+                raise ValueError("Item list response did not contain an items list")
+
+            formatted["items"] = apply_filters(formatted["items"], client_filters)
+            formatted["filtered"] = len(formatted["items"])
 
         # Apply properties filter if specified
         if properties:

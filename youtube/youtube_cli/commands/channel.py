@@ -18,6 +18,7 @@ from typing import List, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 import typer
+from cli_tools_shared.output import command
 from cli_tools_shared.filters import apply_filters, apply_properties_filter
 from cli_tools_shared.output import (
     handle_error,
@@ -50,6 +51,8 @@ from ..models import (
 app = typer.Typer(help="Manage the authenticated user's YouTube channel")
 videos_app = typer.Typer(help="Manage videos on the authenticated user's channel")
 posts_app = typer.Typer(help="Post messages to a YouTube channel")
+captions_app = typer.Typer(help="Manage caption tracks on videos you own")
+videos_app.add_typer(captions_app, name="captions")
 app.add_typer(videos_app, name="videos")
 app.add_typer(posts_app, name="posts")
 
@@ -95,6 +98,18 @@ def _create_text_post(browser, channel_url: str, message: str, dry_run: bool = F
     )
 
 
+def _insert_caption(service, *, video_id: str, file: Path, language: str, name: str) -> str:
+    """Insert one published caption track for a video the caller owns; return its caption ID."""
+    # YouTube rejects captions.insert as invalidMetadata when snippet.name is absent; empty is valid.
+    snippet = {"videoId": video_id, "language": language, "name": name, "isDraft": False}
+    response = service.captions().insert(
+        part="snippet",
+        body={"snippet": snippet},
+        media_body=MediaFileUpload(str(file), mimetype="application/octet-stream"),
+    ).execute()
+    return response["id"]
+
+
 def _require_description_for_recommended_chapters(description: Optional[str]) -> str:
     if not description or not description.strip():
         print_error("--include-recommended-chapters requires --description")
@@ -103,6 +118,7 @@ def _require_description_for_recommended_chapters(description: Optional[str]) ->
 
 
 @posts_app.command("create")
+@command
 def posts_create(
     message: str = typer.Option(..., "--message", "-m", help="Text message to post"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Fill the composer but do not click Post"),
@@ -212,6 +228,7 @@ def _video_detail_from_api(item: dict) -> VideoDetail:
 
 
 @videos_app.command("list")
+@command
 def videos_list(
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of videos to list"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -304,6 +321,7 @@ def videos_list(
 
 
 @videos_app.command("get")
+@command
 def videos_get(
     video_id: str = typer.Argument(..., help="YouTube video ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -343,6 +361,7 @@ def videos_get(
 
 
 @videos_app.command("upload")
+@command
 def videos_upload(
     file: Path = typer.Argument(..., help="Path to video file to upload", exists=True, dir_okay=False),
     title: str = typer.Option(..., "--title", help="Video title"),
@@ -441,22 +460,27 @@ def videos_upload(
 
         video_id = response["id"]
 
-        thumbnail_uploaded = False
-        if thumbnail:
-            print_info(f"Uploading thumbnail {thumbnail}...")
-            service.thumbnails().set(
-                videoId=video_id, media_body=MediaFileUpload(str(thumbnail))
-            ).execute()
-            thumbnail_uploaded = True
-
+        url = f"https://www.youtube.com/watch?v={video_id}"
         result = UploadResult(
             id=video_id,
             title=title,
             privacy_status=privacy,
             publish_at=publish_at,
-            url=f"https://www.youtube.com/watch?v={video_id}",
-            thumbnail_uploaded=thumbnail_uploaded,
+            url=url,
         )
+        if thumbnail:
+            print_info(f"Uploading thumbnail {thumbnail}...")
+            try:
+                service.thumbnails().set(
+                    videoId=video_id, media_body=MediaFileUpload(str(thumbnail))
+                ).execute()
+            except Exception as e:
+                # The video exists: always print its id so callers never re-upload it.
+                print_json(result)
+                print_error(f"Uploaded {url} but thumbnail upload failed: {e}")
+                raise typer.Exit(1)
+            result.thumbnail_uploaded = True
+
         print_success(f"Uploaded: {result.url}")
         print_json(result)
 
@@ -469,7 +493,38 @@ def videos_upload(
         raise typer.Exit(handle_error(e))
 
 
+@captions_app.command("add")
+@command
+def captions_add(
+    video_id: str = typer.Argument(..., help="YouTube video ID (must be owned by the profile's channel)"),
+    file: Path = typer.Argument(..., help="Caption file (for example .srt)", exists=True, dir_okay=False),
+    language: str = typer.Option("en", "--language", help="BCP-47 language of the caption track"),
+    name: str = typer.Option("", "--name", help="Caption track name (default empty)"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Insert a caption track on an existing video you own."""
+    try:
+        client = get_api_client(profile=profile)
+        service = client.get_youtube_service()
+        caption_id = _insert_caption(
+            service, video_id=video_id, file=file, language=language, name=name
+        )
+        print_success(f"Inserted caption {caption_id} on {video_id}")
+        print_json(
+            {"video_id": video_id, "caption_id": caption_id, "language": language, "name": name}
+        )
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
 @videos_app.command("update")
+@command
 def videos_update(
     video_id: str = typer.Argument(..., help="YouTube video ID"),
     title: Optional[str] = typer.Option(None, "--title", help="New video title"),
@@ -573,6 +628,7 @@ def videos_update(
 
 
 @videos_app.command("delete")
+@command
 def videos_delete(
     video_id: str = typer.Argument(..., help="YouTube video ID"),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),

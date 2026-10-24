@@ -20,6 +20,7 @@ else:
     debug.addHandler(logging.NullHandler())
 
 from .config import get_config
+from .errors import command_error
 from .parsers import parse_cli_output, OutputFormat
 
 activity = get_activity_logger("lastpass")
@@ -253,8 +254,7 @@ class LastpassClient:
 
                 if check and result.returncode != 0:
                     raise ClientError(
-                        f"{self.config.cli_command} command failed "
-                        f"(exit {result.returncode})"
+                        command_error(self.config.cli_command, result.returncode, result.stderr or "")
                     )
 
                 return result

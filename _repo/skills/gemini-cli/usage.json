@@ -1,8 +1,8 @@
 {
   "tool": "gemini",
   "description": "CLI interface for Gemini API",
-  "discovered_at": "2026-08-09T20:27:17Z",
-  "total_commands": 27,
+  "discovered_at": "2026-10-17T13:18:25Z",
+  "total_commands": 28,
   "global_options": [
     {
       "name": "--version",
@@ -19,6 +19,39 @@
     }
   ],
   "commands": {
+    "account": {
+      "help": "Manage the Gemini API account and billing",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "topup": {
+          "help": "Open the AI Studio page where prepaid Gemini API credits are added. Makes no Gemini API call, so it works when credits are depleted. Example: gemini-api account topup gemini-api account topup --no-open",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--no-open",
+              "type": "bool",
+              "required": false,
+              "help": "Only print the URL; do not open a browser",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
     "auth": {
       "help": "Manage Gemini API authentication",
       "usage_instructions": "Authentication management -- login with API key, check status, or logout. Use `auth status` to verify credentials before other operations.",
@@ -41,7 +74,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -95,7 +129,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -116,7 +151,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -130,7 +166,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -171,7 +208,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -196,14 +234,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -238,7 +278,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -252,14 +293,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -307,7 +350,7 @@
       ],
       "commands": {
         "new": {
-          "help": "Start a new chat conversation with a prompt. Example: gemini-api chat new \"Explain quantum computing in simple terms\" gemini-api chat new \"What is in this image?\" --file photo.jpg gemini-api chat new \"Summarize this document\" -f report.pdf --model gemini-3.1-pro-preview",
+          "help": "Start a new chat conversation with a prompt. Example: gemini chat new \"Explain quantum computing in simple terms\" gemini chat new \"What is in this image?\" --file photo.jpg gemini chat new \"Summarize this document\" -f report.pdf --model gemini-3.1-pro-preview",
           "usage_instructions": "Send a prompt to Gemini and get a response. PROMPT is required (positional). Attach files with --file/-f (images, PDFs, etc.) for multimodal queries. Use --model/-m to select model (default: gemini-3-pro-preview).",
           "arguments": [
             {
@@ -373,7 +416,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -400,7 +444,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -420,7 +465,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -469,6 +515,8 @@
               "type": "bool",
               "required": false,
               "help": "Wait for processing",
+              "takes_value": false,
+              "secondary": "--no-wait",
               "default": "wait"
             },
             {
@@ -520,6 +568,7 @@
               "required": false,
               "help": "<gemini-3-pro-image-preview|gemini-2.5-flash-image|imagen-4.0-generate-001|imagen-4.  Image generation model to use",
               "short": "-m",
+              "takes_value": false,
               "default": "gemini-3-pro-image-preview"
             },
             {
@@ -542,7 +591,8 @@
               "name": "--search",
               "type": "bool",
               "required": false,
-              "help": "Enable Google Search grounding for real-time data"
+              "help": "Enable Google Search grounding for real-time data",
+              "takes_value": false
             },
             {
               "name": "--input-image",
@@ -596,7 +646,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -680,6 +731,8 @@
               "type": "bool",
               "required": false,
               "help": "Stream results in real-time",
+              "takes_value": false,
+              "secondary": "--no-stream",
               "default": "stream"
             },
             {
@@ -743,7 +796,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation",
-              "short": "-y"
+              "short": "-y",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -769,7 +823,8 @@
               "name": "--save-anyway",
               "type": "bool",
               "required": false,
-              "help": "Save the table ID even if connection verification fails"
+              "help": "Save the table ID even if connection verification fails",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -797,24 +852,27 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--by-model",
               "type": "bool",
               "required": false,
               "help": "Show breakdown by model",
-              "short": "-m"
+              "short": "-m",
+              "takes_value": false
             },
             {
               "name": "--daily",
               "type": "bool",
               "required": false,
-              "help": "Show daily breakdown"
+              "help": "Show daily breakdown",
+              "takes_value": false
             },
             {
               "name": "--source",
-              "type": "LOCAL|CLOUD",
+              "type": "local|cloud",
               "required": false,
               "help": "Data source: local (CLI tracking) or cloud (Cloud Monitoring)",
               "short": "-s",
@@ -887,7 +945,8 @@
               "name": "--no-wait",
               "type": "bool",
               "required": false,
-              "help": "Don't wait for processing (large files only)"
+              "help": "Don't wait for processing (large files only)",
+              "takes_value": false
             },
             {
               "name": "--json-schema",

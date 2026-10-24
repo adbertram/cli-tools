@@ -6,8 +6,8 @@ from pathlib import Path
 import typer
 from typing import Optional, List
 
-from ..client import get_client, ClientError
-from ..utils.images import process_local_images_for_wordpress
+from ..client import get_client
+from ..utils.images import upload_local_images
 from cli_tools_shared.filters import apply_filters, apply_limit, apply_properties_filter
 from cli_tools_shared.output import print_json, print_table, command, print_success, print_info
 from cli_tools_shared import FilterMap
@@ -17,6 +17,7 @@ COMMAND_CREDENTIALS = {
     "get": ["custom"],
     "create": ["custom"],
     "publish": ["custom"],
+    "backfill-scheduled-images": ["custom"],
     "unpublish": ["custom"],
     "update": ["custom"],
     "search": ["custom"],
@@ -151,7 +152,7 @@ def articles_get(
 def articles_create(
     title: str = typer.Option(..., "--title", help="Article title"),
     excerpt: str = typer.Option(..., "--excerpt", help="Article description/synopsis"),
-    category: str = typer.Option(..., "--category", help="Category: IT Ops|Home Ops|DevOps|Cloud|Information Security|Ebook"),
+    category: str = typer.Option(..., "--category", help="Category name from static-site/src/data/terms.json"),
     keywords: Optional[str] = typer.Option(None, "--keywords", help="Comma-separated SEO keywords"),
     post_type: str = typer.Option("Standard", "--type", help="Post type (default: Standard)"),
     status: Optional[str] = typer.Option(None, "--status", "-s", help="Override default status (template sets 'Idea' by default)"),
@@ -185,55 +186,81 @@ def articles_create(
 @command
 def articles_publish(
     page_id: str = typer.Argument(..., help="Notion page ID to publish"),
-    status: str = typer.Option("draft", "--status", "-s", help="Static publish status (draft/publish)"),
-    slug: Optional[str] = typer.Option(None, "--slug", help="Custom URL slug (auto-generated if not provided)"),
-    date: Optional[str] = typer.Option(None, "--date", "-d", help="Schedule date (ISO 8601)"),
-    auto_schedule: bool = typer.Option(False, "--auto-schedule", help="Auto-find next available slot"),
+    status: str = typer.Option(
+        "draft",
+        "--status",
+        "-s",
+        help="Publish status (draft/preview/publish). preview deploys to Cloudflare Pages without mutating Notion; publish promotes to production",
+    ),
+    date: Optional[str] = typer.Option(None, "--date", "-d", help="Schedule only, at this slot (ISO 8601 with UTC offset): sets Status=Scheduled and Publish Date; nothing is built or deployed"),
+    auto_schedule: bool = typer.Option(False, "--auto-schedule", help="Schedule only, at the next available slot: sets Status=Scheduled and Publish Date; nothing is built or deployed"),
+    schedule_after: Optional[str] = typer.Option(None, "--schedule-after", help="Inclusive schedule bound (ISO 8601 with UTC offset; requires --schedule-before)"),
+    schedule_before: Optional[str] = typer.Option(None, "--schedule-before", help="Exclusive schedule bound (ISO 8601 with UTC offset; requires --schedule-after)"),
     no_duplicate_check: bool = typer.Option(False, "--no-duplicate-check", help="Skip duplicate slug check"),
-    featured_image: Optional[str] = typer.Option(None, "--featured-image", help="Path to featured image file to upload and attach"),
+    featured_image: Optional[str] = typer.Option(None, "--featured-image", help="Promotion and preview only: path to featured image file to upload and attach"),
     force: bool = typer.Option(False, "--force", "-F", help="Force republish even if already published"),
 ):
-    """Publish a Notion article through the journaled static-site transaction."""
+    """Schedule a Notion article, deploy a non-publishing Cloudflare preview, or promote it to production."""
     client = get_client()
 
     print_info(f"Publishing article {page_id}...")
     result = client.publish_article(
         page_id,
         status=status,
-        slug=slug,
         date=date,
         auto_schedule=auto_schedule,
+        schedule_after=schedule_after,
+        schedule_before=schedule_before,
         check_duplicates=not no_duplicate_check,
         featured_image=featured_image,
         force=force,
     )
 
-    if result.get("scheduled_date"):
-        if "wordpress_post" in result:
-            print_success(
-                f"Scheduled for {result['scheduled_date']} "
-                f"(Post ID: {result['wordpress_post']['id']})"
-            )
-        else:
-            print_success(
-                f"Scheduled for {result['scheduled_date']} "
-                f"(Deployment ID: {result['deployment_id']})"
-            )
-    else:
-        if "wordpress_post" in result:
-            print_success(
-                f"Published to WordPress (Post ID: {result['wordpress_post']['id']})"
-            )
-        else:
-            print_success(
-                f"Static preview accepted (Deployment ID: {result['deployment_id']})"
-            )
+    if result.get("status") == "Scheduled":
+        print_success(f"Scheduled for {result['scheduled_date']}")
+        print_json(result)
+        return
 
-    if "wordpress_post" in result:
-        print_info(f"WordPress URL: {result.get('wordpress_url', 'N/A')}")
+    if result.get("status") == "preview":
+        print_success(
+            f"Cloudflare preview deployed (Deployment ID: {result['deployment_id']})"
+        )
+        print_info(f"Preview URL: {result['preview_url']}")
+        print_json(result)
+        return
+
+    if result.get("promoted") is True:
+        print_success(
+            f"Promoted to production (Deployment ID: {result['deployment_id']})"
+        )
     else:
-        print_info(f"Static URL: {result['static_url']}")
+        print_success(
+            f"Static preview accepted (Deployment ID: {result['deployment_id']})"
+        )
+
+    print_info(f"Static URL: {result['static_url']}")
     print_json(result)
+
+
+@app.command("backfill-scheduled-images")
+@command
+def articles_backfill_scheduled_images():
+    """Mirror local featured images to R2 for Scheduled pages that predate the recovery mirror.
+
+    Scheduling started mirroring the resolved featured image to R2 so a due
+    `publish --status publish` run can recover it on a different host. A page
+    that was already `Scheduled` before that shipped has no R2 object to
+    recover. Run this once, on every host that might hold the local image for
+    an already-`Scheduled` page, to mirror it.
+    """
+    client = get_client()
+    result = client.backfill_scheduled_featured_images()
+    print_json(result)
+    print_success(
+        f"Mirrored {len(result['mirrored'])}; "
+        f"{len(result['already_mirrored'])} already mirrored; "
+        f"{len(result['no_local_image'])} had no local image on this host"
+    )
 
 
 @app.command("unpublish")
@@ -241,14 +268,13 @@ def articles_publish(
 def articles_unpublish(
     identifier: str = typer.Argument(
         ...,
-        help="Notion page ID, WordPress post ID, post URL, or slug",
+        help="Notion page ID, post URL, or slug",
     ),
-    status: str = typer.Option("Draft", "--status", "-s", help="Notion status to set"),
-    force: bool = typer.Option(
-        False, "--force", "-F", help="Permanently delete the WordPress post (vs trash)"
-    ),
-    keep_wordpress: bool = typer.Option(
-        False, "--keep-wordpress", help="Skip the WordPress trash/delete; only reset Notion"
+    status: Optional[str] = typer.Option(
+        None,
+        "--status",
+        "-s",
+        help="Notion status to set (default: Ready to Publish for a Scheduled page, Draft otherwise)",
     ),
     dry_run: bool = typer.Option(
         False, "--dry-run", help="Resolve and report planned changes without mutating"
@@ -257,52 +283,46 @@ def articles_unpublish(
         False, "--yes", "-y", help="Skip the confirmation prompt (required non-interactively)"
     ),
 ):
-    """Unpublish an article: revert a published post back to draft.
+    """Unpublish an article: take a published post off the site and back to draft,
+    or unschedule a Scheduled post back to Ready to Publish.
 
-    The inverse of `publish`. Resolves both the Notion page and the WordPress
-    post from the identifier, trashes (or permanently deletes with --force) the
-    WordPress post, and resets the Notion page status plus its publication
-    artifact fields (Published URL, X Post URL, LinkedIn Post URL, Publish Date
-    -> cleared; Promoted -> false). Content, Keywords, Tags, Category, Schema
-    Type, Stage Date, and Post Performance Snapshots are left intact.
+    The inverse of `publish`. Resolves both the Notion page and the static
+    site post from the identifier, removes the post from the static site
+    source, rebuilds, deploys, and promotes the site without it, and resets
+    the Notion page status plus its publication artifact fields (Published
+    URL, X Post URL, LinkedIn Post URL, Publish Date -> cleared; Promoted ->
+    false). Content, Keywords, Tags, Category, Schema Type, Stage Date, and
+    Post Performance Snapshots are left intact. The removed post file is kept
+    at the `backup_path` reported in the result.
 
     This is destructive: pass --yes to run non-interactively, or --dry-run to
     preview the resolved post and planned field changes without mutating.
 
+    A Scheduled page has nothing on the site yet, so unscheduling only resets
+    its Notion status and clears Publish Date.
+
     Examples:
         ata-blog notion-page unpublish PAGE_ID --dry-run
+        ata-blog notion-page unpublish SCHEDULED_PAGE_ID --yes
         ata-blog notion-page unpublish PAGE_ID --yes
-        ata-blog notion-page unpublish 26985 --yes
         ata-blog notion-page unpublish https://adamtheautomator.com/my-post/ --yes
-        ata-blog notion-page unpublish my-post-slug --force --yes
-        ata-blog notion-page unpublish PAGE_ID --keep-wordpress --yes
+        ata-blog notion-page unpublish my-post-slug --yes
     """
     client = get_client()
 
     if dry_run:
-        summary = client.unpublish_article(
-            identifier,
-            status=status,
-            force=force,
-            keep_wordpress=keep_wordpress,
-            dry_run=True,
-        )
+        summary = client.unpublish_article(identifier, status=status, dry_run=True)
         print_info("Dry run: no changes were made.")
         print_json(summary)
         return
 
     if not yes:
-        preview = client.unpublish_article(
-            identifier,
-            status=status,
-            force=force,
-            keep_wordpress=keep_wordpress,
-            dry_run=True,
-        )
-        wp = preview["wordpress"]
+        preview = client.unpublish_article(identifier, status=status, dry_run=True)
+        static = preview["static"]
         print_info(
-            f"About to unpublish: WordPress post {wp['post_id']} -> {wp['action']}; "
-            f"Notion page {preview['notion']['page_id']} -> status '{status}', "
+            f"About to unpublish: static post {static['slug']} -> {static['action']}; "
+            f"Notion page {preview['notion']['page_id']} -> "
+            f"status '{preview['notion']['status']}', "
             f"clear {', '.join(preview['notion']['cleared_fields'])}."
         )
         confirm = typer.confirm("Proceed?")
@@ -310,13 +330,7 @@ def articles_unpublish(
             print_info("Aborted.")
             raise typer.Exit(1)
 
-    summary = client.unpublish_article(
-        identifier,
-        status=status,
-        force=force,
-        keep_wordpress=keep_wordpress,
-        dry_run=False,
-    )
+    summary = client.unpublish_article(identifier, status=status, dry_run=False)
     print_success(f"Unpublished {summary['notion']['page_id']}")
     print_json(summary)
 
@@ -340,7 +354,7 @@ def articles_update(
         ata-blog notion-page update PAGE_ID --status "Draft"
         ata-blog notion-page update PAGE_ID --status "Developmental Review"
         ata-blog notion-page update PAGE_ID --property "Keywords:azure, cloud"
-        ata-blog notion-page update PAGE_ID -s "Draft" -p "Dev Review Iterations:2"
+        ata-blog notion-page update PAGE_ID -s "Draft" -p "AI Search Iterations:2"
         ata-blog notion-page update PAGE_ID -p "Promoted:true"
         ata-blog notion-page update PAGE_ID -p "Published URL:" -p "Promoted:false"
     """
@@ -447,8 +461,8 @@ def content_set(
     """Replace article content with markdown from file.
 
     Local image references (paths that are not http/https URLs) are uploaded
-    to the WordPress media library before the markdown is pushed to Notion,
-    and the markdown is rewritten to point at the returned WordPress URLs.
+    to the static site media bucket before the markdown is pushed to Notion,
+    and the markdown is rewritten to point at the returned public URLs.
 
     Examples:
         ata-blog notion-page content set PAGE_ID --file ./post.md
@@ -457,11 +471,11 @@ def content_set(
     if not source_path.exists():
         raise typer.BadParameter(f"File not found: {file}")
 
-    # Upload local image references to WordPress, rewriting the markdown
+    # Upload local image references to static media, rewriting the markdown
     # to point at the returned URLs. Paths are resolved relative to the
     # markdown file's parent directory.
     original_markdown = source_path.read_text()
-    rewritten_markdown, uploaded = process_local_images_for_wordpress(
+    rewritten_markdown, uploaded = upload_local_images(
         original_markdown,
         base_dir=source_path.parent,
         verbose=True,
@@ -484,7 +498,7 @@ def content_set(
             result = client.set_article_content(page_id, rewritten_path)
         finally:
             Path(rewritten_path).unlink(missing_ok=True)
-        print_info(f"Uploaded {uploaded} local image(s) to WordPress media.")
+        print_info(f"Uploaded {uploaded} local image(s) to static media.")
     else:
         result = client.set_article_content(page_id, file)
 

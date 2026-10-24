@@ -313,7 +313,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]  Maximum number of projects",
+              "help": "[x>=1]  Maximum number of projects",
               "short": "-l",
               "default": "100"
             },
@@ -532,7 +532,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "RANGE [x>=1]  Maximum number of tickets",
+              "help": "[x>=1]  Maximum number of tickets",
               "short": "-l",
               "default": "100"
             },

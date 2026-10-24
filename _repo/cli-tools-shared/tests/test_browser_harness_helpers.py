@@ -106,3 +106,43 @@ def test_press_key_keeps_special_keys_untouched(monkeypatch):
     assert events[2]["text"] == "\r"
     assert events[2]["windowsVirtualKeyCode"] == 13
     assert events[2]["modifiers"] == 8
+
+
+def test_cdp_deadline_separate_from_protocol_and_socket_margin(monkeypatch):
+    calls=[]
+    monkeypatch.setattr(helpers,'_send',lambda req,**kw: calls.append((req,kw)) or {'result':{}})
+    helpers.cdp('Page.navigate',session_id='exact-session',request_timeout=.5,url='https://example.test/')
+    req,options=calls[0]
+    assert req=={'method':'Page.navigate','session_id':'exact-session','params':{'url':'https://example.test/'},'request_timeout':.5}
+    assert options=={'timeout':.75}
+    helpers.cdp('Page.getFrameTree')
+    assert calls[1][1]=={} and 'request_timeout' not in calls[1][0]
+
+
+@pytest.mark.parametrize('value',[0,-1,float('nan'),float('inf'),True,301,'1'])
+def test_cdp_rejects_invalid_deadlines(value):
+    with pytest.raises(ValueError,match='invalid_cdp_request_timeout'):
+        helpers.cdp('Page.navigate',request_timeout=value)
+@pytest.mark.parametrize("selector", ["input#owned", "textarea#owned", "[contenteditable=true]#owned"])
+@pytest.mark.parametrize("platform,modifier", [("darwin", 4), ("linux", 2)])
+def test_framework_clear_targets_focused_editor_with_native_select_all(monkeypatch, selector, platform, modifier):
+    calls = []; expressions = []
+    monkeypatch.setattr(helpers.sys, "platform", platform)
+    monkeypatch.setattr(helpers, "js", lambda expression: expressions.append(expression) or True)
+    monkeypatch.setattr(helpers, "cdp", lambda method, **params: calls.append((method, params)) or {})
+    helpers.fill_input(selector, "")
+    assert len(expressions) == 2
+    assert all(selector in expression for expression in expressions)
+    assert calls[0] == ("Input.dispatchKeyEvent", {"type": "rawKeyDown", "commands": ["selectAll"],
+        "key": "a", "code": "KeyA", "modifiers": modifier, "windowsVirtualKeyCode": 65, "nativeVirtualKeyCode": 65})
+    assert "commands" not in calls[1][1] and calls[1][1]["type"] == "keyUp"
+    assert [event[1]["key"] for event in calls[2:]] == ["Backspace", "Backspace"]
+
+
+def test_framework_clear_missing_target_dispatches_no_keyboard_event(monkeypatch):
+    calls = []
+    monkeypatch.setattr(helpers, "js", lambda expression: False)
+    monkeypatch.setattr(helpers, "cdp", lambda *args, **kwargs: calls.append(args))
+    with pytest.raises(RuntimeError, match="element not found"):
+        helpers.fill_input("#missing", "")
+    assert calls == []

@@ -35,6 +35,7 @@ class ToolCallSummary(CLIModel):
     timestamp: str
     tool: str
     status: str
+    agent_id: Optional[str] = None
     is_sidechain: bool = False
     parent_tool_call_id: Optional[str] = None  # Task tool call ID that spawned this subagent
     input: Optional[Dict[str, Any]] = None

@@ -24,3 +24,8 @@ include = ["raptive_cli*"]
 
 [tool.uv.sources]
 cli-tools-shared = { path = "../_repo/cli-tools-shared", editable = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]

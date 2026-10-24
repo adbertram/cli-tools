@@ -28,6 +28,39 @@ YT_DLP_SUBTITLE_FORMATS = {"srt", "vtt"}
 class YoutubeClient:
     """Client for downloading YouTube transcripts using yt-dlp."""
 
+    @staticmethod
+    def get_source_metadata(url: str, *, timeout_seconds, max_bytes) -> Dict:
+        """Bounded exact-video facts and caption languages; no download/auth."""
+        from .source_metadata import get_source_metadata
+        return get_source_metadata(url,timeout_seconds=timeout_seconds,max_bytes=max_bytes)
+
+    @staticmethod
+    def read_source_transcript(url: str, *, expected_video_id, duration_seconds, language,
+                               timeout_seconds, max_caption_bytes, max_cues, max_result_bytes) -> Dict:
+        """Bounded actual provider captions in the full video's original timeline."""
+        from .source_acquisition import read_source_transcript
+        return read_source_transcript(url, expected_video_id=expected_video_id, duration_seconds=duration_seconds,
+                                      language=language, timeout_seconds=timeout_seconds, max_caption_bytes=max_caption_bytes,
+                                      max_cues=max_cues, max_result_bytes=max_result_bytes)
+
+    @staticmethod
+    def acquire_source_media(url: str, *, expected_video_id, duration_seconds, output_dir,
+                             max_source_bytes, max_stage_bytes, max_resolution, timeout_seconds, ownership_path=None) -> Dict:
+        """Exact full-video bytes; caller supplies an empty private owned stage."""
+        from .source_media import acquire_source_media
+        return acquire_source_media(url, expected_video_id=expected_video_id, duration_seconds=duration_seconds,
+                                    output_dir=output_dir, max_source_bytes=max_source_bytes, max_stage_bytes=max_stage_bytes,
+                                    max_resolution=max_resolution, timeout_seconds=timeout_seconds, ownership_path=ownership_path)
+
+    @staticmethod
+    def recover_source_media(url: str, *, expected_video_id, duration_seconds, output_dir,
+                             max_source_bytes, max_stage_bytes, max_resolution, timeout_seconds, ownership_path) -> Dict:
+        """Recover only a durable exact ended owning acquisition attempt."""
+        from .source_media_recovery import recover
+        return recover(dict(url=url,expected_video_id=expected_video_id,duration_seconds=duration_seconds,
+            output_dir=str(output_dir),max_source_bytes=max_source_bytes,max_stage_bytes=max_stage_bytes,
+            max_resolution=max_resolution,timeout_seconds=timeout_seconds,ownership_path=str(ownership_path)))
+
     def __init__(self):
         """Initialize YouTube client."""
         self.ytdlp_path = self._find_ytdlp()

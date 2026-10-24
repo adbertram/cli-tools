@@ -161,7 +161,7 @@ mercari listings get "https://www.mercari.com/us/item/m12345678901/"
 mercari listings get m12345678901 --properties "id,name,price,status,created"
 mercari listings get m12345678901 --table
 
-# Get multiple items. Input order and coverage stay unchanged.
+# Get up to 25 items. Input order and coverage stay unchanged.
 mercari listings get-many m12345678901 m10987654321
 mercari listings get-many m12345678901 m10987654321 --properties "id,status"
 ```
@@ -175,14 +175,25 @@ fields. `get` returns the full `productQuery` item object (all fields — `itemI
 `name`, `price`, `description`, `status`, `itemCondition`, `itemSize`, `brand`,
 `shippingClass`, `shippingFromArea`, `numLikes`, `created`, `updated`,
 `photos[]`, `seller{}`, …) plus `id`, `url`,
-`buyer_protection_fee_cents`, and `landed_total_cents`. The landed total
-includes buyer-paid shipping. Both added cost fields use integer cents.
+`buyer_protection_fee_cents`, and `landed_total_cents`. Buyer Protection comes
+from Mercari's explicit `priceSummary.headline`; `priceSummary.totalPrice` is
+the landed checkout total and can include buyer-paid shipping and other
+checkout costs. Both added cost fields use integer cents.
 
-`get-many` returns one record for each input. A successful record contains
+`get-many` accepts at most 25 item IDs per invocation and returns one record for
+each input. The cap prevents a serialized browser batch from running for an
+unbounded period before emitting its JSON document. A successful record contains
 `item_id`, `status: "ok"`, and `item`. An item read error contains `item_id`,
 `status: "error"`, `error_kind`, and `error`. The `error_kind` is `not_found`
 only when Mercari returns no item. Other item read errors use `unreadable`.
 A human verification challenge stops the command without partial JSON.
+
+Use `mercari listings get-many --status-only <ids...>` for fresh availability
+checks. This mode reads the same uncached item response and returns only the
+published `id`, `url`, `status`, and `lastSoldAt` fields that are present; it
+requires a nonempty status but does not require checkout pricing. Full detail
+reads retain strict buyer-cost validation. A full-detail pricing error becomes
+an `unreadable` record for that item, preserving the other batch results.
 
 ### Authentication (`mercari auth`)
 

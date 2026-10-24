@@ -28,35 +28,22 @@ import typer
 
 from .auth_verifier import AuthVerifier
 from .config import (
+    config_class_of,
     get_runtime_profile_resolution,
     get_profile_auth_settings,
     implicit_profile_auth_type,
     reset_runtime_profile_resolution,
+    root_config_field_names_for,
     set_runtime_profile_resolution,
 )
 from .credentials import CredentialType
 from .profiles import ProfileStore, list_profiles
+from .shared_chromium_profile import get_shared_chromium_profile_seed_guidance
 
 logger = logging.getLogger("cli_tools.command_registry")
 
 # Maps credential type string names (from COMMAND_CREDENTIALS) to CredentialType enum
 _CRED_TYPE_MAP = {ct.value: ct for ct in CredentialType}
-
-
-def _get_config_class(get_config_fn):
-    get_config_fn = getattr(get_config_fn, "__wrapped__", get_config_fn)
-    annotations = getattr(get_config_fn, "__annotations__", {}) or {}
-    config_cls = annotations.get("return")
-    if config_cls is not None:
-        return config_cls
-    config_cls = getattr(get_config_fn, "__globals__", {}).get("Config")
-    if config_cls is not None:
-        return config_cls
-    for cell in getattr(get_config_fn, "__closure__", ()) or ():
-        value = cell.cell_contents
-        if isinstance(value, type) and hasattr(value, "CREDENTIAL_TYPES"):
-            return value
-    return None
 
 
 def _profile_store_for_command(get_config_fn, config_cls, cli_name: str) -> ProfileStore:
@@ -67,8 +54,13 @@ def _profile_store_for_command(get_config_fn, config_cls, cli_name: str) -> Prof
         from .config import resolve_tool_dir
 
         tool_dir = resolve_tool_dir(config_cls.DIST_NAME)
-        tool_name = tool_dir.name
-    return ProfileStore(tool_name, tool_dir=tool_dir, profile_auth_settings=profile_auth_settings)
+        tool_name = getattr(config_cls, "RUNTIME_DATA_NAME", "") or tool_dir.name
+    return ProfileStore(
+        tool_name,
+        tool_dir=tool_dir,
+        profile_auth_settings=profile_auth_settings,
+        root_config_fields=root_config_field_names_for(config_cls),
+    )
 
 
 def _command_profile_auth_type(
@@ -139,7 +131,7 @@ def _resolve_runtime_profile_context(
     if explicit_profile is None and runtime_profile_name:
         explicit_profile = runtime_profile_name
 
-    config_cls = _get_config_class(get_config_fn)
+    config_cls = config_class_of(get_config_fn)
     profile_auth_settings = get_profile_auth_settings(config_cls) if config_cls is not None else None
     if explicit_profile:
         if profile_auth_settings is None:
@@ -349,7 +341,10 @@ def _check_credentials(
             # MUST perform it themselves at the point of use — that is
             # not the gate's job.
             if not config.has_saved_session():
-                missing.append(f"  - {cred_type.value}: no saved browser session")
+                guidance = get_shared_chromium_profile_seed_guidance(config, cli_name)
+                missing.append(
+                    f"  - {cred_type.value}: {guidance or 'no saved browser session'}"
+                )
 
         else:
             # API_KEY, PERSONAL_ACCESS_TOKEN, USERNAME_PASSWORD, CUSTOM
@@ -404,12 +399,6 @@ def register_commands(
     # Resolve CLI name for error messages
     resolved_cli_name = cli_name or (app.info.name if app.info.name else name)
 
-    # Store the original callback if one exists
-    original_callback = sub_app.registered_callback
-    original_callback_fn = None
-    if original_callback and original_callback.callback:
-        original_callback_fn = original_callback.callback
-
     _install_command_wrappers(
         sub_app,
         cred_map=cred_map,
@@ -428,13 +417,8 @@ def register_commands(
 
         invoked = ctx.invoked_subcommand
         if invoked is None:
-            # No subcommand — show help (default Typer behavior)
-            if original_callback_fn:
-                original_callback_fn(ctx)
-            else:
-                typer.echo(ctx.get_help())
-                raise typer.Exit()
-            return
+            typer.echo(ctx.get_help())
+            raise typer.Exit()
 
         if profile is None:
             return

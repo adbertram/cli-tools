@@ -44,6 +44,19 @@ class FakeClient:
         self.calls.append(("create_post", kwargs))
         return {"id": "urn:li:share:1", "author": kwargs["author"], "commentary": kwargs["commentary"]}
 
+    def create_video_post(self, **kwargs):
+        self.calls.append(("create_video_post", kwargs))
+        return {
+            "id": "urn:li:share:9",
+            "url": "https://www.linkedin.com/feed/update/urn:li:share:9/",
+            "video": "urn:li:video:V1",
+            "author": kwargs["author"],
+        }
+
+    def lookup_organization(self, vanity_name):
+        self.calls.append(("lookup_organization", vanity_name))
+        return {"urn": "urn:li:organization:1", "id": 1, "vanity_name": vanity_name}
+
     def update_post(self, **kwargs):
         self.calls.append(("update_post", kwargs))
         return {"id": kwargs["post_urn"], "commentary": kwargs["commentary"], "updated": True}
@@ -401,3 +414,102 @@ def test_auth_readiness_reports_oauth_scope_matrix(monkeypatch):
         "missing credentials: ACCESS_TOKEN",
         "missing scopes: r_organization_social",
     ]
+
+
+def test_page_posts_create_with_video_calls_create_video_post(monkeypatch, tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"mp4")
+    captions = tmp_path / "clip.srt"
+    captions.write_text("srt")
+    client = FakeClient()
+    monkeypatch.setattr("linkedin_cli.main.get_client", lambda profile=None: client)
+
+    result = runner.invoke(
+        app,
+        [
+            "page", "posts", "create", "Watch this",
+            "--page", "urn:li:organization:555",
+            "--video", str(video),
+            "--video-title", "Title",
+            "--captions", str(captions),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert client.calls == [
+        (
+            "create_video_post",
+            {
+                "commentary": "Watch this",
+                "author": "urn:li:organization:555",
+                "video_path": video.resolve(),
+                "title": "Title",
+                "captions_path": captions.resolve(),
+                "thumbnail_path": None,
+                "visibility": "PUBLIC",
+                "feed_distribution": "MAIN_FEED",
+                "disable_reshare": False,
+                "processing_timeout": 600,
+            },
+        )
+    ]
+    output = json.loads(result.stdout)
+    assert output["url"] == "https://www.linkedin.com/feed/update/urn:li:share:9/"
+    assert output["video"] == "urn:li:video:V1"
+
+
+def test_user_posts_create_with_video_uses_member_author(monkeypatch, tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"mp4")
+    client = FakeClient()
+    monkeypatch.setattr("linkedin_cli.main.get_client", lambda profile=None: client)
+
+    result = runner.invoke(
+        app,
+        ["user", "posts", "create", "Hi", "--person", "urn:li:person:abc", "--video", str(video)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert client.calls[0][0] == "create_video_post"
+    assert client.calls[0][1]["author"] == "urn:li:person:abc"
+
+
+def test_video_companion_options_require_video(monkeypatch):
+    client = FakeClient()
+    monkeypatch.setattr("linkedin_cli.main.get_client", lambda profile=None: client)
+
+    result = runner.invoke(
+        app,
+        ["page", "posts", "create", "Hi", "--page", "urn:li:organization:555", "--video-title", "x"],
+    )
+
+    assert result.exit_code == 1
+    assert "can only be used with --video" in result.output
+    assert client.calls == []
+
+
+def test_video_must_be_mp4_and_captions_srt(monkeypatch, tmp_path):
+    video = tmp_path / "clip.mov"
+    video.write_bytes(b"mov")
+    client = FakeClient()
+    monkeypatch.setattr("linkedin_cli.main.get_client", lambda profile=None: client)
+
+    result = runner.invoke(
+        app,
+        ["page", "posts", "create", "Hi", "--page", "urn:li:organization:555", "--video", str(video)],
+    )
+
+    assert result.exit_code == 1
+    assert "--video expects a .mp4 file" in result.output
+    assert client.calls == []
+
+
+def test_page_lookup_resolves_vanity(monkeypatch):
+    client = FakeClient()
+    monkeypatch.setattr("linkedin_cli.main.get_client", lambda profile=None: client)
+
+    result = runner.invoke(app, ["page", "lookup", "--vanity", "atalearning"])
+
+    assert result.exit_code == 0, result.output
+    assert client.calls == [("lookup_organization", "atalearning")]
+    assert json.loads(result.stdout)["urn"] == "urn:li:organization:1"

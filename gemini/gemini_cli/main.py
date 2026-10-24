@@ -13,8 +13,9 @@ app = create_app(
 )
 
 # Register command modules
-from .commands import auth, chat, files, image, models, usage, video, research
+from .commands import account, auth, chat, files, image, models, usage, video, research
 app.add_typer(auth.app, name="auth", help="Manage Gemini API authentication")
+register_commands(app, get_config, account, name="account", help="Manage the Gemini API account and billing")
 register_commands(app, get_config, chat, name="chat", help="Chat and content generation")
 register_commands(app, get_config, files, name="files", help="File operations with Gemini Files API")
 register_commands(app, get_config, image, name="image", help="Image generation with Nano Banana Pro")

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import requests
 
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, config_for, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
 
 DEFAULT_LINKEDIN_SCOPES = "w_member_social"
@@ -115,5 +115,8 @@ class Config(BaseConfig):
         return result
 
 
+_configs = {}
+
+
 def get_config(profile=None):
-    return Config(profile=profile)
+    return config_for(Config, profile, _configs)

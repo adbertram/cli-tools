@@ -1,5 +1,6 @@
 """Main entry point for LinkedIn CLI."""
 
+from pathlib import Path
 from typing import List, Optional
 
 import typer
@@ -17,7 +18,7 @@ from cli_tools_shared.output import command, print_error, print_info, print_json
 from cli_tools_shared.profiles import list_profiles
 
 from . import __version__
-from .client import LinkedInClient, get_client
+from .client import VIDEO_PROCESSING_TIMEOUT_SECONDS, LinkedInClient, get_client
 from .config import get_config
 
 POST_COLUMNS = [
@@ -45,6 +46,7 @@ COMMAND_CREDENTIALS = {
     "page posts update": ["oauth_authorization_code"],
     "page posts delete": ["oauth_authorization_code"],
     "page posts search": ["oauth_authorization_code"],
+    "page lookup": ["oauth_authorization_code"],
 }
 
 app = create_app(
@@ -270,6 +272,83 @@ def _resolve_page_author_from_config(config, page: Optional[str]) -> str:
         )
     return _require_page_urn(page_urn)
 
+def _file_option(flag: str, help_text: str):
+    return typer.Option(
+        None,
+        flag,
+        exists=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+        help=help_text,
+    )
+
+
+VIDEO_OPTION = _file_option("--video", "MP4 video file to upload and attach. Creates a video post.")
+VIDEO_TITLE_OPTION = typer.Option(None, "--video-title", help="Video title (requires --video).")
+CAPTIONS_OPTION = _file_option("--captions", "SRT captions file for the video (requires --video).")
+THUMBNAIL_OPTION = _file_option("--thumbnail", "Custom thumbnail image for the video (requires --video).")
+VIDEO_TIMEOUT_OPTION = typer.Option(
+    VIDEO_PROCESSING_TIMEOUT_SECONDS,
+    "--video-timeout",
+    min=1,
+    help="Seconds to wait for LinkedIn to finish processing the uploaded video.",
+)
+
+
+def _require_suffix(path: Path, suffix: str, flag: str) -> None:
+    if path.suffix.lower() != suffix:
+        raise ClientError(f"{flag} expects a {suffix} file, got {path.name}.")
+    if path.stat().st_size == 0:
+        raise ClientError(f"{flag} file is empty: {path}.")
+
+
+def _create_post(
+    client: LinkedInClient,
+    *,
+    commentary: str,
+    author: str,
+    visibility: str,
+    feed_distribution: str,
+    disable_reshare: bool,
+    video: Optional[Path],
+    video_title: Optional[str],
+    captions: Optional[Path],
+    thumbnail: Optional[Path],
+    video_timeout: int,
+) -> dict:
+    if video is None:
+        extras = {
+            "--video-title": video_title,
+            "--captions": captions,
+            "--thumbnail": thumbnail,
+        }
+        stray = [flag for flag, value in extras.items() if value is not None]
+        if stray:
+            raise ClientError(f"{', '.join(stray)} can only be used with --video.")
+        return client.create_post(
+            commentary=commentary,
+            author=author,
+            visibility=visibility,
+            feed_distribution=feed_distribution,
+            disable_reshare=disable_reshare,
+        )
+    _require_suffix(video, ".mp4", "--video")
+    if captions is not None:
+        _require_suffix(captions, ".srt", "--captions")
+    return client.create_video_post(
+        commentary=commentary,
+        author=author,
+        video_path=video,
+        title=video_title,
+        captions_path=captions,
+        thumbnail_path=thumbnail,
+        visibility=visibility,
+        feed_distribution=feed_distribution,
+        disable_reshare=disable_reshare,
+        processing_timeout=video_timeout,
+    )
+
 
 def _list_posts(
     client: LinkedInClient,
@@ -429,17 +508,28 @@ def create_user_post(
         "--disable-reshare",
         help="Prevent resharing the post.",
     ),
+    video: Optional[Path] = VIDEO_OPTION,
+    video_title: Optional[str] = VIDEO_TITLE_OPTION,
+    captions: Optional[Path] = CAPTIONS_OPTION,
+    thumbnail: Optional[Path] = THUMBNAIL_OPTION,
+    video_timeout: int = VIDEO_TIMEOUT_OPTION,
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
-    """Create a text-only LinkedIn member post."""
+    """Create a LinkedIn member post: text-only, or a video post with --video."""
     client = get_client(profile=profile)
     _render_single(
-        client.create_post(
+        _create_post(
+            client,
             commentary=commentary,
             author=_resolve_user_author(client, person),
             visibility=visibility,
             feed_distribution=feed_distribution,
             disable_reshare=disable_reshare,
+            video=video,
+            video_title=video_title,
+            captions=captions,
+            thumbnail=thumbnail,
+            video_timeout=video_timeout,
         ),
         table,
         None,
@@ -664,17 +754,28 @@ def create_page_post(
         "--disable-reshare",
         help="Prevent resharing the post.",
     ),
+    video: Optional[Path] = VIDEO_OPTION,
+    video_title: Optional[str] = VIDEO_TITLE_OPTION,
+    captions: Optional[Path] = CAPTIONS_OPTION,
+    thumbnail: Optional[Path] = THUMBNAIL_OPTION,
+    video_timeout: int = VIDEO_TIMEOUT_OPTION,
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
 ):
-    """Create a text-only LinkedIn page post."""
+    """Create a LinkedIn page post: text-only, or a video post with --video."""
     client = get_client(profile=profile)
     _render_single(
-        client.create_post(
+        _create_post(
+            client,
             commentary=commentary,
             author=_resolve_page_author(client, page),
             visibility=visibility,
             feed_distribution=feed_distribution,
             disable_reshare=disable_reshare,
+            video=video,
+            video_title=video_title,
+            captions=captions,
+            thumbnail=thumbnail,
+            video_timeout=video_timeout,
         ),
         table,
         None,
@@ -779,6 +880,26 @@ def search_page_posts(
         table=table,
         properties=properties,
     )
+
+
+@page_app.command("lookup")
+@command
+def lookup_page(
+    vanity: str = typer.Option(
+        ...,
+        "--vanity",
+        help="Company page vanity name, the last segment of linkedin.com/company/<vanity>.",
+    ),
+    profile: Optional[str] = typer.Option(
+        None,
+        "--profile",
+        help="Auth profile name. Defaults to the active profile.",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Resolve a company page vanity name to its organization URN."""
+    client = get_client(profile=profile)
+    _render_single(client.lookup_organization(vanity), table, None)
 
 
 user_app.add_typer(user_posts_app, name="posts")

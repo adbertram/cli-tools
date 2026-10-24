@@ -64,6 +64,18 @@ except ImportError:
     pass
 
 try:
+    from .commands import agents
+    register_commands(app, get_config, agents, name="agents", help="Manage Custom Agents and sessions")
+except ImportError:
+    pass
+
+try:
+    from .commands import admin_agents
+    register_commands(app, get_config, admin_agents, name="admin-agents", help="Manage Enterprise workspace agents")
+except ImportError:
+    pass
+
+try:
     app.add_typer(create_cache_app(get_config), name="cache")
 except ImportError:
     pass

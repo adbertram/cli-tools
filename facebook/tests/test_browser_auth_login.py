@@ -11,7 +11,26 @@ def test_facebook_browser_keeps_auth_lifecycle_declarative():
     assert FacebookBrowser.LOGIN_URL == "https://www.facebook.com/login"
     assert FacebookBrowser.AUTH_CHECK_URL == "https://m.facebook.com/"
     assert FacebookBrowser.AUTH_COOKIE_PATTERNS == ["c_user"]
+    assert FacebookBrowser.AUTH_LOGIN_FORM_SELECTOR == 'input[name="email"], input[name="pass"]'
+    assert FacebookBrowser.AUTH_LOGIN_USERNAME_SELECTOR == 'input[name="email"]'
+    assert FacebookBrowser.AUTH_LOGIN_PASSWORD_SELECTOR == 'input[name="pass"]'
+    assert FacebookBrowser.AUTH_LOGIN_SUBMIT_SELECTOR == 'button[name="login"]'
+    assert FacebookBrowser.AUTH_LOGIN_USERNAME_SECRET == "facebook-username"
+    assert FacebookBrowser.AUTH_LOGIN_PASSWORD_SECRET == "facebook-password"
     assert FacebookBrowser.MANUAL_LOGIN is True
+
+
+def test_facebook_browser_scopes_login_secrets_to_the_active_profile():
+    class WorkProfileConfig:
+        _tool_name = "facebook"
+
+        def get_active_profile_name(self):
+            return "work"
+
+    browser = FacebookBrowser(WorkProfileConfig())
+
+    assert browser.AUTH_LOGIN_USERNAME_SECRET == "facebook-work-username"
+    assert browser.AUTH_LOGIN_PASSWORD_SECRET == "facebook-work-password"
 
 
 def test_facebook_headless_automation_uses_real_chrome_user_agent(monkeypatch):

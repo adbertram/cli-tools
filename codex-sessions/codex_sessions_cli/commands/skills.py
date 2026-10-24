@@ -1,5 +1,6 @@
 """Skill mention commands."""
 import typer
+from cli_tools_shared.output import command
 from typing import List, Optional
 
 from ..client import get_client
@@ -13,6 +14,7 @@ SKILL_HEADERS = ["Time", "Session", "Name", "Source"]
 
 
 @app.command("list")
+@command
 def list_skills(
     project: Optional[str] = typer.Option(None, "--project", "-p", help="Project name"),
     project_path: Optional[str] = typer.Option(None, "--project-path", help="Project folder path"),
@@ -29,6 +31,7 @@ def list_skills(
 
 
 @app.command("get")
+@command
 def get_skill(
     skill_id: str = typer.Argument(..., help="Skill invocation ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

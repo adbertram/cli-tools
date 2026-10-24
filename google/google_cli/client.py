@@ -108,6 +108,12 @@ def retry_with_exponential_backoff(
 class GoogleClient:
     """Client for Google Workspace APIs."""
 
+    @staticmethod
+    def read_document_bounded(config,document_id,*,timeout_seconds,max_bytes):
+        """Current all-tab text/links with saved credentials; never opens OAuth."""
+        from .bounded_documents import read_document_bounded
+        return read_document_bounded(config,document_id,timeout_seconds=timeout_seconds,max_bytes=max_bytes)
+
     def __init__(self, config):
         self.config = config
         missing = self.config.get_missing_credentials()

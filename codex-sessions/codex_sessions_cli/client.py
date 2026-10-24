@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .config import get_config
+from .config import dedupe_codex_roots, get_config
 from .models import (
     ConversationSummary,
     Project,
@@ -28,34 +28,38 @@ from .models import (
     create_tool_call,
 )
 from .parsers import (
+    SUBAGENT_TOOL_NAMES,
+    TOOL_CALL_TYPES,
+    TOOL_OUTPUT_TYPES,
     ParsedRollout,
     RolloutIndex,
-    ROLLOUT_PREFIX,
-    ROLLOUT_SUFFIX,
-    SESSION_SUBDIRS,
     conversation_count,
     conversation_id_for_record,
     encode_project_path,
     event_messages,
     extract_skill_mentions,
     has_errors,
+    is_meaningful_user_message,
+    is_message_record,
     iter_rollout_paths,
     last_turn_model,
     load_rollout_index,
     load_rollout,
     load_session_names,
     max_timestamp,
-    message_records,
+    normalized_messages,
     output_for_record,
     output_records_by_call_id,
     parse_arguments,
     project_name,
-    response_items,
     session_text,
+    status_for_call,
     status_for_output,
-    text_from_content,
     token_totals,
+    tool_call_arguments,
+    tool_call_name,
     tool_call_records,
+    tool_calls_by_call_id,
 )
 
 
@@ -70,21 +74,33 @@ class CodexSessionsClient:
 
     def __init__(self, codex_home: Optional[Path] = None):
         self.config = get_config()
-        self.codex_home = Path(codex_home).expanduser() if codex_home else self.config.codex_home
+        roots = (
+            [Path(codex_home)]
+            if codex_home is not None
+            else self.config.codex_roots
+        )
+        self.codex_roots = dedupe_codex_roots(roots)
+        self.codex_home = self.codex_roots[0]
         self.load_errors: List[str] = []
         self._session_names: Optional[Dict[str, str]] = None
 
     def _get_session_names(self) -> Dict[str, str]:
         if self._session_names is None:
-            self._session_names = load_session_names(self.codex_home)
+            names = {}
+            for root in self.codex_roots:
+                for session_id, name in load_session_names(root).items():
+                    names.setdefault(session_id, name)
+            self._session_names = names
         return self._session_names
 
     def auth_status(self) -> Dict[str, Any]:
-        exists = self.codex_home.exists()
+        exists = any(root.exists() for root in self.codex_roots)
         return {
             "authenticated": exists,
             "codex_home": str(self.codex_home),
+            "codex_roots": [str(root) for root in self.codex_roots],
             "sessions_dir": str(self.codex_home / "sessions"),
+            "sessions_dirs": [str(root / "sessions") for root in self.codex_roots],
             "cli_command": self.config.cli_command,
             "cli_available": self.config.is_cli_available(),
             "cli_version": self.config.get_cli_version(),
@@ -127,9 +143,15 @@ class CodexSessionsClient:
         filters: Optional[List[str]] = None,
         date_window: Optional[Tuple[datetime, datetime]] = None,
         min_tool_calls: Optional[int] = None,
+        session_ids: Optional[List[str]] = None,
     ) -> List[SessionSummary]:
+        """List session summaries, newest first.
+
+        session_ids: when given, only the rollout files named by these ids are
+        indexed and parsed; every other rollout on disk is left untouched.
+        """
         sessions: List[SessionSummary] = []
-        for index in self._matching_rollout_indexes(project, project_path, since, date_window):
+        for index in self._matching_rollout_indexes(project, project_path, since, date_window, session_ids):
             parsed = self._load_rollout_or_record_error(index.path)
             if parsed is None:
                 continue
@@ -222,26 +244,9 @@ class CodexSessionsClient:
             outputs = output_records_by_call_id(parsed)
             for record in tool_call_records(parsed):
                 payload = record.payload
-                call_id = payload["call_id"]
+                call_id = self._tool_call_id(payload)
                 output_record = outputs.get(call_id)
-                args = parse_arguments(payload["arguments"])
-                calls.append(
-                    create_tool_call(
-                        {
-                            "id": call_id,
-                            "session_id": parsed.meta["id"],
-                            "conversation_id": conversation_id_for_record(parsed.records, record),
-                            "time": record.timestamp,
-                            "tool": payload["name"],
-                            "name": payload["name"],
-                            "status": status_for_output(output_record),
-                            "arguments": args,
-                            "output": output_for_record(output_record),
-                            "cwd": self._tool_cwd(args, output_record),
-                            "exit_code": self._tool_exit_code(output_record),
-                        }
-                    )
-                )
+                calls.append(self._tool_call_model(parsed, record, output_record))
                 if len(calls) >= limit:
                     return calls[:limit]
         return self._apply_limit(calls, limit)
@@ -252,25 +257,11 @@ class CodexSessionsClient:
             outputs = output_records_by_call_id(parsed)
             for record in tool_call_records(parsed):
                 payload = record.payload
-                if payload["call_id"] != tool_call_id:
+                call_id = self._tool_call_id(payload)
+                if call_id != tool_call_id:
                     continue
                 output_record = outputs.get(tool_call_id)
-                args = parse_arguments(payload["arguments"])
-                return create_tool_call(
-                    {
-                        "id": tool_call_id,
-                        "session_id": parsed.meta["id"],
-                        "conversation_id": conversation_id_for_record(parsed.records, record),
-                        "time": record.timestamp,
-                        "tool": payload["name"],
-                        "name": payload["name"],
-                        "status": status_for_output(output_record),
-                        "arguments": args,
-                        "output": output_for_record(output_record),
-                        "cwd": self._tool_cwd(args, output_record),
-                        "exit_code": self._tool_exit_code(output_record),
-                    }
-                )
+                return self._tool_call_model(parsed, record, output_record)
         raise ClientError(f"Tool call not found: {tool_call_id}")
 
     def list_subagent_activity(
@@ -286,59 +277,70 @@ class CodexSessionsClient:
             outputs = output_records_by_call_id(parsed)
             for record in tool_call_records(parsed):
                 payload = record.payload
-                if payload["name"] not in {"spawn_agent", "Task"}:
+                name = tool_call_name(payload)
+                call_id = self._tool_call_id(payload)
+                if name not in SUBAGENT_TOOL_NAMES:
                     continue
-                arguments = parse_arguments(payload["arguments"])
-                output_record = outputs.get(payload["call_id"])
-                output = output_for_record(output_record)
-                output_data = output if isinstance(output, dict) else {}
-                activities.append(
-                    create_subagent_activity(
-                        {
-                            "id": payload["call_id"],
-                            "session_id": parsed.meta["id"],
-                            "conversation_id": conversation_id_for_record(parsed.records, record),
-                            "time": record.timestamp,
-                            "agent_type": arguments.get("agent_type"),
-                            "name": output_data.get("nickname") or arguments.get("description"),
-                            "message": arguments.get("message") or arguments.get("prompt"),
-                            "status": status_for_output(output_record),
-                            "agent_id": output_data.get("agent_id"),
-                            "output": output,
-                        }
-                    )
-                )
+                output_record = outputs.get(call_id)
+                activities.append(self._subagent_model(parsed, record, output_record))
                 if len(activities) >= limit:
                     return activities[:limit]
         return self._apply_limit(activities, limit)
 
     def get_subagent_activity(self, activity_id: str) -> SubagentActivity:
-        parsed = self._load_rollout_containing_tool_call(activity_id, {"spawn_agent", "Task"})
+        parsed = self._load_rollout_containing_tool_call(activity_id, SUBAGENT_TOOL_NAMES)
         if parsed is not None:
             outputs = output_records_by_call_id(parsed)
             for record in tool_call_records(parsed):
                 payload = record.payload
-                if payload["call_id"] != activity_id or payload["name"] not in {"spawn_agent", "Task"}:
+                call_id = self._tool_call_id(payload)
+                name = tool_call_name(payload)
+                if call_id != activity_id or name not in SUBAGENT_TOOL_NAMES:
                     continue
-                arguments = parse_arguments(payload["arguments"])
-                output_record = outputs.get(payload["call_id"])
-                output = output_for_record(output_record)
-                output_data = output if isinstance(output, dict) else {}
-                return create_subagent_activity(
-                    {
-                        "id": payload["call_id"],
-                        "session_id": parsed.meta["id"],
-                        "conversation_id": conversation_id_for_record(parsed.records, record),
-                        "time": record.timestamp,
-                        "agent_type": arguments.get("agent_type"),
-                        "name": output_data.get("nickname") or arguments.get("description"),
-                        "message": arguments.get("message") or arguments.get("prompt"),
-                        "status": status_for_output(output_record),
-                        "agent_id": output_data.get("agent_id"),
-                        "output": output,
-                    }
-                )
+                output_record = outputs.get(call_id)
+                return self._subagent_model(parsed, record, output_record)
         raise ClientError(f"Subagent activity not found: {activity_id}")
+
+    def _tool_call_model(self, parsed, record, output_record) -> ToolCall:
+        payload = record.payload
+        call_id = self._tool_call_id(payload)
+        name = tool_call_name(payload)
+        arguments = tool_call_arguments(payload)
+        return create_tool_call(
+            {
+                "id": call_id,
+                "session_id": parsed.meta["id"],
+                "conversation_id": conversation_id_for_record(parsed.records, record),
+                "time": record.timestamp,
+                "tool": name,
+                "name": name,
+                "status": status_for_call(record, output_record),
+                "arguments": arguments,
+                "output": output_for_record(output_record),
+                "cwd": self._tool_cwd(arguments, output_record),
+                "exit_code": self._tool_exit_code(output_record),
+            }
+        )
+
+    def _subagent_model(self, parsed, record, output_record) -> SubagentActivity:
+        payload = record.payload
+        arguments = tool_call_arguments(payload)
+        output = output_for_record(output_record)
+        output_data = output if isinstance(output, dict) else {}
+        return create_subagent_activity(
+            {
+                "id": self._tool_call_id(payload),
+                "session_id": parsed.meta["id"],
+                "conversation_id": conversation_id_for_record(parsed.records, record),
+                "time": record.timestamp,
+                "agent_type": arguments.get("agent_type"),
+                "name": output_data.get("nickname") or arguments.get("description"),
+                "message": arguments.get("message") or arguments.get("prompt"),
+                "status": status_for_call(record, output_record),
+                "agent_id": output_data.get("agent_id"),
+                "output": output,
+            }
+        )
 
     def _load_rollout_containing_tool_call(
         self,
@@ -346,7 +348,7 @@ class CodexSessionsClient:
         tool_names: Optional[set[str]] = None,
     ) -> Optional[ParsedRollout]:
         self.load_errors = []
-        if not self.codex_home.exists():
+        if not any(root.exists() for root in self.codex_roots):
             return None
         for path in self._rollout_paths_by_mtime_desc():
             try:
@@ -363,17 +365,36 @@ class CodexSessionsClient:
         return None
 
     def _matches_tool_call(self, record, call_id: str, tool_names: Optional[set[str]]) -> bool:
-        if record.payload["call_id"] != call_id:
+        if self._tool_call_id(record.payload) != call_id:
             return False
-        return tool_names is None or record.payload["name"] in tool_names
+        return tool_names is None or tool_call_name(record.payload) in tool_names
+
+    def _tool_call_id(self, payload: Dict[str, Any]) -> str:
+        value = payload.get("call_id") or payload.get("id") or ""
+        return str(value)
 
     def _rollout_paths_by_mtime_desc(self) -> List[Path]:
-        paths: List[Path] = []
-        for subdir in SESSION_SUBDIRS:
-            root = self.codex_home / subdir
-            if root.exists():
-                paths.extend(root.rglob(f"{ROLLOUT_PREFIX}*{ROLLOUT_SUFFIX}"))
-        return sorted(paths, key=self._path_mtime, reverse=True)
+        paths = list(self._rollout_paths())
+        return sorted(
+            paths,
+            key=lambda path: (self._path_mtime(path), str(path)),
+            reverse=True,
+        )
+
+    def _rollout_paths(
+        self,
+        session_ids: Optional[List[str]] = None,
+    ):
+        seen = set()
+        for root in self.codex_roots:
+            if not root.exists():
+                continue
+            for path in iter_rollout_paths(root, session_ids):
+                normalized = path.resolve()
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                yield path
 
     def _path_mtime(self, path: Path) -> float:
         try:
@@ -397,21 +418,22 @@ class CodexSessionsClient:
         for parsed in self._matching_rollouts(project, project_path, session_id, since):
             for record in tool_call_records(parsed):
                 payload = record.payload
-                if payload["name"] != "update_plan":
+                if tool_call_name(payload) != "update_plan":
                     continue
-                args = parse_arguments(payload["arguments"])
+                call_id = self._tool_call_id(payload)
+                args = tool_call_arguments(payload)
                 plan = args["plan"]
                 for index, item in enumerate(plan, start=1):
                     todos.append(
                         create_todo_item(
                             {
-                                "id": f"{parsed.meta['id']}:{payload['call_id']}:{index}",
+                                "id": f"{parsed.meta['id']}:{call_id}:{index}",
                                 "session_id": parsed.meta["id"],
                                 "conversation_id": conversation_id_for_record(parsed.records, record),
                                 "time": record.timestamp,
                                 "content": item["step"],
                                 "status": item["status"],
-                                "source_call_id": payload["call_id"],
+                                "source_call_id": call_id,
                             }
                         )
                     )
@@ -424,9 +446,9 @@ class CodexSessionsClient:
         parsed = self._get_rollout(session_id)
         for record in tool_call_records(parsed):
             payload = record.payload
-            if payload["name"] != "update_plan" or payload["call_id"] != call_id:
+            if tool_call_name(payload) != "update_plan" or self._tool_call_id(payload) != call_id:
                 continue
-            args = parse_arguments(payload["arguments"])
+            args = tool_call_arguments(payload)
             for index, item in enumerate(args["plan"], start=1):
                 if str(index) != item_index_text:
                     continue
@@ -438,7 +460,7 @@ class CodexSessionsClient:
                         "time": record.timestamp,
                         "content": item["step"],
                         "status": item["status"],
-                        "source_call_id": payload["call_id"],
+                        "source_call_id": call_id,
                     }
                 )
         raise ClientError(f"Todo not found: {todo_id}")
@@ -459,8 +481,11 @@ class CodexSessionsClient:
     ) -> List[SkillInvocation]:
         skills: List[SkillInvocation] = []
         for parsed in self._matching_rollouts(project, project_path, session_id, since):
-            for record in event_messages(parsed, "user_message"):
-                text = str(record.payload["message"])
+            for message in normalized_messages(parsed):
+                if not is_meaningful_user_message(message):
+                    continue
+                record = message.record
+                text = message.text
                 for name in extract_skill_mentions(text):
                     skills.append(
                         create_skill_invocation(
@@ -482,10 +507,13 @@ class CodexSessionsClient:
     def get_skill(self, skill_id: str) -> SkillInvocation:
         session_id, line_number_text, skill_name = self._parse_skill_id(skill_id)
         parsed = self._get_rollout(session_id)
-        for record in event_messages(parsed, "user_message"):
+        for message in normalized_messages(parsed):
+            if not is_meaningful_user_message(message):
+                continue
+            record = message.record
             if str(record.line_number) != line_number_text:
                 continue
-            text = str(record.payload["message"])
+            text = message.text
             if skill_name not in extract_skill_mentions(text):
                 continue
             return create_skill_invocation(
@@ -518,7 +546,7 @@ class CodexSessionsClient:
         if project is None and project_path is None and session_id is None and since is None:
             self.load_errors = []
             events: List[TimelineEvent] = []
-            for path in sorted(iter_rollout_paths(self.codex_home), reverse=True):
+            for path in self._rollout_paths_by_mtime_desc():
                 parsed = self._load_rollout_or_record_error(path)
                 if parsed is None:
                     continue
@@ -579,22 +607,46 @@ class CodexSessionsClient:
     def _timeline_for_rollout(self, parsed: ParsedRollout) -> List[TimelineEvent]:
         events: List[TimelineEvent] = []
         outputs = output_records_by_call_id(parsed)
+        calls = tool_calls_by_call_id(parsed)
         for record in parsed.records:
-            event = self._record_to_timeline_event(parsed, record, outputs)
+            if is_message_record(record):
+                continue
+            event = self._record_to_timeline_event(parsed, record, outputs, calls)
             if event is not None:
                 events.append(event)
+        for index, message in enumerate(normalized_messages(parsed), start=1):
+            events.append(
+                create_timeline_event(
+                    {
+                        "id": f"{parsed.meta['id']}:message:{index}",
+                        "time": message.record.timestamp,
+                        "session_id": parsed.meta["id"],
+                        "event_type": TimelineEventType.MESSAGE,
+                        "conversation_id": conversation_id_for_record(parsed.records, message.record),
+                        "agent": None,
+                        "name": message.phase,
+                        "status": None,
+                        "role": message.role,
+                        "text": message.text,
+                        "input": None,
+                        "output": None,
+                        "raw_type": message.record.record_type,
+                    }
+                )
+            )
         events.sort(key=lambda event: (self._timestamp_sort_key(event.time), event.id))
         return events
 
     def _iter_timeline_events_desc(self, parsed: ParsedRollout):
-        outputs = output_records_by_call_id(parsed)
-        for record in reversed(parsed.records):
-            event = self._record_to_timeline_event(parsed, record, outputs)
-            if event is None:
-                continue
-            yield event
+        yield from reversed(self._timeline_for_rollout(parsed))
 
-    def _record_to_timeline_event(self, parsed: ParsedRollout, record, outputs) -> Optional[TimelineEvent]:
+    def _record_to_timeline_event(
+        self,
+        parsed: ParsedRollout,
+        record,
+        outputs,
+        calls,
+    ) -> Optional[TimelineEvent]:
         payload = record.payload
         session_id = parsed.meta["id"]
         base = {
@@ -624,39 +676,39 @@ class CodexSessionsClient:
                 }
             )
         if record.record_type == "event_msg":
+            if payload.get("type") == "item_completed":
+                return None
             return self._event_msg_timeline_event(record, base)
-        if record.record_type == "response_item" and payload["type"] == "message":
+        if record.record_type == "response_item" and payload.get("type") in TOOL_CALL_TYPES:
+            call_id = self._tool_call_id(payload)
+            output_record = outputs.get(call_id)
             return create_timeline_event(
                 {
                     **base,
-                    "id": f"{session_id}:message:{record.line_number}",
-                    "event_type": TimelineEventType.MESSAGE,
-                    "role": payload["role"],
-                    "name": payload.get("phase"),
-                    "text": text_from_content(payload.get("content")),
-                }
-            )
-        if record.record_type == "response_item" and payload["type"] == "function_call":
-            output_record = outputs.get(payload["call_id"])
-            return create_timeline_event(
-                {
-                    **base,
-                    "id": payload["call_id"],
+                    "id": call_id,
                     "event_type": TimelineEventType.TOOL_CALL,
-                    "name": payload["name"],
-                    "status": status_for_output(output_record),
-                    "input": parse_arguments(payload["arguments"]),
+                    "name": tool_call_name(payload),
+                    "status": status_for_call(record, output_record),
+                    "input": tool_call_arguments(payload),
                     "output": output_for_record(output_record),
                 }
             )
-        if record.record_type == "response_item" and payload["type"] == "function_call_output":
+        if record.record_type == "response_item" and payload.get("type") in TOOL_OUTPUT_TYPES:
+            call_id = payload.get("call_id")
+            call_record = calls.get(call_id) if call_id else None
+            call_payload = call_record.payload if call_record is not None else payload
+            event_id = (
+                f"{call_id}:output"
+                if call_id
+                else payload.get("id") or f"{session_id}:tool-result:{record.line_number}"
+            )
             return create_timeline_event(
                 {
                     **base,
-                    "id": f"{payload['call_id']}:output",
+                    "id": event_id,
                     "event_type": TimelineEventType.TOOL_RESULT,
-                    "name": payload["call_id"],
-                    "status": "completed",
+                    "name": tool_call_name(call_payload),
+                    "status": status_for_output(record),
                     "output": output_for_record(record),
                 }
             )
@@ -665,13 +717,7 @@ class CodexSessionsClient:
     def _event_msg_timeline_event(self, record, base: Dict[str, Any]) -> TimelineEvent:
         payload = record.payload
         event_type = payload["type"]
-        if event_type == "user_message":
-            category = TimelineEventType.MESSAGE
-            text = payload["message"]
-        elif event_type == "agent_message":
-            category = TimelineEventType.MESSAGE
-            text = payload["message"]
-        elif event_type == "exec_command_end":
+        if event_type == "exec_command_end":
             category = TimelineEventType.TOOL_RESULT
             text = payload.get("aggregated_output") or payload.get("stdout") or payload.get("stderr")
         else:
@@ -693,6 +739,7 @@ class CodexSessionsClient:
         meta = parsed.meta
         tokens = token_totals(parsed)
         names = self._get_session_names()
+        calls = tool_call_records(parsed)
         data = {
             "id": meta["id"],
             "name": names.get(meta["id"]),
@@ -701,10 +748,10 @@ class CodexSessionsClient:
             "created_at": meta["timestamp"],
             "last_activity": max_timestamp(parsed.records),
             "model": last_turn_model(parsed.records),
-            "message_count": len(message_records(parsed)),
-            "tool_call_count": len(tool_call_records(parsed)),
+            "message_count": len(normalized_messages(parsed)),
+            "tool_call_count": len(calls),
             "has_errors": has_errors(parsed),
-            "has_subagents": any(record.payload["name"] in {"spawn_agent", "Task"} for record in tool_call_records(parsed)),
+            "has_subagents": any(tool_call_name(record.payload) in SUBAGENT_TOOL_NAMES for record in calls),
             "conversation_count": conversation_count(parsed.records),
             "current_conversation_id": conversation_count(parsed.records),
             "path": str(parsed.path),
@@ -720,19 +767,33 @@ class CodexSessionsClient:
 
     def _conversation_summary(self, parsed: ParsedRollout, index: int) -> ConversationSummary:
         events = self._records_for_conversation(parsed.records, index)
+        event_lines = {record.line_number for record in events}
         messages = [
-            record
-            for record in events
-            if record.record_type == "response_item"
-            and record.payload.get("type") == "message"
-            and record.payload.get("role") in {"user", "assistant"}
+            message
+            for message in normalized_messages(parsed)
+            if message.record.line_number in event_lines
         ]
         calls = [
             record
-            for record in events
-            if record.record_type == "response_item" and record.payload.get("type") == "function_call"
+            for record in tool_call_records(parsed)
+            if record.line_number in event_lines
         ]
-        summary = self._conversation_text_summary(text_from_content(messages[0].payload.get("content")) if messages else None)
+        user_prompts = [
+            message.text
+            for message in messages
+            if is_meaningful_user_message(message)
+        ]
+        assistant_updates = [
+            message.text for message in messages if message.role == "assistant"
+        ]
+        summary_text = (
+            user_prompts[0]
+            if user_prompts
+            else assistant_updates[0]
+            if assistant_updates
+            else None
+        )
+        summary = self._conversation_text_summary(summary_text)
         return create_conversation_summary(
             {
                 "id": f"{parsed.meta['id']}:{index}",
@@ -763,22 +824,22 @@ class CodexSessionsClient:
 
     def _load_rollouts(self) -> List[ParsedRollout]:
         self.load_errors = []
-        if not self.codex_home.exists():
+        if not any(root.exists() for root in self.codex_roots):
             return []
         rollouts = []
-        for path in iter_rollout_paths(self.codex_home):
+        for path in self._rollout_paths():
             parsed = self._load_rollout_or_record_error(path)
             if parsed is not None:
                 rollouts.append(parsed)
         rollouts.sort(key=lambda parsed: self._timestamp_sort_key(max_timestamp(parsed.records)), reverse=True)
         return rollouts
 
-    def _load_rollout_indexes(self) -> List[RolloutIndex]:
+    def _load_rollout_indexes(self, session_ids: Optional[List[str]] = None) -> List[RolloutIndex]:
         self.load_errors = []
-        if not self.codex_home.exists():
+        if not any(root.exists() for root in self.codex_roots):
             return []
         indexes = []
-        for path in iter_rollout_paths(self.codex_home):
+        for path in self._rollout_paths(session_ids):
             try:
                 indexes.append(load_rollout_index(path))
             except FileNotFoundError:
@@ -829,8 +890,9 @@ class CodexSessionsClient:
         project_path: Optional[str],
         since: Optional[str],
         date_window: Optional[Tuple[datetime, datetime]] = None,
+        session_ids: Optional[List[str]] = None,
     ):
-        for index in self._load_rollout_indexes():
+        for index in self._load_rollout_indexes(session_ids):
             if project_path is not None and index.cwd != project_path:
                 continue
             if project is not None and project_name(index.cwd) != project:
@@ -842,20 +904,14 @@ class CodexSessionsClient:
             yield index
 
     def _get_rollout_path(self, session_id: str) -> Path:
-        pattern = f"{ROLLOUT_PREFIX}*{session_id}{ROLLOUT_SUFFIX}"
-        for subdir in SESSION_SUBDIRS:
-            root = self.codex_home / subdir
-            if not root.exists():
-                continue
-            matches = list(root.rglob(pattern))
-            if not matches:
-                continue
-            if len(matches) != 1:
-                rendered = ", ".join(str(path) for path in matches)
-                raise ClientError(
-                    f"Multiple rollouts found for session {session_id}: {rendered}"
-                )
+        matches = list(self._rollout_paths([session_id]))
+        if len(matches) == 1:
             return matches[0]
+        if len(matches) > 1:
+            rendered = ", ".join(str(path) for path in matches)
+            raise ClientError(
+                f"Multiple rollouts found for session {session_id}: {rendered}"
+            )
         raise ClientError(f"Session not found: {session_id}")
 
     def _matches_project(

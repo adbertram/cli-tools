@@ -14,6 +14,11 @@ from urllib.parse import quote
 
 GLOBAL_ERROR_HANDLER_ID = "F79g2nlj6f1glf8u"
 
+# Seconds a single n8n HTTP request may take before the CLI reports a timeout.
+# Shared by the session-auth and REST paths so error messages name the value
+# that was actually used.
+DEFAULT_REQUEST_TIMEOUT = 30
+
 
 class N8nApiError(Exception):
     """Custom exception for n8n API errors."""
@@ -148,12 +153,50 @@ class N8nApiClient:
 
         raise N8nApiError(f"n8n not ready after {timeout}s (last error: {last_error})")
 
+    def wait_for_node_registry(self, timeout: int = 60, poll_interval: float = 2.0) -> bool:
+        """Poll until the authenticated node registry is available after restart.
+
+        n8n can serve health and settings routes before it finishes registering
+        community nodes. Deployment verification consumes this exact endpoint,
+        so readiness must be based on the same boundary.
+        """
+        registry_url = f"{self._get_server_url()}/types/nodes.json"
+        cookie = self._get_session_cookie()
+        deadline = time.time() + timeout
+        last_error = None
+
+        while time.time() < deadline:
+            try:
+                response = requests.get(
+                    registry_url,
+                    headers={"cookie": cookie},
+                    timeout=5,
+                )
+                response.raise_for_status()
+                return True
+            except requests.exceptions.RequestException as error:
+                status = getattr(error.response, "status_code", None)
+                last_error = f"node registry HTTP {status}" if status else str(error)
+            time.sleep(poll_interval)
+
+        raise N8nApiError(
+            f"n8n node registry not ready after {timeout}s (last error: {last_error})"
+        )
+
+    def wait_for_restart_readiness(self, timeout: int = 60, poll_interval: float = 2.0) -> bool:
+        """Wait until both REST routes and the node registry are available."""
+        self.wait_for_ready(timeout=timeout, poll_interval=poll_interval)
+        self.wait_for_node_registry(timeout=timeout, poll_interval=poll_interval)
+        return True
+
     def create_workflow(
         self,
         name: str,
         nodes: List[Dict],
         connections: Dict,
         error_workflow: Optional[str] = GLOBAL_ERROR_HANDLER_ID,
+        settings: Optional[Dict[str, Any]] = None,
+        tags: Optional[List[Dict]] = None,
     ) -> Dict:
         """Create a new workflow.
 
@@ -163,24 +206,32 @@ class N8nApiClient:
             connections: Node connections
             error_workflow: Workflow ID to run on error (default: global error handler).
                            Pass None to skip.
+            settings: Workflow settings (e.g., timezone, executionTimeout) from the
+                      input definition. Merged over the defaults so explicitly
+                      supplied settings are preserved.
+            tags: Workflow tags to attach to the new workflow.
 
         Returns:
             Created workflow object with id
         """
-        settings: Dict[str, Any] = {
+        merged_settings: Dict[str, Any] = {
             "saveManualExecutions": True,
             "saveDataSuccessExecution": "all",
             "saveDataErrorExecution": "all",
         }
+        if settings:
+            merged_settings.update(settings)
         if error_workflow:
-            settings["errorWorkflow"] = error_workflow
-        payload = {
+            merged_settings.setdefault("errorWorkflow", error_workflow)
+        payload: Dict[str, Any] = {
             "name": name,
             "nodes": nodes,
             "connections": connections,
-            "settings": settings,
+            "settings": merged_settings,
         }
-        return self._request("POST", "/workflows", json=payload)
+        if tags is not None:
+            payload["tags"] = tags
+        return self._request("POST", "/workflows", _retries=0, json=payload)
 
     def delete_workflow(self, workflow_id: str) -> Dict:
         """Delete a workflow.
@@ -315,7 +366,11 @@ class N8nApiClient:
             Session cookie string (e.g., "n8n-auth=...")
 
         Raises:
-            N8nApiError: If login fails or credentials not configured
+            N8nApiError: If credentials are not configured, if the server rejects
+                the configured credentials, or if the server cannot be reached.
+                A server that never answers is reported as a transport failure
+                (timeout or connection error), never as a credential rejection:
+                an unanswered request produced no credential verdict.
         """
         email = os.environ.get("EMAIL", "")
         password = os.environ.get("PASSWORD", "")
@@ -323,15 +378,45 @@ class N8nApiClient:
             raise N8nApiError("EMAIL and PASSWORD required in .env for session-based operations")
 
         server_url = self._get_server_url()
+        login_url = f"{server_url}/rest/login"
+
         try:
             resp = requests.post(
-                f"{server_url}/rest/login",
+                login_url,
                 json={"emailOrLdapLoginId": email, "password": password},
-                timeout=30,
+                timeout=DEFAULT_REQUEST_TIMEOUT,
             )
             resp.raise_for_status()
+        except requests.exceptions.Timeout as e:
+            raise N8nApiError(
+                f"Timed out after {DEFAULT_REQUEST_TIMEOUT}s waiting for the n8n server to "
+                f"answer the login request to {login_url} ({e}). No credentials were "
+                "rejected: the server returned no response at all. Check that the n8n "
+                "process is healthy and listening (n8n server version), then retry."
+            )
+        except requests.exceptions.ConnectionError as e:
+            raise N8nApiError(
+                f"Could not reach the n8n server at {login_url} ({e}). No credentials were "
+                "rejected: the server is unreachable. Check that n8n is running, then retry."
+            )
+        except requests.exceptions.HTTPError as e:
+            status = getattr(e.response, "status_code", None)
+            if status in (401, 403):
+                raise N8nApiError(
+                    f"Login failed: the n8n server rejected the configured EMAIL/PASSWORD "
+                    f"(HTTP {status}) at {login_url}. Run 'n8n auth login' to store valid "
+                    "credentials."
+                )
+            detail = (getattr(e.response, "text", "") or "").strip()[:200]
+            raise N8nApiError(
+                f"Login request to {login_url} failed with HTTP {status}: {detail} "
+                "Server-side failure, not a credential rejection."
+            )
         except requests.exceptions.RequestException as e:
-            raise N8nApiError(f"Login failed: {e}")
+            raise N8nApiError(
+                f"Login request to {login_url} failed before the server answered ({e}). "
+                "No credentials were rejected."
+            )
 
         cookie = resp.cookies.get("n8n-auth")
         if not cookie:
@@ -357,21 +442,30 @@ class N8nApiClient:
         headers = kwargs.pop("headers", {})
         headers["cookie"] = cookie
         headers.setdefault("Content-Type", "application/json")
+        timeout = kwargs.pop("timeout", DEFAULT_REQUEST_TIMEOUT)
 
         try:
             resp = requests.request(
                 method,
                 f"{server_url}{path}",
                 headers=headers,
-                timeout=kwargs.pop("timeout", 30),
+                timeout=timeout,
                 **kwargs,
             )
-            resp.raise_for_status()
-            if resp.status_code == 204:
-                return None
-            return resp.json()
+        except requests.exceptions.Timeout as e:
+            raise N8nApiError(
+                f"REST request {method} {path} timed out after {timeout}s ({e}). The n8n "
+                "server did not answer; retry once the server is healthy."
+            )
         except requests.exceptions.RequestException as e:
             raise N8nApiError(f"REST request failed: {e}")
+        if not resp.ok:
+            raise N8nApiError(
+                f"REST request failed ({resp.status_code}) {method} {path}: {resp.text}"
+            )
+        if resp.status_code == 204:
+            return None
+        return resp.json()
 
     def _get_project_id(self) -> str:
         """Get the default project ID from the n8n server.
@@ -741,7 +835,7 @@ class N8nApiClient:
             Created credential object with id, name, type
         """
         payload = {"name": name, "type": cred_type, "data": data}
-        return self._request("POST", "/credentials", json=payload)
+        return self._request("POST", "/credentials", _retries=0, json=payload)
 
     def update_credential(self, credential_id: str, **kwargs) -> Dict:
         """Update a credential on the n8n server via the public API.
@@ -850,7 +944,24 @@ class N8nApiClient:
         Returns:
             Updated workflow object
         """
-        return self._request("PUT", f"/workflows/{workflow_id}", json=data)
+        return self._request("PUT", f"/workflows/{workflow_id}", json=data, _retries=0)
+
+    def stop_execution(self, execution_id: str) -> Dict:
+        """Stop a running or waiting execution via the internal REST API.
+
+        The public API has no stop endpoint; n8n serves it at
+        POST /rest/executions/:id/stop behind session auth.
+
+        Args:
+            execution_id: Execution ID
+
+        Returns:
+            Stop result object from the response data envelope
+        """
+        response = self._rest_request("POST", f"/rest/executions/{execution_id}/stop")
+        if not isinstance(response, dict) or not isinstance(response.get("data"), dict):
+            raise N8nApiError("Execution stop response did not include a data object")
+        return response["data"]
 
     def get_execution(self, execution_id: int, include_data: bool = True) -> Dict:
         """Get a specific execution by ID.

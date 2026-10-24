@@ -7,6 +7,7 @@ from typing import Optional
 from pydantic import Field
 
 from .base import EbayBaseModel
+from .image import MAX_IMAGES_PER_LISTING
 from .listing import ItemCondition
 
 
@@ -18,7 +19,7 @@ class Product(EbayBaseModel):
     image_urls: list[str] = Field(
         default_factory=list,
         alias="imageUrls",
-        max_length=12,
+        max_length=MAX_IMAGES_PER_LISTING,
         description="Product image URLs",
     )
     aspects: Optional[dict[str, list[str]]] = Field(None, description="Product aspects/attributes")

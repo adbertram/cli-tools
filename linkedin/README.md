@@ -13,6 +13,8 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 - List, get, and search member posts through `/rest/posts`
 - List, get, and search organization or showcase-page posts through `/rest/posts`
 - Client-side wildcard search on normalized post output
+- Create video posts (MP4, optional SRT captions and thumbnail) through the Videos API and `/rest/posts`
+- Resolve a company page vanity name to its organization URN
 
 ## Scope Requirements
 
@@ -107,6 +109,9 @@ linkedin user posts list --profile default --limit 20
 linkedin user posts list --filter "visibility:eq:PUBLIC" --table
 linkedin user posts list --properties "id,commentary,published_at"
 
+# Create a member video post (see "Video Posts" below)
+linkedin user posts create "Watch this" --video clip.mp4 --video-title "Clip" --captions clip.srt
+
 # Get a post
 linkedin user posts get urn:li:share:1234567890123456789
 linkedin user posts get urn:li:share:1234567890123456789 --person urn:li:person:8675309
@@ -129,6 +134,13 @@ linkedin user posts search "launch*" --person urn:li:person:8675309 --limit 25
 ```bash
 # Create a post for a specific organization page URN
 linkedin page posts create "Organization update" --page urn:li:organization:123456
+
+# Create a page video post (see "Video Posts" below)
+linkedin page posts create "Watch this" --page urn:li:organization:123456 \
+  --video clip.mp4 --video-title "Clip" --captions clip.srt
+
+# Resolve a company page vanity name (linkedin.com/company/<vanity>) to its URN
+linkedin page lookup --vanity atalearning
 
 # Create a post using LINKEDIN_PAGE_URN from the active profile
 linkedin page posts create "Organization update"
@@ -156,15 +168,53 @@ linkedin page posts delete urn:li:share:1234567890123456789 --page urn:li:organi
 linkedin page posts search "launch*" --page urn:li:organization:123456 --limit 25
 ```
 
+### Video Posts
+
+`user posts create` and `page posts create` accept these options. Without
+`--video` the command creates the same text-only post as before.
+
+| Option | Meaning |
+|---|---|
+| `--video PATH` | MP4 to upload. Triggers the video flow. |
+| `--video-title TEXT` | Media title on the post. |
+| `--captions PATH` | SRT file uploaded as English closed captions. |
+| `--thumbnail PATH` | Custom thumbnail image. |
+| `--video-timeout SECONDS` | How long to wait for processing (default 600). |
+
+The command runs the Videos API sequence: `initializeUpload` (owner is the post
+author URN), `PUT` each part collecting ETags, upload captions/thumbnail,
+`finalizeUpload`, then polls `GET /rest/videos/{urn}` every 2 seconds until `AVAILABLE`. It exits
+non-zero on `PROCESSING_FAILED` or when the timeout elapses, before any post
+is created. Only then does it create the post with `content.media`.
+
+`--video-title`, `--captions`, and `--thumbnail` require `--video`.
+Output includes `id` (post URN), `url`
+(`https://www.linkedin.com/feed/update/<urn>/`), `video` (video URN), and
+`captions_attached`.
+
 ### Cache
 
 ```bash
 linkedin cache clear
 ```
 
+## Request Behavior
+
+- Every HTTP request has a finite timeout (60 seconds; 300 seconds for video part,
+  thumbnail, and caption uploads).
+- Only idempotent requests are retried (GET and PUT, up to 3 retries with
+  backoff on 429/5xx and connection errors). POST requests, including
+  `POST /rest/posts`, are sent once and fail with the error, so a transient
+  failure never publishes a duplicate post.
+
 ## Output Notes
 
 - `create` returns the new post URN plus the requested author and content values.
+  Video posts also return `url`, `video`, and `captions_attached`.
+- `page lookup` returns `urn`, `id`, `vanity_name`, `name`, and `website`. It calls
+  the `/v2/organizations?q=vanityName` finder, which works with
+  `w_organization_social`/`r_organization_social`; the `/rest/organizations`
+  vanityName finder needs `rw_organization_admin`.
 - `update` and `delete` return the post URN plus a success flag.
 - `list`, `get`, and `search` return normalized post records with:
   `id`, `author`, `commentary`, `visibility`, `lifecycle_state`,

@@ -1,8 +1,8 @@
 {
   "tool": "vinted",
   "description": "CLI interface for vinted",
-  "discovered_at": "2026-08-04T15:04:16Z",
-  "total_commands": 14,
+  "discovered_at": "2026-09-26T23:34:17Z",
+  "total_commands": 15,
   "global_options": [],
   "commands": {
     "auth": {
@@ -26,7 +26,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -76,7 +77,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -96,7 +98,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -109,7 +112,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -150,7 +154,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -175,14 +180,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -200,6 +207,19 @@
             }
           }
         },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
+        },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
           "arguments": [],
@@ -216,7 +236,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -229,14 +250,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -275,6 +298,11 @@
       "commands": {
         "get": {
           "help": "Get one Vinted listing by its ID. Adds the description, category, color, total price, and shipping that catalog search omits. It does not carry the seller login or the view count.",
+          "examples": [
+            "vinted listings get 9571854910",
+            "vinted listings get 9571854910 --table",
+            "vinted listings get 9571854910 --properties \"id,title,description\""
+          ],
           "arguments": [
             {
               "name": "item_id",
@@ -289,7 +317,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -302,6 +331,13 @@
         },
         "search": {
           "help": "Search Vinted marketplace listings. Results are newest-listed first by default. Price, condition, catalog, brand, size, and color are sent to Vinted as search parameters, so the limit applies to matching listings only.",
+          "examples": [
+            "vinted listings search \"lego bulk lot\" --limit 10 --table",
+            "vinted listings search \"lego\" --sort price --max-price 25 --currency USD",
+            "vinted listings search \"lego\" --condition new-with-tags --condition good",
+            "vinted listings search \"lego\" --properties \"id,title,price,url\"",
+            "vinted listings search \"lego\" --limit 10 --include-shipping"
+          ],
           "arguments": [
             {
               "name": "query",
@@ -324,7 +360,8 @@
               "type": "bool",
               "required": false,
               "help": "Reverse the sort field's natural direction (only valid with --sort price)",
-              "short": "-d"
+              "short": "-d",
+              "takes_value": false
             },
             {
               "name": "--min-price",
@@ -379,7 +416,8 @@
               "name": "--include-shipping",
               "type": "bool",
               "required": false,
-              "help": "Add the shipping figures. One paced item page request per listing, so it is slow"
+              "help": "Add the shipping figures. One paced item page request per listing, so it is slow",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -401,7 +439,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",

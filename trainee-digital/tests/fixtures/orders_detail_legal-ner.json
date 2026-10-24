@@ -1,0 +1,19 @@
+{
+  "path": "/api/orders/legal-ner",
+  "status": 200,
+  "body": {
+    "id": "legal-ner",
+    "title": "Legal Clause Classification",
+    "category": "Legal NLP",
+    "pay": "$0.55",
+    "unit": "per page",
+    "volume": "800 pages",
+    "deadline": "7 days",
+    "posted": "2d ago",
+    "totalPay": null,
+    "dataset": null,
+    "scope": null,
+    "guidelines": null,
+    "createdAt": "2026-06-25T07:49:06.000Z"
+  }
+}

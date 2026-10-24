@@ -9,6 +9,7 @@ from .item import (
     # Models
     BinStatus,
     RobotInfo,
+    RoomInfo,
     RobotStatus,
     RobotDetail,
     CommandResult,
@@ -26,6 +27,7 @@ __all__ = [
     # Models
     "BinStatus",
     "RobotInfo",
+    "RoomInfo",
     "RobotStatus",
     "RobotDetail",
     "CommandResult",

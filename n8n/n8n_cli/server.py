@@ -8,9 +8,13 @@ no SSH_HOST is set and BASE_URL points to localhost.
 """
 import os
 import subprocess
+import time
 from urllib.parse import urlparse
 
-from .n8n_api import N8nApiError
+from .n8n_api import N8nApiError, get_n8n_api_client
+
+
+N8N_PLIST = "/Library/LaunchDaemons/com.n8n.server.plist"
 
 
 def get_server_host() -> str:
@@ -61,23 +65,41 @@ def run_on_server(command: str, timeout: int = 30) -> str:
     return result.stdout
 
 
-def run_on_server_raw(command: str, timeout: int = 120) -> subprocess.CompletedProcess:
+def run_on_server_raw(command: str, timeout: int = 120, *, input_data: str | None = None) -> subprocess.CompletedProcess:
     """Run a command on the n8n server, returning the raw CompletedProcess.
 
     Uses a local shell when running on the server, SSH otherwise.
-    Callers are responsible for checking returncode.
+    Callers are responsible for checking returncode. Private payloads may be
+    passed on stdin; they never become shell arguments or environment values.
     """
     if is_local():
         return subprocess.run(
             ["bash", "-c", command],
             capture_output=True, text=True, timeout=timeout,
+            **({"input": input_data} if input_data is not None else {}),
         )
     else:
         host = get_server_host()
         return subprocess.run(
             ["ssh", host, command],
             capture_output=True, text=True, timeout=timeout,
+            **({"input": input_data} if input_data is not None else {}),
         )
+
+
+def restart_n8n(timeout: int = 60, *, plist_path: str = N8N_PLIST) -> None:
+    """Restart the n8n LaunchDaemon and wait until it is usable."""
+    result = run_on_server_raw(f"sudo launchctl unload {plist_path}")
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to stop n8n: {result.stderr.strip()}")
+
+    time.sleep(2)
+
+    result = run_on_server_raw(f"sudo launchctl load {plist_path}")
+    if result.returncode != 0:
+        raise RuntimeError(f"Failed to start n8n: {result.stderr.strip()}")
+
+    get_n8n_api_client().wait_for_restart_readiness(timeout=timeout)
 
 
 def sync_to_server(src: str, dest: str, excludes: list[str] = None) -> subprocess.CompletedProcess:

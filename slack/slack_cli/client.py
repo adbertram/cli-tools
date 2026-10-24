@@ -42,6 +42,10 @@ def get_api_type_for_endpoint(endpoint: str) -> str:
     return operations.get(endpoint, ApiType.BOT)
 
 
+# Slack's documented limit for one files.completeUploadExternal call.
+MAX_UPLOAD_FILES = 10
+
+
 class ClientError(Exception):
     """Custom exception for Slack API errors."""
     pass
@@ -499,49 +503,62 @@ class SlackClient:
 
     def upload_file(
         self,
-        file_path: str,
+        file_paths: List[str],
         channels: Optional[str] = None,
         title: Optional[str] = None,
         initial_comment: Optional[str] = None,
         thread_ts: Optional[str] = None,
     ) -> Dict:
-        """Upload a file to Slack using the 3-step external upload flow.
+        """Upload one or more files to Slack as a single message (external upload flow).
 
         Steps:
-        1. files.getUploadURLExternal - get a pre-signed upload URL
-        2. POST file content to that URL
-        3. files.completeUploadExternal - finalize and share the file
+        1. files.getUploadURLExternal - get a pre-signed upload URL (once per file)
+        2. POST file content to that URL (once per file)
+        3. files.completeUploadExternal - ONCE with every file, so Slack posts a
+           single message carrying all attachments and the one initial comment
+
+        Returns {"ok": True, "file": <first file>, "files": [<all files>]}.
         """
         import os
 
-        file_size = os.path.getsize(file_path)
-        filename = os.path.basename(file_path)
-
-        # Step 1: Get upload URL (this endpoint requires form-encoded data)
-        url_response = self._make_request(
-            "POST",
-            "files.getUploadURLExternal",
-            form_data={"filename": filename, "length": file_size},
-        )
-        upload_url = url_response["upload_url"]
-        file_id = url_response["file_id"]
-
-        # Step 2: Upload file content to the pre-signed URL
-        with open(file_path, "rb") as f:
-            upload_resp = requests.post(
-                upload_url,
-                data=f,
-                headers={"Content-Type": "application/octet-stream"},
+        if not file_paths:
+            raise ClientError("No files to upload.")
+        if len(file_paths) > MAX_UPLOAD_FILES:
+            raise ClientError(
+                f"Cannot upload {len(file_paths)} files in one message; "
+                f"Slack allows at most {MAX_UPLOAD_FILES} per files.completeUploadExternal call."
             )
-            if not upload_resp.ok:
-                raise ClientError(
-                    f"File upload to pre-signed URL failed ({upload_resp.status_code}): {upload_resp.text}"
-                )
+        if title and len(file_paths) > 1:
+            raise ClientError("--title can only be used when uploading a single file.")
 
-        # Step 3: Complete the upload and share to channel(s)
-        complete_data: Dict[str, Any] = {
-            "files": [{"id": file_id, "title": title or filename}],
-        }
+        uploaded = []
+        for file_path in file_paths:
+            filename = os.path.basename(file_path)
+
+            # Step 1: Get upload URL (this endpoint requires form-encoded data)
+            url_response = self._make_request(
+                "POST",
+                "files.getUploadURLExternal",
+                form_data={"filename": filename, "length": os.path.getsize(file_path)},
+            )
+
+            # Step 2: Upload file content to the pre-signed URL
+            with open(file_path, "rb") as f:
+                upload_resp = requests.post(
+                    url_response["upload_url"],
+                    data=f,
+                    headers={"Content-Type": "application/octet-stream"},
+                )
+                if not upload_resp.ok:
+                    raise ClientError(
+                        f"File upload to pre-signed URL failed for {filename} "
+                        f"({upload_resp.status_code}): {upload_resp.text}"
+                    )
+
+            uploaded.append({"id": url_response["file_id"], "title": title or filename})
+
+        # Step 3: Complete all uploads in one call and share to channel(s)
+        complete_data: Dict[str, Any] = {"files": uploaded}
         if channels:
             # The API accepts channel_id for a single channel, or channels for multiple
             if "," in channels:
@@ -559,10 +576,8 @@ class SlackClient:
             data=complete_data,
         )
 
-        # Return a response shaped like the old files.upload for compatibility
-        files_list = complete_response.get("files", [])
-        file_info = files_list[0] if files_list else {"id": file_id, "title": title or filename}
-        return {"ok": True, "file": file_info}
+        files_list = complete_response.get("files") or uploaded
+        return {"ok": True, "file": files_list[0], "files": files_list}
 
     @cached
     def get_file_info(self, file_id: str) -> Dict:

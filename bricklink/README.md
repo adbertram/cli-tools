@@ -403,3 +403,34 @@ Commands emit plain JSON-compatible dictionaries and lists. Table output is a re
 MIT
 
 [Bricklink API]: https://www.bricklink.com/v3/api.page
+
+## Buyer marketplace (`bricklink buy`) — phase 1
+
+Fetch and filter live BrickLink for-sale lots for a catalog item using plain HTTP
+(`searchproduct.ajax` + `catalogifs.ajax`). Official OAuth API is **not** used
+for lots.
+
+```bash
+# Resolve idItem + refresh lots into local SQLite (~4h TTL for lots, weeks for idItem)
+bricklink buy item PART 3001
+bricklink buy item PART 3001 --color 11 --force-refresh
+
+# Query the local SQLite lot store (seeds the item index if empty)
+bricklink buy current_inventory list --type PART --no 3001 --max-price 0.25 --country US --table
+
+# Read one saved lot using its id_inv from the list output (no remote refresh)
+bricklink buy current_inventory get 123456 --table
+```
+
+`current_inventory get` reads only the local lot store and reports an error if
+the ID is absent. Refresh the relevant item with `buy item` before retrieving a
+lot that has not been saved locally.
+
+`buy item` and `current_inventory list` auto-seed an empty local item index from
+`brickbuddy get /items` (no separate seed command). `current_inventory get`
+skips item-index seeding and remote refresh. HTTP goes through the shared
+`cli_tools_shared.http_session` long-lived session helpers with a host-wide
+concurrency-1 queue: empty HTTP 403 pauses the host and forever-retries with
+exponential backoff; after recovery the next ~10 requests are spaced ~1s apart.
+
+SQLite path defaults under the BrickLink CLI data dir: `buy/buy.sqlite3`.

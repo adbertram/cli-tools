@@ -11,12 +11,15 @@ Tests validate:
 5. No custom is_logged_in/is_authenticated — must use base class is_authenticated() via hooks
 6. No direct browser-binary subprocess calls (must go through cli_tools_shared BrowserHarnessService)
 7. browser_harness module is importable in the CLI's uv tool venv
+8. shared Chromium profile resolution stays owned by cli_tools_shared (no per-CLI override)
 """
+import ast
 import re
 import subprocess
 import tomllib
 from pathlib import Path
 
+from cli_test_utils import get_pkg_dir
 import pytest
 
 from cli_test_utils import get_uv_tool_venv_dir
@@ -24,7 +27,7 @@ from cli_test_utils import get_uv_tool_venv_dir
 
 def _get_pkg_dir(cli_dir: Path, cli_name: str) -> Path:
     """Get the CLI package directory."""
-    pkg_name = cli_name.replace("-", "_") + "_cli"
+    pkg_name = get_pkg_dir(cli_dir, cli_name).name
     return cli_dir / pkg_name
 
 
@@ -94,6 +97,55 @@ def test_browser_cli_config_has_get_browser(cli_name, cli_dir, test_config, comm
     assert "get_browser" in content, (
         f"'{cli_name}' config.py must implement get_browser() returning the BrowserAutomation subclass. "
         f"Fix: Add 'def get_browser(self): return MyBrowser(self)' to Config."
+    )
+
+
+
+
+def test_browser_cli_inherits_shared_chromium_profile_contract(
+    cli_name, cli_dir, test_config, command_filter, is_browser_cli
+):
+    """Browser CLIs must inherit shared-vs-isolated profile resolution.
+
+    The shared package owns ``get_persistent_profile_dir()``. Per-CLI path
+    overrides, raw ``--user-data-dir`` flags, or hard-coded shared paths would
+    bypass named-profile isolation, environment overrides, logout safety, and
+    Chrome lifecycle locking.
+    """
+    if command_filter:
+        pytest.skip("Skipping browser automation tests (command filter active)")
+    if not is_browser_cli:
+        pytest.skip(f"{cli_name} is not a browser automation CLI")
+
+    pkg_dir = _get_pkg_dir(cli_dir, cli_name)
+    violations = []
+    forbidden = {
+        "def get_persistent_profile_dir": "per-CLI persistent-profile override",
+        "--user-data-dir": "raw Chrome user-data-dir flag",
+        "/_shared/chromium-profile": "hard-coded shared profile path",
+        "\\_shared\\chromium-profile": "hard-coded shared profile path",
+    }
+
+    for py_file in pkg_dir.rglob("*.py"):
+        if "__pycache__" in py_file.parts:
+            continue
+        content = py_file.read_text()
+        for marker, description in forbidden.items():
+            if marker in content:
+                violations.append(
+                    (str(py_file.relative_to(cli_dir)), description, marker)
+                )
+
+    assert not violations, (
+        f"'{cli_name}' must inherit shared Chromium profile resolution from "
+        "cli_tools_shared.config.BaseConfig. Violations:\n"
+        + "\n".join(
+            f"  {path}: {description} ({marker})"
+            for path, description, marker in violations
+        )
+        + "\nFix: remove per-CLI user-data-dir logic and call BrowserAutomation "
+        "through Config.get_browser(); BaseConfig keeps default profiles "
+        "shared and named profiles isolated."
     )
 
 
@@ -285,9 +337,26 @@ def test_browser_cli_no_custom_auth_check(cli_name, cli_dir, test_config, comman
 _DIRECT_BROWSER_PATTERNS = [
     (r"""subprocess\.\w+\(.*["']playwright-cli["']""", "Direct subprocess call to playwright-cli"),
     (r"""Popen\(.*["']playwright-cli["']""", "Direct Popen call to playwright-cli"),
-    (r"""from cli_tools_shared\.browser\.driver import""", "Direct BrowserHarnessService import (use BrowserAutomation instead)"),
-    (r"""from cli_tools_shared\.browser import.*BrowserHarnessService""", "Direct BrowserHarnessService import (use BrowserAutomation instead)"),
 ]
+
+
+def _direct_browser_service_imports(source):
+    """Inspect imported symbols, including aliases and multiline imports."""
+    return [node.lineno for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ImportFrom)
+            and node.module in ('cli_tools_shared.browser', 'cli_tools_shared.browser.driver')
+            and any(alias.name in ('BrowserHarnessService', '*') for alias in node.names)]
+
+
+@pytest.mark.parametrize('source,blocked', [
+    ('from cli_tools_shared.browser.driver import _chrome_binary', False),
+    ('from cli_tools_shared.browser.driver import BrowserHarnessService', True),
+    ('from cli_tools_shared.browser import BrowserHarnessService as Service', True),
+    ('from cli_tools_shared.browser.driver import (\n _chrome_binary,\n BrowserHarnessService as Service,\n)', True),
+    ('from cli_tools_shared.browser.driver import *', True),
+])
+def test_direct_browser_service_import_detection(source, blocked):
+    assert bool(_direct_browser_service_imports(source)) is blocked
 
 
 def test_browser_cli_uses_browser_harness_via_browser_automation(
@@ -315,8 +384,11 @@ def test_browser_cli_uses_browser_harness_via_browser_automation(
         if "__pycache__" in py_file.parts:
             continue
 
-        lines = py_file.read_text().splitlines()
+        source = py_file.read_text()
+        lines = source.splitlines()
         rel_path = py_file.relative_to(cli_dir)
+        violations.extend((str(rel_path), line, "Direct BrowserHarnessService import (use BrowserAutomation instead)")
+                          for line in _direct_browser_service_imports(source))
 
         for line_num, line in enumerate(lines, start=1):
             stripped = line.lstrip()
@@ -413,5 +485,5 @@ def test_browser_cli_browser_harness_module_installed(cli_name, cli_dir, test_co
         f"requires the browser_harness module vendored by cli-tools-shared.\n"
         f"stderr: {result.stderr.strip()}\n"
         f"Fix: Ensure {cli_name}/pyproject.toml depends on cli-tools-shared, "
-        f"then run: uv tool install -e {cli_dir} --force --refresh"
+        f'then run: uv tool install -e {cli_dir} --force --refresh --python "$(command -v python3)"'
     )

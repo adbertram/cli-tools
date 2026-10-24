@@ -198,6 +198,8 @@ def workflows_create(
             nodes=workflow_data.get("nodes", []),
             connections=workflow_data.get("connections", {}),
             error_workflow=ew,
+            settings=workflow_data.get("settings"),
+            tags=workflow_data.get("tags"),
         )
 
         workflow_id = result.get("id")

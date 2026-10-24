@@ -1,7 +1,7 @@
 {
   "tool": "deepseek-sessions",
   "description": "CLI interface for deepseek-sessions",
-  "discovered_at": "2026-09-01T12:25:56Z",
+  "discovered_at": "2026-09-14T13:26:05Z",
   "total_commands": 38,
   "global_options": [],
   "commands": {
@@ -1126,7 +1126,7 @@
           ]
         },
         "search": {
-          "help": "Search for sessions whose transcript contains a query string. Returns session summaries. Use `search run` for matching snippets. Example: deepseek-sessions sessions search \"legoscout\" deepseek-sessions sessions search \"timeout\" --since 7d --table",
+          "help": "Search session titles first, then full transcripts when no title matches. A title match returns the matching session summaries directly, so a known title does not require a full transcript scan. Queries that do not match a title fall back to the complete transcript search. Use `search run` for matching snippets. Example: deepseek-sessions sessions search \"legoscout\" deepseek-sessions sessions search \"timeout\" --since 7d --table",
           "arguments": [
             {
               "name": "query",

@@ -1,12 +1,18 @@
 """Google Search Console commands."""
 COMMAND_CREDENTIALS = {
+    "coverage": ["no_auth"],
     "index": ["custom"],
     "sites": ["custom"],
+    "sitemaps": ["custom"],
     "urls": ["custom"],
 }
 
+import csv
+import io
 import re
-from datetime import datetime, timedelta
+import zipfile
+from datetime import date, datetime, timedelta
+from pathlib import Path
 import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
@@ -58,7 +64,7 @@ def searchconsole_index(
     ),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
-    """Request Google to crawl and index a URL via URL Inspection API."""
+    """Inspect a URL's Google index status via the URL Inspection API."""
     try:
         client = get_client(profile=profile)
         service = client.get_webmasters_service()
@@ -486,3 +492,425 @@ def searchconsole_urls_get(
         raise typer.Exit(handle_error(e))
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+sitemaps_app = typer.Typer(help="Manage submitted Search Console sitemaps")
+app.add_typer(sitemaps_app, name="sitemaps")
+SITEMAP_FIELDS = ["path", "lastSubmitted", "isPending", "isSitemapsIndex", "type", "lastDownloaded", "warnings", "errors", "contents"]
+
+
+@sitemaps_app.command("list")
+@command
+def searchconsole_sitemaps_list(
+    site_url: str = typer.Argument(..., help="Exact Search Console property URL or sc-domain property"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as table"),
+    limit: int = typer.Option(100, "--limit", "-l", min=1, help="Maximum number of sitemaps"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    properties: Optional[List[str]] = typer.Option(None, "--properties", "-p", help="Comma-separated output fields"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """List sitemaps submitted for a Search Console property."""
+    from cli_tools_shared.filters import apply_filters
+
+    fields = [field.strip() for item in properties for field in item.split(",")] if properties else SITEMAP_FIELDS
+    unknown = set(fields) - set(SITEMAP_FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown sitemap properties: {', '.join(sorted(unknown))}")
+    service = get_client(profile=profile).get_webmasters_v3_service()
+    rows = service.sitemaps().list(siteUrl=site_url).execute().get("sitemap", [])
+    rows = apply_filters(rows, filter, allowed_fields=SITEMAP_FIELDS)[:limit]
+    rows = [{key: value for key, value in row.items() if key in fields} for row in rows]
+    if table:
+        columns = fields if properties else ["path", "lastSubmitted", "isPending", "errors"]
+        print_table(rows, columns, columns)
+    else:
+        print_json(rows)
+
+
+@sitemaps_app.command("get")
+@command
+def searchconsole_sitemaps_get(
+    site_url: str = typer.Argument(..., help="Exact Search Console property URL or sc-domain property"),
+    sitemap_url: str = typer.Argument(..., help="Submitted sitemap URL"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as table"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Get Google's processing status for a submitted sitemap."""
+    service = get_client(profile=profile).get_webmasters_v3_service()
+    result = service.sitemaps().get(siteUrl=site_url, feedpath=sitemap_url).execute()
+    if table:
+        columns = ["path", "lastSubmitted", "isPending", "errors"]
+        print_table([result], columns, columns)
+    else:
+        print_json(result)
+
+
+@sitemaps_app.command("submit")
+@command
+def searchconsole_sitemaps_submit(
+    site_url: str = typer.Argument(..., help="Exact Search Console property URL or sc-domain property"),
+    sitemap_url: str = typer.Argument(..., help="Public sitemap URL to submit"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Submit a sitemap URL to Google; acceptance does not guarantee indexing."""
+    service = get_client(profile=profile).get_webmasters_v3_service()
+    service.sitemaps().submit(siteUrl=site_url, feedpath=sitemap_url).execute()
+    print_json({"siteUrl": site_url, "path": sitemap_url, "submitted": True})
+
+
+COVERAGE_FILE_NAMES = {
+    "chart": "Chart.csv",
+    "table": "Table.csv",
+    "critical_issues": "Critical issues.csv",
+    "non_critical_issues": "Non-critical issues.csv",
+    "metadata": "Metadata.csv",
+}
+SUMMARY_FILES = frozenset({"chart", "critical_issues", "non_critical_issues", "metadata"})
+DRILLDOWN_FILES = frozenset({"chart", "table", "metadata"})
+SUMMARY_CHART_COLUMNS = ("Date", "Not indexed", "Indexed", "Impressions")
+DRILLDOWN_CHART_COLUMNS = ("Date", "Affected pages")
+ISSUE_COLUMNS = ("Reason", "Source", "Validation", "Pages")
+METADATA_COLUMNS = ("Property", "Value")
+TABLE_COLUMNS = ("URL", "Last crawled")
+
+
+def _coverage_member_name(filename: str) -> str:
+    """Return the basename of a ZIP member for case-insensitive matching."""
+    return filename.replace("\\", "/").rsplit("/", 1)[-1].strip().lower()
+
+
+def _read_coverage_source(path: Path) -> dict[str, str]:
+    """Read the recognized CSV files from a coverage ZIP or directory."""
+    expected = {name.lower(): key for key, name in COVERAGE_FILE_NAMES.items()}
+    found: dict[str, str] = {}
+
+    def add(key: str, content: str, origin: str) -> None:
+        if key in found:
+            raise ValueError(
+                f"Coverage export contains more than one {COVERAGE_FILE_NAMES[key]} ({origin})"
+            )
+        found[key] = content
+
+    if path.is_dir():
+        for child in path.iterdir():
+            if not child.is_file():
+                continue
+            key = expected.get(child.name.strip().lower())
+            if key is not None:
+                add(key, child.read_text(encoding="utf-8-sig"), str(child))
+    elif path.is_file() and zipfile.is_zipfile(path):
+        with zipfile.ZipFile(path) as archive:
+            for info in archive.infolist():
+                if info.is_dir():
+                    continue
+                key = expected.get(_coverage_member_name(info.filename))
+                if key is not None:
+                    add(key, archive.read(info).decode("utf-8-sig"), info.filename)
+    else:
+        raise ValueError(f"Coverage export not found or not a ZIP/directory: {path}")
+
+    return found
+
+
+def _coverage_rows(
+    text: str,
+    filename: str,
+    required_columns: tuple[str, ...],
+) -> list[tuple[int, dict[str, str]]]:
+    """Parse one CSV and verify its required columns."""
+    reader = csv.DictReader(io.StringIO(text, newline=""))
+    if reader.fieldnames is None:
+        raise ValueError(f"{filename} is empty")
+    missing = [
+        column for column in required_columns
+        if column not in reader.fieldnames
+    ]
+    if missing:
+        raise ValueError(
+            f"{filename} is missing required column(s): {', '.join(missing)}"
+        )
+    rows = []
+    for row_number, row in enumerate(reader, start=2):
+        if None in row:
+            raise ValueError(
+                f"{filename} row {row_number} has more values than the header"
+            )
+        rows.append((row_number, row))
+    return rows
+
+
+def _coverage_date(
+    value: str | None,
+    filename: str,
+    row_number: int,
+    column: str = "Date",
+) -> str:
+    """Validate and return a YYYY-MM-DD cell."""
+    text = (value or "").strip()
+    try:
+        date.fromisoformat(text)
+    except ValueError:
+        raise ValueError(
+            f"{filename} row {row_number}: {column} must be YYYY-MM-DD, "
+            f"got {text!r}"
+        ) from None
+    return text
+
+
+def _coverage_optional_int(
+    value: str | None,
+    filename: str,
+    row_number: int,
+    column: str,
+) -> int | None:
+    """Parse an integer cell, preserving empty cells as null."""
+    if value is None or not value.strip():
+        return None
+    try:
+        return int(value.strip())
+    except ValueError:
+        raise ValueError(
+            f"{filename} row {row_number}: {column} must be an integer, got {value!r}"
+        ) from None
+
+
+def _coverage_required_int(
+    value: str | None,
+    filename: str,
+    row_number: int,
+    column: str,
+) -> int:
+    """Parse a required integer cell."""
+    result = _coverage_optional_int(value, filename, row_number, column)
+    if result is None:
+        raise ValueError(f"{filename} row {row_number}: {column} is empty")
+    return result
+
+
+def _coverage_issue_rows(text: str, filename: str) -> list[dict[str, object]]:
+    """Parse a critical or non-critical issues CSV."""
+    issues = []
+    for row_number, row in _coverage_rows(text, filename, ISSUE_COLUMNS):
+        reason = (row.get("Reason") or "").strip()
+        if not reason:
+            raise ValueError(f"{filename} row {row_number}: Reason is empty")
+        issues.append({
+            "reason": reason,
+            "source": (row.get("Source") or "").strip(),
+            "validation": (row.get("Validation") or "").strip(),
+            "pages": _coverage_required_int(
+                row.get("Pages"), filename, row_number, "Pages"
+            ),
+        })
+    return issues
+
+
+def _coverage_metadata(text: str) -> list[dict[str, str]]:
+    """Parse Metadata.csv into ordered property/value records."""
+    metadata = []
+    for row_number, row in _coverage_rows(text, "Metadata.csv", METADATA_COLUMNS):
+        prop = (row.get("Property") or "").strip()
+        if not prop:
+            raise ValueError(f"Metadata.csv row {row_number}: Property is empty")
+        metadata.append({
+            "property": prop,
+            "value": (row.get("Value") or "").strip(),
+        })
+    return metadata
+
+
+def _parse_summary_export(path: Path, files: dict[str, str]) -> dict:
+    """Parse the summary export with chart, issues, and metadata."""
+    chart = []
+    for row_number, row in _coverage_rows(
+        files["chart"], "Chart.csv", SUMMARY_CHART_COLUMNS
+    ):
+        chart.append({
+            "date": _coverage_date(row.get("Date"), "Chart.csv", row_number),
+            "not_indexed": _coverage_optional_int(
+                row.get("Not indexed"), "Chart.csv", row_number, "Not indexed"
+            ),
+            "indexed": _coverage_optional_int(
+                row.get("Indexed"), "Chart.csv", row_number, "Indexed"
+            ),
+            "impressions": _coverage_optional_int(
+                row.get("Impressions"), "Chart.csv", row_number, "Impressions"
+            ),
+        })
+
+    metadata = _coverage_metadata(files["metadata"])
+    critical_issues = _coverage_issue_rows(
+        files["critical_issues"], "Critical issues.csv"
+    )
+    non_critical_issues = _coverage_issue_rows(
+        files["non_critical_issues"], "Non-critical issues.csv"
+    )
+    latest = next(
+        (
+            row for row in reversed(chart)
+            if row["not_indexed"] is not None or row["indexed"] is not None
+        ),
+        None,
+    )
+    return {
+        "source": str(path),
+        "kind": "summary",
+        "metadata": metadata,
+        "latest": latest,
+        "chart": chart,
+        "critical_issues": critical_issues,
+        "non_critical_issues": non_critical_issues,
+        "totals": {
+            "critical_pages": sum(
+                issue["pages"] for issue in critical_issues
+            ),
+            "non_critical_pages": sum(
+                issue["pages"] for issue in non_critical_issues
+            ),
+        },
+    }
+
+
+def _parse_drilldown_export(path: Path, files: dict[str, str]) -> dict:
+    """Parse a reason-level drilldown export with its URL table."""
+    chart = []
+    for row_number, row in _coverage_rows(
+        files["chart"], "Chart.csv", DRILLDOWN_CHART_COLUMNS
+    ):
+        chart.append({
+            "date": _coverage_date(row.get("Date"), "Chart.csv", row_number),
+            "affected_pages": _coverage_optional_int(
+                row.get("Affected pages"), "Chart.csv", row_number, "Affected pages"
+            ),
+        })
+
+    table = []
+    for row_number, row in _coverage_rows(files["table"], "Table.csv", TABLE_COLUMNS):
+        url = (row.get("URL") or "").strip()
+        if not url:
+            raise ValueError(f"Table.csv row {row_number}: URL is empty")
+        last_crawled = (row.get("Last crawled") or "").strip()
+        if last_crawled:
+            _coverage_date(last_crawled, "Table.csv", row_number, "Last crawled")
+        table.append({
+            "url": url,
+            "last_crawled": last_crawled or None,
+        })
+
+    metadata = _coverage_metadata(files["metadata"])
+    issue = next(
+        (
+            item["value"] for item in metadata
+            if item["property"].lower() == "issue"
+        ),
+        None,
+    )
+    latest = next(
+        (
+            row for row in reversed(chart)
+            if row["affected_pages"] is not None
+        ),
+        None,
+    )
+    return {
+        "source": str(path),
+        "kind": "drilldown",
+        "issue": issue,
+        "metadata": metadata,
+        "latest": latest,
+        "chart": chart,
+        "table": table,
+        "totals": {
+            "row_count": len(table),
+            "unique_url_count": len({row["url"] for row in table}),
+        },
+    }
+
+
+def _parse_coverage_export(path: Path) -> dict:
+    """Parse a Page indexing summary or drilldown CSV export."""
+    files = _read_coverage_source(path)
+    if SUMMARY_FILES.issubset(files):
+        return _parse_summary_export(path, files)
+    if DRILLDOWN_FILES.issubset(files):
+        return _parse_drilldown_export(path, files)
+    missing_summary = sorted(SUMMARY_FILES - files.keys())
+    missing_drilldown = sorted(DRILLDOWN_FILES - files.keys())
+    summary_names = [COVERAGE_FILE_NAMES[key] for key in missing_summary]
+    drilldown_names = [COVERAGE_FILE_NAMES[key] for key in missing_drilldown]
+    raise ValueError(
+        "Coverage export does not match a summary or drilldown export. "
+        f"Summary export is missing: {', '.join(summary_names)}. "
+        f"Drilldown export is missing: {', '.join(drilldown_names)}."
+    )
+
+
+def _print_coverage_tables(payload: dict) -> None:
+    """Print the parsed coverage export as readable tables."""
+    tables = []
+    if payload["metadata"]:
+        tables.append((
+            payload["metadata"],
+            ["property", "value"],
+            ["Property", "Value"],
+        ))
+    if payload["kind"] == "drilldown":
+        if payload["latest"] is not None:
+            tables.append((
+                [payload["latest"]],
+                ["date", "affected_pages"],
+                ["Date", "Affected Pages"],
+            ))
+        if payload["table"]:
+            tables.append((
+                payload["table"],
+                ["url", "last_crawled"],
+                ["URL", "Last Crawled"],
+            ))
+    else:
+        if payload["latest"] is not None:
+            tables.append((
+                [payload["latest"]],
+                ["date", "not_indexed", "indexed", "impressions"],
+                ["Date", "Not Indexed", "Indexed", "Impressions"],
+            ))
+        if payload["critical_issues"]:
+            tables.append((
+                payload["critical_issues"],
+                ["reason", "source", "validation", "pages"],
+                ["Reason", "Source", "Validation", "Pages"],
+            ))
+        if payload["non_critical_issues"]:
+            tables.append((
+                payload["non_critical_issues"],
+                ["reason", "source", "validation", "pages"],
+                ["Reason", "Source", "Validation", "Pages"],
+            ))
+    for index, (rows, columns, headers) in enumerate(tables):
+        if index:
+            typer.echo()
+        print_table(rows, columns, headers)
+
+
+coverage_app = typer.Typer(
+    help="Parse Page indexing (coverage) exports",
+    no_args_is_help=True,
+)
+app.add_typer(coverage_app, name="coverage")
+
+
+@coverage_app.command("parse")
+@command
+def searchconsole_coverage_parse(
+    export_path: str = typer.Argument(
+        ...,
+        help="Path to a Coverage export .zip or extracted directory",
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Parse a Google Search Console Page indexing export."""
+    payload = _parse_coverage_export(Path(export_path).expanduser())
+    if table:
+        _print_coverage_tables(payload)
+    else:
+        print_json(payload)

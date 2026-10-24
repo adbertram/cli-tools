@@ -9,7 +9,12 @@ from cli_tools_shared.browser import BrowserHarnessError
 from cli_tools_shared.browser.driver import BrowserHarnessService
 from cli_tools_shared.browser._elements import _ServiceElement, _ServiceLocator, _scoped_css_js
 from cli_tools_shared.browser._js_fragments import _check_js, _fill_js
-from cli_tools_shared.browser.processes import ProcessCommand, ProcessTableUnavailableError
+from cli_tools_shared.browser.processes import (
+    ProfileProcessOwner,
+    ProcessCommand,
+    ProcessTableUnavailableError,
+    format_profile_in_use_message,
+)
 import browser_harness.helpers as bh_helpers
 import cli_tools_shared.browser.driver as driver
 
@@ -126,6 +131,64 @@ def test_macos_app_launch_uses_new_instance_command():
         assert command == args
 
 
+def test_macos_app_launch_routes_chrome_stderr_to_bounded_diagnostic_file(tmp_path):
+    chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    args = [chrome, "--user-data-dir=/tmp/profile"]
+    stderr_path = tmp_path / "chrome.stderr"
+
+    command = driver._chrome_launch_command(chrome, args, stderr_path=stderr_path)
+
+    if driver.sys.platform == "darwin":
+        assert command[:5] == [
+            "/usr/bin/open",
+            "-na",
+            "/Applications/Google Chrome.app",
+            "--stderr",
+            str(stderr_path),
+        ]
+    else:
+        assert command == args
+
+
+def test_failed_cdp_launch_reports_profile_owner_and_redacts_parent_secret(tmp_path, monkeypatch):
+    service = BrowserHarnessService("sample-browser-session")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir()
+    service._user_data_dir = profile
+    (service._runtime_dir / "chrome.stderr").write_text(
+        "Failed to create a ProcessSingleton for your profile directory.\n"
+        "Failed to create SingletonLock: File exists (17)\n"
+    )
+    monkeypatch.setattr(
+        service,
+        "_list_process_table",
+        lambda: [
+            ProcessCommand(300, 1, "S", "python cli.py --token very-secret-value"),
+            ProcessCommand(
+                301,
+                300,
+                "S",
+                f"/Applications/Google Chrome --user-data-dir={profile.resolve()}",
+            ),
+        ],
+    )
+
+    error = service._chrome_start_failure(BrowserHarnessError("CDP timed out"))
+
+    assert "PID 301" in str(error)
+    assert "parent PID 300" in str(error)
+    assert "<redacted>" in str(error)
+    assert "very-secret-value" not in str(error)
+
+
+def test_non_profile_chrome_stderr_does_not_change_cdp_error(tmp_path):
+    service = BrowserHarnessService("sample-browser-session")
+    (service._runtime_dir / "chrome.stderr").write_text("ordinary Chrome startup warning")
+    original = BrowserHarnessError("CDP timed out")
+
+    assert service._chrome_start_failure(original) is original
+
+
 def test_wait_for_cdp_requires_and_returns_browser_websocket_url(monkeypatch):
     class Response:
         status = 200
@@ -204,7 +267,7 @@ def test_wait_for_cdp_rechecks_when_final_sleep_reaches_deadline(monkeypatch):
     assert calls == 2
 
 
-def test_cleanup_stale_session_stops_daemon_kills_matching_pids_and_clears_locks(tmp_path, monkeypatch):
+def test_cleanup_stale_session_removes_proven_stale_artifacts_without_signaling_profile_owner(tmp_path, monkeypatch):
     service = BrowserHarnessService("sample-browser-session")
     user_data_dir = tmp_path / "ud-sample-browser-session"
     user_data_dir.mkdir(parents=True)
@@ -218,22 +281,25 @@ def test_cleanup_stale_session_stops_daemon_kills_matching_pids_and_clears_locks
         path.write_text("stale")
 
     restarted: list[str] = []
-    killed: list[int] = []
 
     service._user_data_dir = user_data_dir
     monkeypatch.setattr("browser_harness.admin.restart_daemon", lambda name=None: restarted.append(name))
-    monkeypatch.setattr(service, "_session_process_pids", lambda: [201, 202])
-    monkeypatch.setattr(service, "_terminate_session_pid", lambda pid: killed.append(pid))
+    monkeypatch.setattr(service, "_profile_owner", lambda: None)
+    monkeypatch.setattr(
+        driver.os,
+        "kill",
+        lambda *_args: pytest.fail("profile cleanup must not signal live Chrome"),
+    )
 
     service._cleanup_stale_session()
 
     assert restarted == ["sample-browser-session"]
-    assert killed == [201, 202]
     for path in lock_paths:
         assert not path.exists()
 
 
 def test_browser_open_continues_when_process_table_unavailable_without_profile_lock(tmp_path, monkeypatch):
+    from contextlib import nullcontext
     service = BrowserHarnessService("sample-browser-session")
     events: list[str] = []
     persistent = tmp_path / "chromium-profile"
@@ -276,7 +342,7 @@ def test_browser_open_continues_when_process_table_unavailable_without_profile_l
         def wait_for_load(self, timeout):
             events.append(f"load:{timeout}")
 
-    service._bh = type("_BH", (), {"h": _Helpers()})()
+    service._bh = type("_BH", (), {"h": _Helpers(), "bound": lambda self: nullcontext(self.h)})()
 
     service.browser_open("https://example.com/dashboard", persistent_profile_dir=persistent)
     service.browser_close()
@@ -316,10 +382,249 @@ def test_cleanup_session_lock_files_reports_live_profile_lock_without_process_ta
         ),
     )
 
-    with pytest.raises(BrowserHarnessError, match="held by PID 12345"):
+    with pytest.raises(BrowserHarnessError, match="already in use by PID 12345"):
         service._cleanup_session_lock_files()
 
     assert checked == [12345]
+
+
+# ---------------------------------------------------------------------------
+# Orphaned profile owner recovery: an owning Chrome whose parent is launchd
+# (or gone) belongs to a CLI that exited or was killed, so the launch must
+# reclaim it instead of refusing and orphaning another Chrome every attempt.
+# ---------------------------------------------------------------------------
+
+
+def _orphaned_owner_rows(profile: Path) -> list[ProcessCommand]:
+    return [
+        ProcessCommand(1, 0, "S", "/sbin/launchd"),
+        ProcessCommand(
+            67564,
+            1,
+            "S",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            f"--user-data-dir={profile}",
+        ),
+        ProcessCommand(
+            67565,
+            67564,
+            "S",
+            f"/Applications/Google Chrome Helper --user-data-dir={profile}",
+        ),
+    ]
+
+
+def _write_profile_lock_artifacts(profile: Path) -> list[Path]:
+    artifacts = [
+        profile / name
+        for name in ("SingletonCookie", "SingletonLock", "SingletonSocket", "DevToolsActivePort")
+    ]
+    for path in artifacts:
+        path.write_text("orphaned")
+    return artifacts
+
+
+def _prepare_recovery_launch(service, monkeypatch, events: list[str]) -> None:
+    """Bind the service to fake daemon/Chrome helpers, like _prepare_open_success."""
+    from contextlib import nullcontext
+
+    monkeypatch.setattr("browser_harness.admin.restart_daemon", lambda name=None: events.append("restart"))
+    monkeypatch.setattr(driver, "_find_free_port", lambda: 51312)
+    monkeypatch.setattr(
+        driver,
+        "_wait_for_cdp",
+        lambda port, timeout: events.append("cdp")
+        or "ws://127.0.0.1:51312/devtools/browser/test",
+    )
+    monkeypatch.setattr(
+        driver,
+        "_chrome_binary",
+        lambda: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    )
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: events.append("popen") or _Proc(4242),
+    )
+    monkeypatch.setattr(service, "_start_daemon", lambda: events.append("daemon"))
+    monkeypatch.setattr(
+        service,
+        "_page_info",
+        lambda: {"url": "", "title": "", "console_errors": 0, "console_warnings": 0},
+    )
+    monkeypatch.setattr(service, "_request_browser_close", lambda: events.append("graceful-close"))
+    monkeypatch.setattr(service, "_stop_daemon", lambda: events.append("stop"))
+    monkeypatch.setattr(service, "_terminate_chrome", lambda: events.append("terminate"))
+    monkeypatch.setattr(service, "_session_process_pids", lambda: [])
+
+    class _Helpers:
+        def cdp(self, *_args, **_kwargs):
+            return {}
+
+        def goto_url(self, _url):
+            return None
+
+        def wait_for_load(self, timeout):
+            return None
+
+    service._bh = type(
+        "_BH",
+        (),
+        {"h": _Helpers(), "bound": lambda self: nullcontext(self.h)},
+    )()
+
+
+def test_browser_open_terminates_orphaned_profile_owner_and_retries_launch(tmp_path, monkeypatch):
+    service = BrowserHarnessService("whop-rewards")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir(parents=True)
+    artifacts = _write_profile_lock_artifacts(profile)
+    rows = _orphaned_owner_rows(profile)
+    events: list[str] = []
+    reclaimed: list[Path] = []
+
+    def reclaim(owner_profile: Path) -> None:
+        reclaimed.append(owner_profile)
+        rows[:] = [row for row in rows if row.pid == 1]
+
+    _prepare_recovery_launch(service, monkeypatch, events)
+    monkeypatch.setattr(service, "_list_process_table", lambda: list(rows))
+    monkeypatch.setattr(driver, "terminate_profile_processes", reclaim)
+    monkeypatch.setattr(
+        driver.os,
+        "kill",
+        lambda *args: pytest.fail("recovery must terminate through terminate_profile_processes"),
+    )
+
+    service.browser_open(persistent_profile_dir=profile)
+    service.browser_close()
+
+    assert reclaimed == [profile.resolve()]
+    assert events == ["restart", "popen", "cdp", "daemon", "graceful-close", "stop", "terminate"]
+    assert all(not path.exists() for path in artifacts)
+
+
+def test_browser_open_keeps_refusing_live_concurrent_profile_owner(tmp_path, monkeypatch):
+    service = BrowserHarnessService("whop-rewards")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir(parents=True)
+    artifacts = _write_profile_lock_artifacts(profile)
+    events: list[str] = []
+    rows = [
+        ProcessCommand(700, 1, "S", "python whop_cli/main.py campaigns list"),
+        ProcessCommand(
+            701,
+            700,
+            "S",
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome "
+            f"--user-data-dir={profile}",
+        ),
+    ]
+
+    _prepare_recovery_launch(service, monkeypatch, events)
+    monkeypatch.setattr(service, "_list_process_table", lambda: list(rows))
+    monkeypatch.setattr(
+        driver,
+        "terminate_profile_processes",
+        lambda *args, **kwargs: pytest.fail("a live concurrent CLI owner must never be terminated"),
+    )
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("Chrome must not be spawned while a live CLI owns the profile"),
+    )
+
+    with pytest.raises(BrowserHarnessError) as excinfo:
+        service.browser_open(persistent_profile_dir=profile)
+
+    assert str(excinfo.value) == format_profile_in_use_message(
+        profile.resolve(),
+        ProfileProcessOwner(701, 700, "python whop_cli/main.py campaigns list"),
+    )
+    assert events == ["restart"]
+    assert all(path.exists() for path in artifacts)
+    assert service._lifecycle_lock_file is None
+
+
+def test_browser_open_orphan_recovery_is_bounded_and_raises_existing_error(tmp_path, monkeypatch):
+    service = BrowserHarnessService("whop-rewards")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir(parents=True)
+    artifacts = _write_profile_lock_artifacts(profile)
+    rows = _orphaned_owner_rows(profile)
+    events: list[str] = []
+    cleanup_calls: list[str] = []
+    terminated: list[Path] = []
+
+    _prepare_recovery_launch(service, monkeypatch, events)
+    monkeypatch.setattr(service, "_list_process_table", lambda: list(rows))
+    monkeypatch.setattr(
+        driver,
+        "terminate_profile_processes",
+        lambda owner_profile: terminated.append(owner_profile),
+    )
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("Chrome must not be spawned while the profile is refused"),
+    )
+    monkeypatch.setattr(
+        driver.os,
+        "kill",
+        lambda *args: pytest.fail("recovery must terminate through terminate_profile_processes"),
+    )
+    original_cleanup = service._cleanup_session_lock_files
+
+    def counting_cleanup() -> None:
+        cleanup_calls.append("cleanup")
+        original_cleanup()
+
+    monkeypatch.setattr(service, "_cleanup_session_lock_files", counting_cleanup)
+
+    with pytest.raises(BrowserHarnessError) as excinfo:
+        service.browser_open(persistent_profile_dir=profile)
+
+    assert cleanup_calls == ["cleanup"] * (1 + driver._ORPHANED_OWNER_RECOVERY_ATTEMPTS)
+    assert terminated == [profile.resolve()]
+    assert str(excinfo.value) == format_profile_in_use_message(
+        profile.resolve(),
+        ProfileProcessOwner(67564, 1, "/sbin/launchd"),
+    )
+    assert all(path.exists() for path in artifacts)
+
+
+def test_browser_open_still_refuses_when_orphan_cannot_be_terminated(tmp_path, monkeypatch):
+    """A failed reclaim surfaces today's refusal, not the termination error."""
+    service = BrowserHarnessService("whop-rewards")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir(parents=True)
+    artifacts = _write_profile_lock_artifacts(profile)
+    rows = _orphaned_owner_rows(profile)
+    events: list[str] = []
+
+    _prepare_recovery_launch(service, monkeypatch, events)
+    monkeypatch.setattr(service, "_list_process_table", lambda: list(rows))
+    monkeypatch.setattr(
+        driver,
+        "terminate_profile_processes",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("Browser process 67564 did not exit")
+        ),
+    )
+    monkeypatch.setattr(
+        driver.subprocess,
+        "Popen",
+        lambda *args, **kwargs: pytest.fail("Chrome must not be spawned while the profile is refused"),
+    )
+
+    with pytest.raises(BrowserHarnessError) as excinfo:
+        service.browser_open(persistent_profile_dir=profile)
+
+    assert str(excinfo.value) == format_profile_in_use_message(
+        profile.resolve(),
+        ProfileProcessOwner(67564, 1, "/sbin/launchd"),
+    )
+    assert all(path.exists() for path in artifacts)
 
 
 def test_browser_open_surfaces_stale_cleanup_failure(tmp_path, monkeypatch):
@@ -432,6 +737,65 @@ def test_browser_open_serializes_same_session_until_first_owner_closes(tmp_path,
 
     assert acquired.is_set() is True
     second.browser_close()
+
+
+def test_cdp_and_playwright_backends_share_one_resolved_profile_lock(tmp_path):
+    from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
+
+    profile = tmp_path / "profiles" / ".." / "chromium-profile"
+    cdp = BrowserHarnessService("cdp-owner")
+    playwright = PlaywrightBrowserService("playwright-owner")
+    cdp._user_data_dir = profile
+    playwright._user_data_dir = profile.resolve()
+    cdp._acquire_lifecycle_lock()
+    acquired = threading.Event()
+
+    def acquire_playwright_owner():
+        playwright._acquire_profile_lifecycle_lock()
+        acquired.set()
+
+    thread = threading.Thread(target=acquire_playwright_owner)
+    thread.start()
+    try:
+        assert not acquired.wait(timeout=0.1)
+    finally:
+        cdp._release_lifecycle_lock()
+    assert acquired.wait(timeout=1)
+    playwright._release_profile_lifecycle_lock()
+    thread.join(timeout=1)
+    assert not thread.is_alive()
+
+
+def test_driver_data_delete_refuses_live_external_profile_owner(tmp_path, monkeypatch):
+    service = BrowserHarnessService("sample-browser-session")
+    profile = tmp_path / "chromium-profile"
+    profile.mkdir()
+    (tmp_path / "profiles").mkdir()
+    equivalent_profile = tmp_path / "profiles" / ".." / "chromium-profile"
+    service._user_data_dir = profile
+    monkeypatch.setattr(
+        service,
+        "_list_process_table",
+        lambda: [
+            ProcessCommand(700, 1, "S", "python external-cli.py"),
+            ProcessCommand(
+                701,
+                700,
+                "S",
+                f"/Applications/Google Chrome --user-data-dir={equivalent_profile}",
+            ),
+        ],
+    )
+    monkeypatch.setattr(
+        driver.os,
+        "kill",
+        lambda *_args: pytest.fail("data_delete must not signal an external Chrome owner"),
+    )
+
+    with pytest.raises(BrowserHarnessError, match="PID 701"):
+        service.data_delete()
+
+    assert profile.exists()
 
 
 # ---------------- wait_for_selector / query_selector ----------------
@@ -758,6 +1122,7 @@ def test_cleanup_session_lock_raises_when_singletonlock_points_at_live_pid(tmp_p
     # Chrome's SingletonLock is a symlink whose target is "<hostname>-<pid>".
     lock.symlink_to("somehost-12345")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
+    monkeypatch.setattr(service, "_profile_owner", lambda: None)
     monkeypatch.setattr(driver, "pid_is_running", lambda pid: pid == 12345)
 
     with pytest.raises(BrowserHarnessError, match="12345"):
@@ -774,6 +1139,7 @@ def test_cleanup_session_lock_deletes_when_pid_is_dead(tmp_path, monkeypatch):
     lock = ud / "SingletonLock"
     lock.symlink_to("somehost-99999")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
+    monkeypatch.setattr(service, "_profile_owner", lambda: None)
     monkeypatch.setattr(driver, "pid_is_running", lambda pid: False)
 
     service._cleanup_session_lock_files()
@@ -789,6 +1155,7 @@ def test_cleanup_session_lock_treats_unparseable_target_as_stale(tmp_path, monke
     lock = ud / "SingletonLock"
     lock.symlink_to("garbage")
     monkeypatch.setattr(service, "_user_data_dir", lambda: ud)
+    monkeypatch.setattr(service, "_profile_owner", lambda: None)
     # pid_is_running should NOT be called when parsing fails.
     monkeypatch.setattr(
         driver,
@@ -1778,3 +2145,235 @@ def test_locator_press_types_each_printable_character_exactly_once(monkeypatch):
     # char event, so this landed as "AAddaa4422".
     assert field.value == typed
     assert len(focus_calls) == len(typed)
+
+
+def test_request_browser_close_leaves_single_blank_tab_before_browser_close():
+    """Restored tabs from other CLIs must not reopen on the next launch (agent-issues#530)."""
+    service = BrowserHarnessService("sample-browser-session")
+    service._opened = True
+    events: list[str] = []
+
+    class _Helpers:
+        def current_tab(self):
+            return {"targetId": "OURS", "url": "https://www.brickowl.com/mystore/orders", "title": ""}
+
+        def list_tabs(self):
+            return [
+                {"targetId": "BL-LOGIN", "url": "https://identity.lego.com/en-US/login", "title": ""},
+                {"targetId": "OURS", "url": "https://www.brickowl.com/mystore/orders", "title": ""},
+                {"targetId": "BF-LOGIN", "url": "https://brickfreedom.com/login", "title": ""},
+            ]
+
+        def cdp(self, method, **params):
+            events.append(f"{method}:{params.get('targetId', '')}")
+
+        def goto_url_for_close(self, url, *, timeout):
+            events.append(f"goto:{url}")
+            assert timeout == 5
+
+    service._bh = type("_BH", (), {"h": _Helpers()})()
+    service._chrome_proc = None
+
+    service._request_browser_close()
+
+    assert events == [
+        "Target.closeTarget:BL-LOGIN",
+        "Target.closeTarget:BF-LOGIN",
+        "goto:about:blank",
+        "Browser.close:",
+    ]
+
+
+def test_public_framework_fill_reuses_owned_helper(monkeypatch):
+    service = BrowserHarnessService("framework-input-test"); calls = []
+    monkeypatch.setattr(service, "_require_open", lambda: calls.append("open"))
+    monkeypatch.setattr(service._bh.h, "fill_input", lambda selector, text: calls.append((selector, text)))
+    service.fill_framework_input("#exact-editor", "caption")
+    assert calls == ["open", ("#exact-editor", "caption")]
+
+
+@pytest.mark.parametrize('order',[(0,1,0),(1,0,1)])
+def test_alternating_live_service_objects_bind_cached_ipc_before_daemon_start(tmp_path,monkeypatch,order):
+    from browser_harness import _ipc,admin
+    for field in ('_RUNTIME','_TMP','BH_RUNTIME_DIR','BH_TMP_DIR'):
+        monkeypatch.setattr(_ipc,field,getattr(_ipc,field))
+    for field in ('NAME','SOCK'):
+        monkeypatch.setattr(bh_helpers,field,getattr(bh_helpers,field))
+    for field in ('BH_RUNTIME_DIR','BH_TMP_DIR','BH_IPC_TIMEOUT'):
+        monkeypatch.setenv(field,os.environ.get(field,''))
+    def runtime(session):
+        path=tmp_path/session;path.mkdir(exist_ok=True);return path
+    monkeypatch.setattr(driver,'_ensure_runtime_dir',runtime)
+    services=[BrowserHarnessService('owned-stage'),BrowserHarnessService('owned-final')]
+    services[order[0]]._bh.h  # Prime the first cached IPC directory.
+    observed=[]
+    def ensure(*,name,env,wait):
+        service=next(s for s in services if s.session==name)
+        assert _ipc._RUNTIME==service._runtime_dir
+        assert _ipc._TMP==service._runtime_dir
+        assert bh_helpers.NAME==service.session
+        assert env['BH_RUNTIME_DIR']==str(service._runtime_dir)
+        observed.append(name)
+    monkeypatch.setattr(admin,'ensure_daemon',ensure)
+    monkeypatch.setattr(admin,'restart_daemon',lambda *a,**k:pytest.fail('unrelated daemon must not be restarted'))
+    for index in order:
+        service=services[index];service._cdp_ws='ws://127.0.0.1:1234/devtools/browser/fake'
+        service._start_daemon()
+    assert observed==[services[i].session for i in order]
+
+
+def test_daemon_stop_rebinds_owner_and_leaves_other_endpoint_intact(tmp_path,monkeypatch):
+    from browser_harness import _ipc
+    for field in ('_RUNTIME','_TMP','BH_RUNTIME_DIR','BH_TMP_DIR'):
+        monkeypatch.setattr(_ipc,field,getattr(_ipc,field))
+    for field in ('NAME','SOCK'):
+        monkeypatch.setattr(bh_helpers,field,getattr(bh_helpers,field))
+    for field in ('BH_RUNTIME_DIR','BH_TMP_DIR','BH_IPC_TIMEOUT'):
+        monkeypatch.setenv(field,os.environ.get(field,''))
+    def runtime(session):
+        path=tmp_path/session;path.mkdir(exist_ok=True);return path
+    monkeypatch.setattr(driver,'_ensure_runtime_dir',runtime)
+    owner=BrowserHarnessService('owned-first');other=BrowserHarnessService('owned-other')
+    for service,pid in [(owner,11111),(other,22222)]:
+        service._bh.h;_ipc.pid_path(service.session).write_text(str(pid))
+    signals=[];monkeypatch.setattr(driver.os,'kill',lambda pid,sig:signals.append(pid))
+    owner._stop_daemon()
+    assert signals==[11111]
+    assert not (owner._runtime_dir/'bu.pid').exists()
+    assert (other._runtime_dir/'bu.pid').read_text()=='22222'
+
+
+def test_native_click_reuses_existing_mouse_press_and_release(monkeypatch):
+    service = BrowserHarnessService('native-click-proof')
+    service._opened = True
+    calls = []
+    monkeypatch.setattr(service, 'evaluate', lambda script, selector: {'x': 12.5, 'y': 42})
+    monkeypatch.setattr(bh_helpers, 'cdp', lambda method, **params: calls.append((method, params)))
+    monkeypatch.setattr(service._bh.h, 'click_at_xy', bh_helpers.click_at_xy)
+    service.click_native('#exact-option')
+    assert [call[1]['type'] for call in calls] == ['mousePressed', 'mouseReleased']
+    assert all(call[0] == 'Input.dispatchMouseEvent' and call[1]['x'] == 12.5 and call[1]['y'] == 42 for call in calls)
+
+
+@pytest.mark.parametrize('point', [None, {'x': True, 'y': 1}, {'x': -1, 'y': 1}, {'x': float('nan'), 'y': 1}, {'x': 1, 'y': float('inf')}, {'x': 1, 'y': 1, 'extra': 1}])
+def test_native_click_malformed_coordinates_never_dispatch(monkeypatch, point):
+    service = BrowserHarnessService('native-click-refusal')
+    service._opened = True
+    monkeypatch.setattr(service, 'evaluate', lambda *args: point)
+    monkeypatch.setattr(service._bh.h, 'click_at_xy', lambda *args: pytest.fail('no native event permitted'))
+    with pytest.raises(BrowserHarnessError, match='coordinates_invalid'):
+        service.click_native('#exact-option')
+
+
+def test_native_click_actual_dom_guard_refuses_ambiguous_and_occluded_targets(monkeypatch):
+    import json
+    import subprocess
+    service = BrowserHarnessService('native-click-dom-guard');service._opened = True
+    scripts = []
+    monkeypatch.setattr(service, 'evaluate', lambda script, selector: scripts.append(script) or {'x': 10, 'y': 10})
+    monkeypatch.setattr(service._bh.h, 'click_at_xy', lambda *args: None)
+    service.click_native('#exact')
+    script = r'''const click=EXPRESSION;
+    global.innerWidth=100;global.innerHeight=100;
+    const target={isConnected:true,disabled:false,getAttribute(){return null},scrollIntoView(){},getBoundingClientRect(){return {left:0,top:0,width:20,height:20}},contains(x){return x===this}};
+    let rows=[target],hit=target;
+    global.document={querySelectorAll(){return rows},elementFromPoint(){return hit}};
+    global.getComputedStyle=()=>({visibility:'visible',display:'block'});
+    const point=click('#exact');if(point.x!==10||point.y!==10)throw Error('wrong coordinate');
+    rows=[target,target];try{click('#exact');throw Error('ambiguous accepted')}catch(e){if(e.message!=='NATIVE_CLICK_TARGET_NOT_UNIQUE')throw e}
+    rows=[target];hit={};try{click('#exact');throw Error('occluded accepted')}catch(e){if(e.message!=='NATIVE_CLICK_TARGET_NOT_HIT')throw e}
+    console.log('EXACT_HIT_ONLY');'''.replace('EXPRESSION', '(' + scripts[0] + ')')
+    result = subprocess.run(['node', '-e', script], capture_output=True, text=True, check=True)
+    assert result.stdout.strip() == 'EXACT_HIT_ONLY'
+
+
+def network_service(monkeypatch, *, events=(), body=None):
+    service = BrowserHarnessService('network-receipt-proof');service._opened = True
+    calls = []
+    def send(request, **kwargs):
+        calls.append((request, kwargs))
+        return {'session_id': 'owner'} if request['meta'] == 'session' else {'events': list(events)}
+    def cdp(method, **kwargs):
+        calls.append((method, kwargs))
+        return body if method == 'Network.getResponseBody' else {}
+    monkeypatch.setattr(service._bh.h, '_send', send)
+    monkeypatch.setattr(service._bh.h, 'cdp', cdp)
+    return service, calls
+
+
+def test_network_observer_enables_bounded_durable_body_storage(monkeypatch):
+    service, calls = network_service(monkeypatch)
+    assert service.begin_network_observation(max_bytes=1024) == 'owner'
+    method, params = calls[1]
+    assert method == 'Network.enable' and params == {'session_id': 'owner', 'request_timeout': 5, 'maxTotalBufferSize': 4096, 'maxResourceBufferSize': 1024, 'maxPostDataSize': 1024, 'enableDurableMessages': True}
+    assert calls[-1] == ({'meta': 'drain_events'}, {'timeout': 5})
+
+
+def test_network_filter_exports_only_exact_session_route_and_no_headers(monkeypatch):
+    def event(method, **params):return {'session_id': 'owner', 'method': 'Network.'+method, 'params': params}
+    events = [event('requestWillBeSent', requestId='other', request={'method': 'POST', 'url': 'https://other.test/post', 'postData': 'SECRET'}),
+              {'session_id': 'foreign', 'method': 'Network.requestWillBeSent', 'params': {'requestId': 'foreign', 'request': {'method': 'POST', 'url': 'https://exact.test/post', 'postData': 'SECRET'}}},
+              event('requestWillBeSent', requestId='exact', request={'method': 'POST', 'url': 'https://exact.test/post?signed=SECRET', 'postData': '{}', 'headers': {'Authorization': 'SECRET'}}),
+              event('responseReceived', requestId='exact', response={'url': 'https://exact.test/post?signed=SECRET', 'status': 200, 'headers': {'Set-Cookie': 'SECRET'}}),
+              event('loadingFinished', requestId='exact', encodedDataLength=12), event('loadingFailed', requestId='other')]
+    service, _ = network_service(monkeypatch, events=events)
+    result = service.network_observations('owner', method='POST', origin='https://exact.test', path='/post')
+    assert result == [{'kind': 'request', 'request_id': 'exact', 'body': '{}'}, {'kind': 'response', 'request_id': 'exact', 'status': 200, 'route_matches': True}, {'kind': 'finished', 'request_id': 'exact', 'encoded_bytes': 12}]
+    assert 'SECRET' not in str(result)
+
+
+def test_network_late_response_keeps_explicit_original_request_and_session(monkeypatch):
+    events = [{'session_id': 'owner', 'method': 'Network.responseReceived', 'params': {'requestId': 'exact', 'response': {'url': 'https://exact.test/post', 'status': 200}}}]
+    service, _ = network_service(monkeypatch, events=events)
+    assert service.network_observations('owner', method='POST', origin='https://exact.test', path='/post', request_ids=('exact',))[0]['request_id'] == 'exact'
+
+
+@pytest.mark.parametrize('count', [500, 501])
+def test_network_buffer_overflow_is_inconclusive(monkeypatch, count):
+    service, _ = network_service(monkeypatch, events=[{}]*count)
+    with pytest.raises(BrowserHarnessError, match='buffer_inconclusive'):
+        service.network_observations('owner', method='POST', origin='https://exact.test', path='/post')
+
+
+@pytest.mark.parametrize('body', [None, 12, 'x'*1025])
+def test_network_matching_request_requires_bounded_body(monkeypatch, body):
+    event = {'session_id': 'owner', 'method': 'Network.requestWillBeSent', 'params': {'requestId': 'exact', 'request': {'method': 'POST', 'url': 'https://exact.test/post', 'postData': body}}}
+    service, _ = network_service(monkeypatch, events=[event])
+    with pytest.raises(BrowserHarnessError, match='body_unavailable'):
+        service.network_observations('owner', method='POST', origin='https://exact.test', path='/post', max_bytes=1024)
+
+
+@pytest.mark.parametrize('encoded', [False, True])
+def test_network_response_body_exact_id_bounded_utf8(monkeypatch, encoded):
+    import base64
+    value = '{"ok":"✓"}'
+    body = base64.b64encode(value.encode()).decode() if encoded else value
+    service, calls = network_service(monkeypatch, body={'body': body, 'base64Encoded': encoded})
+    assert service.network_response_body('owner', 'exact', max_bytes=1024, timeout=2) == value
+    assert calls == [('Network.getResponseBody', {'session_id': 'owner', 'request_timeout': 2, 'requestId': 'exact'})]
+
+
+@pytest.mark.parametrize('body', [{'body': 'x'*1025, 'base64Encoded': False}, {'body': 'eA=='*800, 'base64Encoded': True}, {'body': '{}'}, {}])
+def test_network_response_oversize_or_malformed_is_not_returned(monkeypatch, body):
+    service, _ = network_service(monkeypatch, body=body)
+    with pytest.raises(BrowserHarnessError):service.network_response_body('owner', 'exact', max_bytes=1024)
+
+
+@pytest.mark.parametrize('timeout', [0, -1, 6, float('nan'), True])
+def test_network_response_invalid_deadline_never_queries(monkeypatch, timeout):
+    service, calls = network_service(monkeypatch)
+    with pytest.raises(BrowserHarnessError):service.network_response_body('owner', 'exact', timeout=timeout)
+    assert calls == []
+
+
+def test_get_network_filter_needs_no_request_body_and_exports_no_secrets(monkeypatch):
+    def event(method, **params):
+        return {'session_id':'owner', 'method':'Network.'+method, 'params':params}
+    events = [event('requestWillBeSent', requestId='foreign', request={'method':'GET','url':'https://other.test/search'}),
+              event('requestWillBeSent', requestId='exact', request={'method':'GET','url':'https://exact.test/search?token=SECRET','headers':{'Cookie':'SECRET'}}),
+              event('responseReceived',requestId='exact',response={'url':'https://exact.test/search?token=SECRET','status':200}),
+              event('loadingFinished',requestId='exact',encodedDataLength=12)]
+    service, _ = network_service(monkeypatch, events=events)
+    rows = service.network_observations('owner',method='GET',origin='https://exact.test',path='/search')
+    assert rows == [{'kind':'request','request_id':'exact','body':None,'url_sha256':__import__('hashlib').sha256(b'https://exact.test/search?token=SECRET').hexdigest()},{'kind':'response','request_id':'exact','status':200,'route_matches':True},{'kind':'finished','request_id':'exact','encoded_bytes':12}]
+    assert 'SECRET' not in str(rows)

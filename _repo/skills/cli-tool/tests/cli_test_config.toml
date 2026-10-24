@@ -29,6 +29,31 @@ no_auth_clis = [
     "powerpoint-slide-recorder",
     "harmony",
     "weather",
+    # Read-only local state readers: `auth status` reports whether the local
+    # store is readable, and login/logout/profile-write commands are
+    # deliberately not exposed.
+    "hermes-sessions",
+    "ntfy-cli",
+]
+
+# Local readers that expose only `auth status` as a conventional readiness
+# surface. They own no credentials and deliberately must not mount
+# create_auth_app(), because doing so would add profile/config mutation paths.
+read_only_status_auth_clis = [
+    "hermes-sessions",
+    "ntfy-cli",
+]
+
+# Browser-session CLIs whose login hands a rotating-refresh-token session
+# (Supabase) to the CLI for HTTP use. Reopening the site in the saved browser
+# replays a refresh token the CLI has already rotated, and the provider then
+# revokes the whole session ("reuse outside the exceptions ... all refresh
+# tokens belonging to it are marked as revoked", supabase.com/docs/guides/auth/
+# sessions). These CLIs leave AUTH_CHECK_URL empty and must prove the session
+# with a live HTTP identity call instead: Config.BROWSER_SESSION_REQUIRES_API_TEST
+# = True plus a test_connection().
+http_session_browser_clis = [
+    "vues",
 ]
 
 # Orchestration/framework CLIs that don't follow standard resource patterns
@@ -42,7 +67,7 @@ no_filters_clis = ["reminders", "cliclick", "powerpoint-slide-recorder", "macspe
 browser_clis = ["bricklink", "brickowl", "globiflow", "ahrefs", "brickfreedom", "raptive", "facebook"]
 
 # Wrapper CLIs that don't use profiles (wrap system commands, not services)
-wrapper_clis = ["lastpass", "imessage", "openai-whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder"]
+wrapper_clis = ["lastpass", "imessage", "openai-whisper", "cliclick", "notifier", "claude-code-sessions", "powerpoint-slide-recorder", "ntfy-cli"]
 
 [output]
 # Rich table requirements
@@ -78,6 +103,12 @@ list_commands = [
 # `workers get` returns raw script content; there is no single record to
 # render as a table.
 excluded_from_table_flag_required = ["workers"]
+# `email-routing settings` is singular aggregate data (one settings object per
+# zone, enabled/disabled status), not a collection with an ID space to
+# enumerate -- there is nothing for a `list` command to return. `get` is the
+# correct and only read command per the command-standards.md "Singular
+# Aggregate Data" exception.
+excluded_from_list_required = ["settings"]
 
 [cli_specific.copilot]
 # Copilot has deep command trees: tool mcp tools <list|get|invoke> and
@@ -95,7 +126,9 @@ max_nested_depth = 4
 # listings without a query, and `listings search` is the documented ID-discovery
 # command. `time-away` is a single store setting (get/enable/disable) with no ID
 # space at all. Neither has anything a `list` command could return.
-excluded_from_list_required = ["listings", "time-away"]
+# `videos` is the Media API video resource: eBay exposes createVideo, uploadVideo,
+# and getVideo only, so there is no endpoint that could back a `videos list`.
+excluded_from_list_required = ["listings", "time-away", "videos"]
 
 [cli_specific.vinted]
 # `listings` is marketplace-wide search: Vinted's catalog endpoint answers a
@@ -110,16 +143,6 @@ list_commands = ["listings search"]
 [cli_specific.vinted.param_fixtures]
 "listings search" = { "_pos1" = "search_query" }
 "listings get" = { "_pos1" = "item_id" }
-
-[cli_specific.wordpress]
-# Profiles is a utility command from cli_tools_shared, not a resource list command
-# Exclude it from list command tests that require --limit/--filter/--properties
-list_commands = [
-    "posts list",
-    "media list",
-    "categories list",
-    "tags list",
-]
 
 [cli_specific.buttondown]
 # Automations and feeds are feature-gated by the live Buttondown account.
@@ -136,18 +159,10 @@ list_commands = [
 ]
 
 [cli_specific.ata-blog]
-# `shoutouts site` is the one site-wide shoutout slot: `get` reads it and `set`
-# writes it. There is no ID space, so a `list` command would have nothing to
-# enumerate.
-excluded_from_list_required = ["site"]
 list_commands = [
     "notion-page list",
-    "wordpress-post list",
-    "wordpress-page list",
-    "media list",
     "categories list",
     "tags list",
-    "schema list",
 ]
 
 [cli_specific.gemini]
@@ -297,6 +312,7 @@ max_nested_depth = 4
 # Podio fixtures: uses _pos prefix for positional arguments
 [cli_specific.podio.param_fixtures]
 "item list" = { "_pos1" = "app_id" }
+"file list" = { "_pos1" = "file_ref_type", "_pos2" = "space_id" }
 
 # Ahrefs fixtures: site-audit commands require project_id positional arg
 [cli_specific.ahrefs.param_fixtures]
@@ -311,10 +327,10 @@ max_nested_depth = 4
 "messages list" = { "_pos1" = "channel_id" }
 "messages threads" = { "_pos1" = "channel_id" }
 
-# AtaBlog fixtures: shoutouts commands require post_id positional arg
-[cli_specific.ata-blog.param_fixtures]
-"shoutouts list" = { "_pos1" = "post_id" }
-"shoutouts get" = { "_pos1" = "post_id", "--position" = "shoutout_position" }
+# Globiflow: `flows list` walks every app with flows via one full-page
+# navigation each (--limit is client-side), measured live at ~45s.
+[cli_specific.globiflow]
+command_timeout = 120
 
 # Facebook: browser automation needs longer timeout; posts commands need group_id
 [cli_specific.facebook]
@@ -351,3 +367,49 @@ list_commands = [
 
 [cli_specific.depop.param_fixtures]
 "search" = { "_pos1" = "query" }
+
+[cli_specific.garrul]
+# Garrul renders no id on an audit row (and only an 8-character prefix of most
+# target ids), so there is no record a `get` could address. `audit list` returns
+# every field the page exposes.
+excluded_from_get_required = ["audit"]
+
+[cli_specific.tiktok]
+# account get reads the single current session identity, takes no resource ID,
+# and needs no collection command for ID discovery. Other groups remain checked.
+excluded_from_list_required = ["account"]
+
+[cli_specific.tiktok.param_fixtures]
+"videos list" = { "--username" = "username" }
+
+[cli_specific.whop]
+# Current participant and date-bounded creator analytics are singletons without resource-ID discovery.
+excluded_from_list_required = ["account", "earnings"]
+
+[cli_specific.vyro]
+# Current account is a singleton; observed social API exposes only a collection.
+excluded_from_list_required = ["account"]
+excluded_from_get_required = ["social-accounts"]
+
+[cli_specific.clipster]
+# The signed-in creator and its balance/earnings totals are singletons with no IDs to discover.
+excluded_from_list_required = ["account", "earnings"]
+
+[cli_specific.vues]
+# The signed-in creator and its balance/earnings totals are singletons with no IDs to discover.
+excluded_from_list_required = ["account", "earnings"]
+# Vues exposes linked accounts only as a collection; there is no single-account get route.
+excluded_from_get_required = ["social-accounts"]
+
+[cli_specific.frameio]
+# A share is addressed only by its public URL; Frame.io exposes no way to
+# enumerate shares, so `shares get <share-url>` has no collection command.
+excluded_from_list_required = ["shares"]
+
+[cli_specific.promote-fun]
+# Current session identity has no resource ID or enumerable collection.
+excluded_from_list_required = ["account"]
+
+[cli_specific.reach-cat]
+# Firebase currentUser is a singleton, including incomplete onboarding.
+excluded_from_list_required = ["account"]

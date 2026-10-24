@@ -30,7 +30,7 @@ After installation, the `facebook` command will be available in your terminal.
 # Check if browser session is active
 facebook auth status
 
-# Login (opens headed browser)
+# Login (uses secret-manager credentials; opens a headed browser only for a human gate)
 facebook auth login
 
 # Browse marketplace listings
@@ -67,10 +67,9 @@ This CLI is a **wrapper** around the `playwright` command-line tool:
 Manage browser authentication sessions.
 
 ```bash
-# Login via headed browser
-facebook auth login
-facebook auth login --force  # Re-authenticate
-facebook auth login --force --profile work  # Uses USERNAME/PASSWORD from that profile
+# Login or refresh a browser session
+facebook auth login --profile default --credential-type browser_session
+facebook auth login --force --profile work --credential-type browser_session
 
 # Check authentication status
 facebook auth status
@@ -85,11 +84,20 @@ facebook auth logout
 facebook auth logout --force  # Skip confirmation
 ```
 
-`facebook auth login --force --profile <name>` requires `USERNAME` and
-`PASSWORD` in that auth profile. The CLI submits those credentials into the
-Facebook login form. If Facebook presents a checkpoint, two-step, or captcha
-screen, complete it manually in the opened browser; the CLI waits until the
-login finishes and the browser session is saved.
+Store reusable Facebook login credentials in the CLI-tools secret manager,
+never in an authentication-profile `.env` file. The default browser profile
+uses `facebook-username` and `facebook-password`; a named profile uses
+`facebook-<profile>-username` and `facebook-<profile>-password`.
+
+```bash
+printf '%s' "$FACEBOOK_USERNAME" | _repo/_secret-manager/secrets.sh set --tool facebook --type username
+printf '%s' "$FACEBOOK_PASSWORD" | _repo/_secret-manager/secrets.sh set --tool facebook --type password
+```
+
+The CLI reads those secrets only for the browser-login flow. Browser cookies
+and other session state remain in the authentication profile. If Facebook
+presents a checkpoint, two-step, or CAPTCHA screen, complete it in the opened
+browser; the session is then saved for later commands.
 
 ### Marketplace
 
@@ -567,10 +575,14 @@ Supported operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `startswi
 Non-auth configuration is stored in `~/.local/share/cli-tools/facebook/.env`.
 Browser-auth profiles live under
 `~/.local/share/cli-tools/facebook/authentication_profiles/<profile>/`.
+Their `.env` files contain profile metadata and CLI-managed runtime state only;
+reusable usernames and passwords are stored in the CLI-tools secret manager.
 
-Facebook login runs in normal headed Chrome, while routine commands reuse the
-same persistent profile headlessly. The CLI derives a normal Chrome User-Agent
-from the installed Chrome version for both modes so Facebook sees one consistent
+Facebook login first uses the secret-manager credentials headlessly. If Facebook
+requires a checkpoint, two-step verification, or CAPTCHA, it opens a headed
+browser for you to complete that human gate. Routine commands reuse the same
+persistent profile headlessly. The CLI derives a normal Chrome User-Agent from
+the installed Chrome version for both modes so Facebook sees one consistent
 browser fingerprint instead of `Chrome` during login and `HeadlessChrome`
 during automation. Set `BROWSER_USER_AGENT` only when an explicit override is
 required.
@@ -610,3 +622,50 @@ CLI_COMMAND=playwright
 ## License
 
 MIT
+
+
+## Page Reels Publishing
+
+Use a Graph API OAuth profile for Page discovery and Reels publishing. Existing
+Marketplace, Groups, and Messenger commands continue to use browser-session profiles.
+
+```bash
+facebook auth profiles create graph --auth-type oauth_authorization_code
+facebook auth login --profile graph --credential-type oauth_authorization_code
+
+facebook pages list --profile graph --table
+facebook pages get PAGE_ID --profile graph
+facebook reels publish short.mp4 --page PAGE_ID --description "Caption" --profile graph
+facebook reels publish short.mp4 --page PAGE_ID --draft --profile graph
+facebook reels status VIDEO_ID --page PAGE_ID --profile graph
+facebook reels delete VIDEO_ID --page PAGE_ID --yes --profile graph
+```
+
+`reels publish --draft` finishes the upload with `video_state=DRAFT`, so the Reel
+is saved as an unpublished Page draft instead of appearing on the Page. The JSON
+output includes `video_state` and `published` (false for drafts). If publishing
+fails after Facebook has created the video, the error ends with
+`[video_id=<id>]` so the partial upload can be removed with `reels delete`.
+
+`reels delete` calls Graph API `DELETE /{video-id}` with the Page access token and
+prints `{"page_id", "page_name", "video_id", "deleted": true}`. It refuses to run
+in non-interactive contexts without `--yes`/`-y`.
+
+### Live Reels e2e test
+
+`tests/test_e2e_reels_live.py` uploads a 5-second 1080x1920 ffmpeg-generated clip
+as a Page Reel draft, polls `reels status` until `video_status` is `ready` (failing
+on `error`, `expired`, or `upload_failed`), deletes the Reel in a `finally` block
+even when the test fails, and verifies `reels status` then reports that the video
+does not exist. It is marked `e2e` and skipped unless `FACEBOOK_E2E=1`:
+
+```bash
+FACEBOOK_E2E=1 FACEBOOK_E2E_PAGE_ID=PAGE_ID \
+  uv run --project facebook pytest facebook/tests/test_e2e_reels_live.py -m e2e -v -s
+```
+
+`FACEBOOK_E2E_PROFILE` selects the Graph API auth profile (default `graph`).
+Requires `ffmpeg` on PATH.
+
+The CLI obtains Page access tokens through the authenticated user token and never
+prints those Page tokens in command output.

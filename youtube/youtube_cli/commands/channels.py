@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
+from cli_tools_shared.output import command
 from cli_tools_shared.filters import (
     FilterValidationError,
     apply_filters,
@@ -205,6 +206,7 @@ def _render_rows(rows: List[dict], table: bool, properties: Optional[str], empty
 
 
 @app.command("create")
+@command
 def create_channel():
     """Explain how to create a YouTube channel when the API does not support it."""
     print_error(CHANNEL_CREATION_ERROR)
@@ -212,6 +214,7 @@ def create_channel():
 
 
 @app.command("list")
+@command
 def list_channels(
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of channels"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
@@ -249,6 +252,7 @@ def list_channels(
 
 
 @app.command("get")
+@command
 def get_channel(
     channel_id: str = typer.Argument(..., help="YouTube channel ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -279,6 +283,7 @@ def get_channel(
 
 
 @app.command("update")
+@command
 def update_channel(
     channel_id: str = typer.Argument(..., help="YouTube channel ID"),
     banner_image: Path = typer.Option(

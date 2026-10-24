@@ -3,13 +3,16 @@ set -o pipefail
 
 usage() {
     cat <<'HELP'
-Usage: test-cli-tool.sh --cli-name <name> [--command <cmd>] [--verbose]
+Usage: test-cli-tool.sh --cli-name <name> [--command <cmd>] [--cli-executable <path>] [--profile <name>] [--verbose]
        test-cli-tool.sh --file <path>
 
 Options:
   --cli-name <name>   CLI tool name to test (e.g. ahrefs, notion)
   --command <cmd>     Test only a specific command (e.g. list, get)
+  --cli-executable <path>
+                      Executable to test instead of ~/.local/bin/<name>
   --file <path>       Auto-derive cli-name and command from a file path
+  --profile <name>   Verify and use an exact named profile without activation
   --verbose           Show verbose pytest output
   -h, --help          Show this help message
 HELP
@@ -51,6 +54,25 @@ payload = {
 }
 print(json.dumps(payload, indent=2))
 PY
+}
+
+resolve_cli_dir_from_executable() {
+    local executable_path="$1"
+    local executable_dir
+    local venv_dir
+    local source_dir
+
+    executable_dir="$(cd "$(dirname "$executable_path")" && pwd -P)" || return 1
+    venv_dir="$(cd "$executable_dir/.." && pwd -P)" || return 1
+    source_dir="$(cd "$venv_dir/.." && pwd -P)" || return 1
+
+    if [[ "$(basename "$executable_dir")" != "bin" ]] ||
+        [[ "$(basename "$venv_dir")" != ".venv" ]] ||
+        [[ ! -f "$source_dir/pyproject.toml" ]]; then
+        return 1
+    fi
+
+    printf '%s\n' "$source_dir"
 }
 
 validate_readme_description_block() {
@@ -127,6 +149,7 @@ run_auth_status_schema_preflight() {
     CLI_NAME="$CLI_NAME" \
     CLI_EXECUTABLE="$CLI_EXECUTABLE" \
     COMMAND="$COMMAND" \
+    CLI_PROFILE="$CLI_PROFILE" \
     uv run --project "$SKILL_DIR" python3 - <<'PY'
 import json
 import os
@@ -153,6 +176,7 @@ def run_command(args: list[str]) -> subprocess.CompletedProcess[str]:
 cli_name = os.environ["CLI_NAME"]
 cli_executable = os.environ["CLI_EXECUTABLE"]
 command_filter = os.environ.get("COMMAND")
+requested_profile = os.environ.get("CLI_PROFILE")
 
 if command_filter:
     emit("skipped", "Skipping (command filter active)")
@@ -178,7 +202,7 @@ if not has_subcommand(auth_help.stdout, "status"):
     emit("skipped", f"{cli_name} has no 'auth status' subcommand")
     raise SystemExit(0)
 
-status_result = run_command([cli_executable, "auth", "status"])
+status_result = run_command([cli_executable, "auth", "status"] + (["--profile", requested_profile] if requested_profile else []))
 if status_result.returncode not in (0, 2):
     detail = status_result.stderr.strip() or status_result.stdout.strip()
     emit("failed", f"'{cli_name} auth status' exited {status_result.returncode}: {detail[:300]}")
@@ -193,6 +217,9 @@ if errors:
     raise SystemExit(0)
 
 profiles = payload.get("profiles", []) if isinstance(payload, dict) else []
+if requested_profile and (len(profiles) != 1 or not isinstance(profiles[0], dict) or profiles[0].get("name") != requested_profile):
+    emit("failed", f"auth status did not verify exactly requested profile '{requested_profile}'")
+    raise SystemExit(0)
 if status_result.returncode == 2 or not any(
     isinstance(profile, dict) and profile.get("authenticated") is True
     for profile in profiles
@@ -206,6 +233,8 @@ PY
 
 CLI_NAME=""
 COMMAND=""
+CLI_PROFILE=""
+CLI_EXECUTABLE=""
 VERBOSE=false
 FILE_PATH=""
 
@@ -217,6 +246,8 @@ while [[ $# -gt 0 ]]; do
             ;;
         --cli-name) CLI_NAME="$2"; shift 2 ;;
         --command) COMMAND="$2"; shift 2 ;;
+        --profile) CLI_PROFILE="$2"; shift 2 ;;
+        --cli-executable) CLI_EXECUTABLE="$2"; shift 2 ;;
         --verbose) VERBOSE=true; shift ;;
         --file) FILE_PATH="$2"; shift 2 ;;
         *) json_error "Unknown argument: $1. Use --cli-name <name> or --file <path>." >&2; exit 1 ;;
@@ -258,8 +289,33 @@ fi
 
 SKILL_UV_ENV="${UV_PROJECT_ENVIRONMENT:-$HOME/.cache/uv/project-envs/cli-tool-skill-tests}"
 
+CLI_EXECUTABLE_OVERRIDE=false
+if [[ -n "$CLI_EXECUTABLE" ]]; then
+    if [[ ! -f "$CLI_EXECUTABLE" || ! -x "$CLI_EXECUTABLE" ]]; then
+        json_test_failure \
+            "test_cli_executable_override" \
+            "test-cli-tool.sh" \
+            "CLI executable override missing, not a regular file, or not executable: $CLI_EXECUTABLE"
+        exit 1
+    fi
+    CLI_EXECUTABLE="$(cd "$(dirname "$CLI_EXECUTABLE")" && pwd -P)/$(basename "$CLI_EXECUTABLE")"
+    CLI_EXECUTABLE_OVERRIDE=true
+fi
+
 CLI_DIR="$REPO_ROOT/$CLI_NAME"
-if [[ ! -d "$CLI_DIR" ]]; then
+if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then
+    if RESOLVED_CLI_DIR="$(resolve_cli_dir_from_executable "$CLI_EXECUTABLE")"; then
+        CLI_DIR="$RESOLVED_CLI_DIR"
+    elif [[ ! -d "$CLI_DIR" ]]; then
+        json_test_failure \
+            "test_cli_executable_override_source" \
+            "test-cli-tool.sh" \
+            "CLI executable override must be under <tool-dir>/.venv/bin/<tool> with a pyproject.toml when the tool is not at $CLI_DIR: $CLI_EXECUTABLE"
+        exit 1
+    fi
+fi
+
+if [[ ! -d "$CLI_DIR" && "$CLI_EXECUTABLE_OVERRIDE" == false ]]; then
     RESOLVED_CLI_DIR="$(
         CLI_NAME="$CLI_NAME" \
         UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
@@ -305,15 +361,17 @@ PY
     fi
 fi
 
-CANONICAL_UV_LAUNCHER="$HOME/.local/bin/$CLI_NAME"
-if [[ ! -f "$CANONICAL_UV_LAUNCHER" || ! -x "$CANONICAL_UV_LAUNCHER" ]]; then
-    json_test_failure \
-        "test_cli_executable_linked" \
-        "test-cli-tool.sh" \
-        "CLI executable link missing, not a regular file, or not executable: $CANONICAL_UV_LAUNCHER"
-    exit 1
+if [[ "$CLI_EXECUTABLE_OVERRIDE" == false ]]; then
+    CANONICAL_UV_LAUNCHER="$HOME/.local/bin/$CLI_NAME"
+    if [[ ! -f "$CANONICAL_UV_LAUNCHER" || ! -x "$CANONICAL_UV_LAUNCHER" ]]; then
+        json_test_failure \
+            "test_cli_executable_linked" \
+            "test-cli-tool.sh" \
+            "CLI executable link missing, not a regular file, or not executable: $CANONICAL_UV_LAUNCHER"
+        exit 1
+    fi
+    CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"
 fi
-CLI_EXECUTABLE="$CANONICAL_UV_LAUNCHER"
 
 validate_readme_description_block
 
@@ -329,11 +387,25 @@ if [[ ${#FORBIDDEN_ROOT_ENV_FILES[@]} -gt 0 ]]; then
     exit 1
 fi
 
+# Every `uv run --project "$SKILL_DIR"` below resolves the harness environment
+# (pytest, cli-tools-shared and its dependencies such as python-dotenv) from the
+# project file in $SKILL_DIR. When that project is missing or incomplete (for
+# example a partial copy of this skill on another host) uv silently runs a bare
+# interpreter, and the first cli_tools_shared import dies with
+# ModuleNotFoundError. Prove the environment up front and fail with a clear error.
+if ! HARNESS_ENV_ERROR="$(
+    UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
+    uv run --project "$SKILL_DIR" python3 -c 'import cli_tools_shared, dotenv, pytest' 2>&1
+)"; then
+    json_error "cli-tool harness environment is unusable: $SKILL_DIR must hold the full skill project (pyproject.toml, uv.lock, pytest.ini, scripts/, tests/) so uv can install cli-tools-shared, python-dotenv and pytest. Deploy the whole _repo/skills/cli-tool directory from the cli-tools repo. uv output: $HARNESS_ENV_ERROR" >&2
+    exit 1
+fi
+
 if ! PLACEHOLDER_VALIDATION_ERROR="$(
     PYTHONPATH="$CLI_DIR:$REPO_ROOT/_repo/cli-tools-shared${PYTHONPATH:+:$PYTHONPATH}" \
     CLI_NAME="$CLI_NAME" \
     UV_PROJECT_ENVIRONMENT="$SKILL_UV_ENV" \
-    uv run --project "$SKILL_DIR" python3 - <<'PY'
+    uv run --project "$SKILL_DIR" python3 - 2>&1 <<'PY'
 import os
 
 from cli_tools_shared.config import validate_auth_profile_secret_placeholders
@@ -380,11 +452,15 @@ PY
 )"
 
 PYTEST_ARGS=(--cli-name "$CLI_NAME" --tb=short --junitxml="$JUNIT")
+if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then
+    PYTEST_ARGS+=(--cli-executable "$CLI_EXECUTABLE")
+fi
 PYTEST_ARGS+=(-k "not test_auth_status_schema")
+[[ -n "$CLI_PROFILE" ]] && PYTEST_ARGS+=(--profile "$CLI_PROFILE")
 [[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command "$COMMAND")
 $VERBOSE && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
 
-uv run python -m pytest "${PYTEST_ARGS[@]}" 2>&1 | tee -a "$RAW_OUTPUT_FILE" >&2
+uv run python -m pytest "$SKILL_DIR/tests" "${PYTEST_ARGS[@]}" 2>&1 | tee -a "$RAW_OUTPUT_FILE" >&2
 EXIT_CODE=$?
 
 CLI_NAME="$CLI_NAME" COMMAND="$COMMAND" JUNIT="$JUNIT" \

@@ -18,6 +18,19 @@ description: >-
 Route every cli-tools request to the correct repo-owned CLI skill or lifecycle workflow, then execute against the real command contract.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh cli-tool
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <agent_routing>
 Service-operation routing stays in the current session: use `<cli-tools-root>/_repo/skills/cli-tool/workflows/skill-router.md`, then load the selected service skill and its adjacent `usage.json`.
 
@@ -46,7 +59,7 @@ relative to `<cli-tools-root>` unless it is already absolute; resolve it against
 that root before deriving the tool directory or checking files. The default mode is
 JSON, and `--json` is accepted as an explicit alias for that default. To inspect
 one CLI, pass the exact tool name as a positional filter, for example
-`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json upwork`; the output is
+`<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json notion`; the output is
 still a JSON array. When filtering the saved output with `jq`, iterate the array
 explicitly, for example `jq -e '.[] | select(.name == "google")' <file>`. Do not
 treat the output as JSONL records. When parsing the saved JSON with Python, do not wrap a quoted
@@ -80,9 +93,20 @@ These principles apply to ALL CLI tool operations. They cannot be skipped.
 <principle name="Always Use new-cli-tool Script">
 **Never create CLI files manually.** Use the scaffolding script:
 ```bash
-<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name <name> --type <api|browser|wrapper> [options]
+<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name <name> --type <api|browser|wrapper> [--personal] [options]
 ```
 This handles: directory structure, uv tool installation (isolated venv + symlink), and placement inside the parent cli-tools monorepo.
+</principle>
+
+
+<principle name="Browser CLIs Share Chrome Safely">
+New browser CLIs inherit the shared Chromium user-data-dir from
+`cli_tools_shared.config.BaseConfig`; never hard-code a per-tool
+`--user-data-dir`. The `default` auth profile shares
+`~/.local/share/cli-tools/_shared/chromium-profile`; named auth profiles stay
+isolated. Chrome processes using the shared profile must run sequentially.
+See `_repo/skills/cli-tool-browser-expert/SKILL.md` and
+`_repo/cli-tools-shared/docs/shared-chromium-profile.md`.
 </principle>
 
 <principle name="Output Stream Separation">
@@ -597,7 +621,7 @@ For multi-profile CLIs, direct config probes must also pass an explicit profile:
 
 Do not expect per-tool shell variables such as `JIRA_PROFILE` or a generic `CLI_TOOLS_PROFILE` environment variable to select the profile for an ad-hoc Python probe. The CLI runtime resolves profiles through explicit `--profile` handling and internal runtime overrides, not ambient shell env vars.
 
-`validate-cli-tool.sh` and the pytest `test_launcher_shebang_points_to_uv_tool_python` check enforce this shebang is correct. If they fail, reinstall with `uv tool install -e <cli-dir> --force --refresh`. See `references/common-issues.md` for details (including the CWD / sys.path wrinkle when editing source).
+`validate-cli-tool.sh` and the pytest `test_launcher_shebang_points_to_uv_tool_python` check enforce this shebang is correct. If they fail, reinstall with `install-cli-tool.sh --force-refresh <name>` (a bare `uv tool install ... --force --refresh` can pick a uv-managed Python instead of the system one, which then fails `test_cli_uses_system_python`). See `references/common-issues.md` for details (including the CWD / sys.path wrinkle when editing source).
 </principle>
 
 <principle name="Update cli_tools.md After Creation">
@@ -618,11 +642,27 @@ adjacent `usage.json` before running that CLI. CLI lifecycle workflows that
 change commands or parameters must refresh that same skill-folder `usage.json`.
 Use `<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json
 <tool>` to refresh it; do not import `cli_test_utils` from ad-hoc Python.
+For a project-owned CLI whose service skill lives outside `cli-tools`, the
+default in-repo location does not apply. You must pass the canonical skill path:
+
+```bash
+<cli-tools-root>/_repo/skills/cli-tool/scripts/regenerate-usage-json <tool> \
+  --usage-json <canonical-skill-path>/usage.json
+```
+
+Do not create an in-repo skill folder merely to use the default path.
+When the CLI tracks `usage.json` in its own tool directory (the skill's copy is
+a link to it), that tracked copy is canonical: regenerate the one in the checkout
+that changed the CLI (`--usage-json <checkout>/<tool>/usage.json`) and commit it
+with the change. The usage-map compliance tests read that same copy, so a
+worktree never writes the skill link or another checkout's map.
 When an existing `usage.json` declares `binary`, the generator uses that exact
 absolute executable path. This is the launcher contract for non-uv tools whose
 command differs from the skill name. Without `binary`, the generator requires
-the canonical uv launcher at `~/.local/bin/<tool>`. Use `--cli-executable` only
-for a new non-uv map or an isolated test fixture.
+the canonical uv launcher at `~/.local/bin/<tool>`. Use `--cli-executable` for
+a new non-uv map, an isolated test fixture, or a worktree checkout. For a
+worktree, point it at that checkout's `<tool>/.venv/bin/<tool>` and never
+reinstall or repoint the shared `~/.local/bin/<tool>` launcher.
 </principle>
 
 <principle name="Schema-Safe Usage JSON Inspection">
@@ -792,6 +832,7 @@ Omit local models when parsed/API records can flow straight to the documented ou
 **Common Commands:**
 ```
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name myservice --type api --base-url https://api.example.com
+<cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name internal-tool --type api --base-url https://api.example.com --personal
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name myservice --type api --base-url https://api.example.com --auth-type personal_access_token
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name mysite --type browser --base-url https://mysite.com
 <cli-tools-root>/_repo/skills/cli-tool/scripts/new-cli-tool --name mysite --type browser --base-url https://mysite.com --auth-type oauth --auth-type browser_session
@@ -804,7 +845,13 @@ Omit local models when parsed/API records can flow straight to the documented ou
 <topic name="Typer Dependency Extras">
 **Context:** Use this when creating or updating Python CLI tool `pyproject.toml` dependencies.
 **Key Facts:** Current Typer releases no longer expose the legacy `all` extra, so CLI tools should depend on `typer>=0.9.0` instead of `typer>=0.9.0`. The stale extra produces `uv` warnings during `uv run` and `uv tool install`, even though installation continues.
-**Gotchas:** If the warning appears while installing one CLI, inspect both that CLI and `cli-tools-shared`; transitive package metadata can be the source. After changing shared dependency metadata, refresh the dependent CLI install with `uv tool install -e . --force --refresh` so it resolves the new `cli-tools-shared` commit.
+**Gotchas:** If the warning appears while installing one CLI, inspect both that CLI and `cli-tools-shared`; transitive package metadata can be the source. After changing shared dependency metadata, refresh the dependent CLI install with `install-cli-tool.sh --force-refresh <name>` so it resolves the new `cli-tools-shared` commit.
+</topic>
+
+<topic name="Venv Disk Accounting (macOS APFS Clones)">
+**Context:** Use when assessing or reporting disk usage of `uv tool` venvs (e.g. "N venvs, duplicated deps, X GB").
+**Key Facts:** On macOS, uv installs tools into `~/.local/share/uv/tools/<tool>` using APFS copy-on-write clones (`--link-mode clone` is the default), not hardlinks or copies. Clone copies share physical blocks with the uv cache and with each other; `du` and per-tool sums count every clone at full size and overstate physical usage (measured ~2.6x on this fleet). `uv cache clean` frees only cache bytes not referenced by surviving venvs; deleting one of several same-content venvs frees ~nothing, deleting the last frees the content. Clones inherit identical mtime/birthtime from their cache source, so grouping duplicate files by timestamp pairs yields lineage counts = physical copy counts (calibrated forensics method).
+**Gotchas:** Never report a `du` total as physical disk usage for uv tool venvs; do not expect `uv cache clean` to reclaim space while venvs hold references; uninstalling a tool reclaims only bytes exclusive to it.
 </topic>
 
 </domain_knowledge>

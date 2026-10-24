@@ -7,7 +7,6 @@ COMMAND_CREDENTIALS = {
 import typer
 from typing import Optional, List
 from ..client import get_client, ClientError
-from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import command, print_json, print_table, handle_error
 from .session_arg import resolve_session_arg
 
@@ -38,18 +37,10 @@ def list_subagent_activity(
     try:
         client = get_client()
         session_id = resolve_session_arg(client, session_id, session_name, project=project)
-        subagents = client.list_subagent_activity(project=project, limit=limit, since=since)
+        subagents = client.list_subagent_activity(project=project, limit=limit, since=since, session_id=session_id, filters=filter)
 
         # Convert to dicts for filtering/output
         items = [s.model_dump() for s in subagents]
-
-        # Apply session_id filter
-        if session_id:
-            items = [item for item in items if item.get('session_id') == session_id]
-
-        # Apply client-side filters
-        if filter:
-            items = apply_filters(items, filter)
 
         # Apply property selection
         if properties:

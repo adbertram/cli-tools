@@ -6,7 +6,9 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
+from codex_sessions_cli import client as client_module
 from codex_sessions_cli.client import CodexSessionsClient
+from codex_sessions_cli.commands.common import exact_session_ids
 from codex_sessions_cli.main import app
 from codex_sessions_cli.models import TimelineEventType, create_timeline_event
 from codex_sessions_cli.parsers import load_rollout_index
@@ -14,18 +16,24 @@ from codex_sessions_cli.parsers import load_rollout_index
 
 SESSION_ID = "019db111-1111-7111-8111-111111111111"
 SKILL_SESSION_ID = "019db222-2222-7222-8222-222222222222"
+OTHER_PROFILE_SESSION_ID = "019db333-3333-7333-8333-333333333333"
 
 
-def write_rollout(codex_home: Path, cwd: str, source="cli") -> Path:
+def write_rollout(
+    codex_home: Path,
+    cwd: str,
+    source="cli",
+    session_id: str = SESSION_ID,
+) -> Path:
     session_dir = codex_home / "sessions" / "2026" / "04" / "21"
     session_dir.mkdir(parents=True)
-    rollout_path = session_dir / f"rollout-2026-04-21T10-00-00-{SESSION_ID}.jsonl"
+    rollout_path = session_dir / f"rollout-2026-04-21T10-00-00-{session_id}.jsonl"
     records = [
         {
             "timestamp": "2026-04-21T15:00:00.000Z",
             "type": "session_meta",
             "payload": {
-                "id": SESSION_ID,
+                "id": session_id,
                 "timestamp": "2026-04-21T15:00:00.000Z",
                 "cwd": cwd,
                 "originator": "codex-tui",
@@ -599,6 +607,189 @@ class CodexSessionsClientTests(unittest.TestCase):
             self.assertEqual(timeline[0].event_type, "message")
             self.assertEqual(timeline[-1].event_type, "session")
 
+    def test_default_roots_include_base_and_all_profiles_when_codex_home_is_a_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_home = Path(tmp) / ".codex"
+            deepseek_home = base_home / "profiles" / "deepseek"
+            other_home = base_home / "profiles" / "other"
+            (base_home / "profiles" / "empty").mkdir(parents=True)
+            write_rollout(base_home, str(Path(tmp) / "Base Project"))
+            write_rollout(
+                deepseek_home,
+                str(Path(tmp) / "DeepSeek Project"),
+                session_id=SKILL_SESSION_ID,
+            )
+            write_rollout(
+                other_home,
+                str(Path(tmp) / "Other Project"),
+                session_id=OTHER_PROFILE_SESSION_ID,
+            )
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "CODEX_HOME": str(deepseek_home),
+                    "CODEX_SESSIONS_CODEX_HOME": "",
+                    "CODEX_SESSIONS_CODEX_PROFILE": "",
+                },
+                clear=False,
+            ):
+                client = CodexSessionsClient()
+                sessions = client.list_sessions()
+
+            self.assertEqual(
+                client.codex_roots,
+                [base_home.absolute(), deepseek_home.absolute(), other_home.absolute()],
+            )
+            self.assertEqual(
+                {session.id for session in sessions},
+                {SESSION_ID, SKILL_SESSION_ID, OTHER_PROFILE_SESSION_ID},
+            )
+
+    def test_codex_sessions_profile_scopes_reads_to_one_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_home = Path(tmp) / ".codex"
+            deepseek_home = base_home / "profiles" / "deepseek"
+            other_home = base_home / "profiles" / "other"
+            write_rollout(base_home, str(Path(tmp) / "Base Project"))
+            write_rollout(
+                deepseek_home,
+                str(Path(tmp) / "DeepSeek Project"),
+                session_id=SKILL_SESSION_ID,
+            )
+            write_rollout(
+                other_home,
+                str(Path(tmp) / "Other Project"),
+                session_id=OTHER_PROFILE_SESSION_ID,
+            )
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "CODEX_HOME": str(deepseek_home),
+                    "CODEX_SESSIONS_CODEX_HOME": "",
+                    "CODEX_SESSIONS_CODEX_PROFILE": "other",
+                },
+                clear=False,
+            ):
+                client = CodexSessionsClient()
+                sessions = client.list_sessions()
+
+            self.assertEqual(client.codex_roots, [other_home.absolute()])
+            self.assertEqual([session.id for session in sessions], [OTHER_PROFILE_SESSION_ID])
+
+    def test_codex_sessions_home_takes_precedence_over_profile_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_home = Path(tmp) / ".codex"
+            deepseek_home = base_home / "profiles" / "deepseek"
+            other_home = base_home / "profiles" / "other"
+            write_rollout(
+                deepseek_home,
+                str(Path(tmp) / "DeepSeek Project"),
+                session_id=SKILL_SESSION_ID,
+            )
+            write_rollout(
+                other_home,
+                str(Path(tmp) / "Other Project"),
+                session_id=OTHER_PROFILE_SESSION_ID,
+            )
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "CODEX_HOME": str(deepseek_home),
+                    "CODEX_SESSIONS_CODEX_HOME": str(deepseek_home),
+                    "CODEX_SESSIONS_CODEX_PROFILE": "other",
+                },
+                clear=False,
+            ):
+                client = CodexSessionsClient()
+                sessions = client.list_sessions()
+
+            self.assertEqual(client.codex_roots, [deepseek_home.absolute()])
+            self.assertEqual([session.id for session in sessions], [SKILL_SESSION_ID])
+
+    def test_session_get_finds_session_in_another_profile(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_home = Path(tmp) / ".codex"
+            deepseek_home = base_home / "profiles" / "deepseek"
+            other_home = base_home / "profiles" / "other"
+            write_rollout(
+                deepseek_home,
+                str(Path(tmp) / "DeepSeek Project"),
+                session_id=SKILL_SESSION_ID,
+            )
+            write_rollout(
+                other_home,
+                str(Path(tmp) / "Other Project"),
+                session_id=OTHER_PROFILE_SESSION_ID,
+            )
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "CODEX_HOME": str(deepseek_home),
+                    "CODEX_SESSIONS_CODEX_HOME": "",
+                    "CODEX_SESSIONS_CODEX_PROFILE": "",
+                },
+                clear=False,
+            ):
+                result = CliRunner().invoke(
+                    app,
+                    [
+                        "sessions",
+                        "get",
+                        OTHER_PROFILE_SESSION_ID,
+                        "--properties",
+                        "id",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(json.loads(result.output), {"id": OTHER_PROFILE_SESSION_ID})
+
+    def test_session_names_merge_across_profile_roots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base_home = Path(tmp) / ".codex"
+            deepseek_home = base_home / "profiles" / "deepseek"
+            write_rollout(base_home, str(Path(tmp) / "Base Project"))
+            write_rollout(
+                deepseek_home,
+                str(Path(tmp) / "DeepSeek Project"),
+                session_id=SKILL_SESSION_ID,
+            )
+            (base_home / "session_index.jsonl").write_text(
+                json.dumps({"id": SESSION_ID, "thread_name": "Base Thread"}) + "\n"
+            )
+            (deepseek_home / "session_index.jsonl").write_text(
+                json.dumps(
+                    {"id": SKILL_SESSION_ID, "thread_name": "DeepSeek Thread"}
+                )
+                + "\n"
+            )
+
+            with patch.dict(
+                "os.environ",
+                {
+                    "CODEX_HOME": str(deepseek_home),
+                    "CODEX_SESSIONS_CODEX_HOME": "",
+                    "CODEX_SESSIONS_CODEX_PROFILE": "",
+                },
+                clear=False,
+            ):
+                client = CodexSessionsClient()
+                names = {session.id: session.name for session in client.list_sessions()}
+
+            self.assertEqual(
+                names,
+                {
+                    SESSION_ID: "Base Thread",
+                    SKILL_SESSION_ID: "DeepSeek Thread",
+                },
+            )
+            self.assertEqual(client._resolve_session_id("DeepSeek Thread"), SKILL_SESSION_ID)
+
+
 class CodexSessionsCliTests(unittest.TestCase):
     def test_console_script_uses_error_handling_entrypoint(self):
         pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
@@ -615,7 +806,15 @@ class CodexSessionsCliTests(unittest.TestCase):
             write_rollout(codex_home, project_path)
 
             runner = CliRunner()
-            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}, clear=False):
+            with patch.dict(
+                "os.environ",
+                {
+                    "CODEX_HOME": str(codex_home),
+                    "CODEX_SESSIONS_CODEX_HOME": "",
+                    "CODEX_SESSIONS_CODEX_PROFILE": "",
+                },
+                clear=False,
+            ):
                 result = runner.invoke(app, ["auth", "status"])
 
             self.assertEqual(result.exit_code, 0, result.output)
@@ -627,6 +826,119 @@ class CodexSessionsCliTests(unittest.TestCase):
             self.assertTrue(profile["authenticated"])
             self.assertIn("custom", profile["credential_types"])
             self.assertEqual(profile["credential_types"]["custom"]["api_test"], "passed")
+            self.assertEqual(
+                profile["credential_types"]["custom"]["codex_roots"],
+                [str(codex_home.absolute())],
+            )
+
+    def test_sessions_list_filter_runs_before_limit(self):
+        # agent-issues #584: --limit was applied before --filter, so an exact
+        # id filter with --limit 1 returned [] for any non-newest session.
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            write_skill_rollout(codex_home, project_path)
+
+            runner = CliRunner()
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}):
+                unfiltered = runner.invoke(app, ["sessions", "list", "--limit", "1", "--properties", "id"])
+                filtered = runner.invoke(
+                    app,
+                    ["sessions", "list", "--filter", f"id:eq:{SESSION_ID}", "--limit", "1", "--properties", "id"],
+                )
+                by_count = runner.invoke(
+                    app,
+                    ["sessions", "list", "--filter", "tool_call_count:gte:1", "--limit", "1", "--properties", "id"],
+                )
+
+            self.assertEqual(unfiltered.exit_code, 0, unfiltered.output)
+            self.assertEqual(json.loads(unfiltered.output), [{"id": SKILL_SESSION_ID}])
+            self.assertEqual(filtered.exit_code, 0, filtered.output)
+            self.assertEqual(json.loads(filtered.output), [{"id": SESSION_ID}])
+            self.assertEqual(by_count.exit_code, 0, by_count.output)
+            self.assertEqual(json.loads(by_count.output), [{"id": SESSION_ID}])
+
+    def test_sessions_list_id_filter_returns_non_newest_session_with_limit_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            write_rollout(codex_home, project_path)
+            write_skill_rollout(codex_home, project_path)
+
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}):
+                result = CliRunner().invoke(
+                    app,
+                    [
+                        "sessions", "list",
+                        "--filter", f"id:eq:{SESSION_ID}",
+                        "--properties", "id,last_activity",
+                        "--limit", "1",
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(
+                json.loads(result.output),
+                [{"id": SESSION_ID, "last_activity": "2026-04-21T15:00:08.000Z"}],
+            )
+
+    def test_sessions_list_id_filter_opens_only_the_named_rollout(self):
+        # An exact id filter resolves to rollout-<timestamp>-<id>.jsonl by name;
+        # the newer skill rollout must be neither indexed nor parsed.
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            project_path = str(Path(tmp) / "Project One")
+            named = write_rollout(codex_home, project_path)
+            write_skill_rollout(codex_home, project_path)
+
+            indexed, parsed = [], []
+            real_index, real_load = client_module.load_rollout_index, client_module.load_rollout
+
+            def recording_index(path):
+                indexed.append(path)
+                return real_index(path)
+
+            def recording_load(path):
+                parsed.append(path)
+                return real_load(path)
+
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}), patch.object(
+                client_module, "load_rollout_index", recording_index
+            ), patch.object(client_module, "load_rollout", recording_load):
+                result = CliRunner().invoke(
+                    app, ["sessions", "list", "--filter", f"id:eq:{SESSION_ID}", "--properties", "id"]
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(json.loads(result.output), [{"id": SESSION_ID}])
+            self.assertEqual(indexed, [named])
+            self.assertEqual(parsed, [named])
+
+    def test_sessions_list_id_filter_for_unknown_id_returns_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_home = Path(tmp) / ".codex"
+            write_rollout(codex_home, str(Path(tmp) / "Project One"))
+
+            with patch.dict("os.environ", {"CODEX_HOME": str(codex_home)}):
+                result = CliRunner().invoke(
+                    app, ["sessions", "list", "--filter", "id:eq:019db999-9999-7999-8999-999999999999"]
+                )
+
+            self.assertEqual(result.exit_code, 0, result.output)
+            self.assertEqual(json.loads(result.output), [])
+
+    def test_exact_session_ids_bounds_only_fully_pinned_filters(self):
+        self.assertEqual(exact_session_ids([f"id:eq:{SESSION_ID}"]), [SESSION_ID])
+        self.assertEqual(exact_session_ids([f"id:{SESSION_ID}"]), [SESSION_ID])
+        self.assertEqual(
+            exact_session_ids([f"id:eq:{SESSION_ID},tool_call_count:gte:1", f"id:eq:{SKILL_SESSION_ID}"]),
+            [SESSION_ID, SKILL_SESSION_ID],
+        )
+        self.assertIsNone(exact_session_ids(None))
+        self.assertIsNone(exact_session_ids(["tool_call_count:gte:1"]))
+        self.assertIsNone(exact_session_ids([f"id:eq:{SESSION_ID}", "tool_call_count:gte:1"]))
+        self.assertIsNone(exact_session_ids([f"id:contains:{SESSION_ID[:8]}"]))
 
     def test_sessions_list_outputs_json_for_matching_project_path(self):
         with tempfile.TemporaryDirectory() as tmp:

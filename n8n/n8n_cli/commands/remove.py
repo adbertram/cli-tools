@@ -1,16 +1,15 @@
 """Remove command - uninstall a community node from the n8n server."""
-import time
 import typer
 
 from ..n8n_api import get_n8n_api_client, N8nApiError
 from cli_tools_shared.output import print_error, print_info, print_success, print_json
-from ..server import run_on_server_raw
+from ..server import restart_n8n, run_on_server_raw
 from ..package_inventory import (
     list_server_packages,
     node_belongs_to_package,
     resolve_installed_package_name,
 )
-from .deploy import N8N_NODES_DIR, N8N_PLIST, N8N_PATH
+from .deploy import N8N_NODES_DIR, N8N_PATH
 
 
 def remove_node(
@@ -119,21 +118,11 @@ def remove_node(
     # Step 4: Restart n8n
     if not skip_restart:
         print_info("[4/4] Restarting n8n...")
-
-        result = run_on_server_raw(f"sudo launchctl unload {N8N_PLIST}")
-        if result.returncode != 0:
-            print_error(f"Failed to stop n8n: {result.stderr}")
+        try:
+            restart_n8n()
+        except (RuntimeError, N8nApiError) as e:
+            print_error(str(e))
             raise typer.Exit(1)
-
-        time.sleep(2)
-
-        result = run_on_server_raw(f"sudo launchctl load {N8N_PLIST}")
-        if result.returncode != 0:
-            print_error(f"Failed to start n8n: {result.stderr}")
-            raise typer.Exit(1)
-
-        print_info("Waiting for n8n to start...")
-        time.sleep(5)
 
         # Verify node is gone
         try:

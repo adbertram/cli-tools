@@ -1,0 +1,3 @@
+Disabled 2026-10-13. Upwork will not issue Adam an API key (account does not meet the $25K lifetime earnings / 90% Job Success Score eligibility), and live profile commands are blocked by Cloudflare, so the tool cannot do anything useful.
+While this file exists the tool is hidden from _repo/scripts/find-cli-tools.sh and _repo/_scripts/refresh_readme.py. The launcher is uninstalled and the service skill lives in _repo/skills/_disabled/upwork-cli.
+Re-enable steps: see "Disabled" in README.md.

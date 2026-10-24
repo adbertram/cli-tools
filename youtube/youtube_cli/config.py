@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import Optional
 
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, resolve_tool_dir, config_for
 from cli_tools_shared.credentials import CredentialType
 
 YOUTUBE_PROFILE_AUTH_TYPE = "google_oauth_desktop"
@@ -33,7 +33,9 @@ class Config(BaseConfig):
         "Create OAuth credentials at: https://console.cloud.google.com/apis/credentials\n"
         "  Click 'Create Credentials' > 'OAuth client ID' > type: 'Desktop app'\n"
         "  (Desktop app type auto-allows http://localhost redirect URIs)\n"
-        "  Then enable the YouTube Data API v3 in the same project."
+        "  Then enable the YouTube Data API v3 in the same project.\n"
+        "  Also enable the YouTube Analytics API for analytics commands:\n"
+        "  https://console.cloud.google.com/apis/library/youtubeanalytics.googleapis.com"
     )
     CUSTOM_LOGIN_PROMPTS = YOUTUBE_PROFILE_AUTH_PROMPTS
     CUSTOM_EPHEMERAL_FIELDS = []
@@ -116,10 +118,7 @@ _configs: dict = {}
 
 def get_config(profile: Optional[str] = None) -> Config:
     """Get or create the global config instance."""
-    key = profile or "_default"
-    if key not in _configs:
-        _configs[key] = Config(profile=profile)
-    return _configs[key]
+    return config_for(Config, profile, _configs)
 
 
 def reset_config():

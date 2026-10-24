@@ -1,12 +1,10 @@
 """Server config commands - manage n8n plist environment variables."""
 import typer
 
-from cli_tools_shared.output import print_error, print_info, print_success, print_table, print_warning, handle_error
-from ..server import run_on_server
+from cli_tools_shared.output import command, print_error, print_info, print_success, print_table, print_warning, handle_error
+from ..server import N8N_PLIST, restart_n8n, run_on_server
 
 app = typer.Typer(help="Manage n8n server configuration (plist env vars)", no_args_is_help=True)
-
-N8N_PLIST = "/Library/LaunchDaemons/com.n8n.server.plist"
 
 VALID_KEYS = {
     "EXECUTIONS_DATA_PRUNE": {"desc": "Enable execution pruning", "default": "true"},
@@ -23,6 +21,7 @@ def _shell_quote(s: str) -> str:
 
 
 @app.command("show")
+@command
 def config_show(
     plist_path: str = typer.Option(N8N_PLIST, "--plist", help="LaunchDaemon plist path on server"),
 ):
@@ -56,6 +55,7 @@ def config_show(
 
 
 @app.command("set")
+@command
 def config_set(
     key: str = typer.Argument(..., help=f"Config key: {', '.join(VALID_KEYS.keys())}"),
     value: str = typer.Argument(..., help="Value to set"),
@@ -95,8 +95,7 @@ print("  {key} = {value}")
 
         if restart:
             print_info("Restarting n8n...")
-            from .server import _restart_n8n
-            _restart_n8n()
+            restart_n8n(plist_path=plist_path)
             print_success(f"Config updated and n8n restarted")
         else:
             print_warning("Config updated but n8n NOT restarted. Run: n8n server restart")

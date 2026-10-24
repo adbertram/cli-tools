@@ -1,7 +1,7 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-07-28T16:26:59Z",
+  "discovered_at": "2026-09-15T16:14:34Z",
   "total_commands": 30,
   "global_options": [
     {
@@ -34,7 +34,8 @@
               "type": "bool",
               "required": false,
               "help": "Clear existing ephemeral auth state and re-authenticate",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -84,7 +85,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -104,7 +106,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,7 +120,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -158,7 +162,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -183,14 +188,16 @@
                   "name": "--keep-old",
                   "type": "bool",
                   "required": false,
-                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact"
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
                 },
                 {
                   "name": "--force",
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -224,7 +231,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -237,14 +245,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -306,7 +316,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -346,7 +357,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -413,7 +425,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -432,7 +445,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -507,7 +521,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -536,7 +551,8 @@
               "name": "--snippets",
               "type": "bool",
               "required": false,
-              "help": "Show matching text snippets (table mode)"
+              "help": "Show matching text snippets (table mode)",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -583,7 +599,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -615,7 +632,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -666,7 +684,8 @@
               "name": "--prompts-clean",
               "type": "bool",
               "required": false,
-              "help": "When --include-prompts is set, skip system reminders, Caveat: lines, and tool-result content"
+              "help": "When --include-prompts is set, skip system reminders, Caveat: lines, and tool-result content",
+              "takes_value": false
             },
             {
               "name": "--prompts-max-chars",
@@ -725,7 +744,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -800,7 +820,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -840,7 +861,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -915,7 +937,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -955,7 +978,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1037,14 +1061,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--wide",
               "type": "bool",
               "required": false,
               "help": "Show full input/output (no truncation)",
-              "short": "-w"
+              "short": "-w",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1059,13 +1085,16 @@
               "type": "bool",
               "required": false,
               "help": "Include subagent tool calls",
+              "takes_value": false,
+              "secondary": "--hide-agent-tools",
               "default": "show-agent-tools"
             },
             {
               "name": "--show-thinking",
               "type": "bool",
               "required": false,
-              "help": "Include Claude's thinking/reasoning blocks"
+              "help": "Include Claude's thinking/reasoning blocks",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -1112,14 +1141,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--wide",
               "type": "bool",
               "required": false,
               "help": "Show full input/output (no truncation)",
-              "short": "-w"
+              "short": "-w",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1174,14 +1205,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--wide",
               "type": "bool",
               "required": false,
               "help": "Show full input/output (no truncation)",
-              "short": "-w"
+              "short": "-w",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1210,7 +1243,8 @@
               "type": "bool",
               "required": false,
               "help": "Show only errors",
-              "short": "-e"
+              "short": "-e",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1257,7 +1291,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1297,7 +1332,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1372,7 +1408,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1419,7 +1456,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1454,7 +1492,8 @@
               "type": "bool",
               "required": false,
               "help": "Include tool calls from subagents",
-              "short": "-a"
+              "short": "-a",
+              "takes_value": false
             },
             {
               "name": "--subagent-id",

@@ -1,0 +1,251 @@
+"""TikTok Direct Post video commands."""
+from pathlib import Path
+from typing import List, Optional
+
+import typer
+
+from cli_tools_shared.filters import (
+    FilterValidationError,
+    apply_filters,
+    apply_properties_filter,
+    validate_filters,
+)
+from cli_tools_shared.output import ClientError, command, print_json, print_table
+
+from ..client import get_web_client
+from ..posting import TikTokPostingClient
+
+app = typer.Typer(help="Publish, inspect, list, delete, and set privacy of TikTok videos")
+
+COMMAND_CREDENTIALS = {
+    "search": ["browser_session"],
+    "publish": ["custom"],
+    "status": ["custom"],
+    "list": ["browser_session"],
+    "get": ["browser_session"],
+    "metrics": ["browser_session"],
+    "delete": ["browser_session"],
+    "privacy": ["browser_session"],
+}
+_VIDEO_COLUMNS = ["id", "url", "caption", "author", "created_at"]
+_USERNAME_HELP = "TikTok username whose posts to read (private posts need that account's session)"
+
+
+@app.command("publish")
+@command
+def videos_publish(
+    file: Path = typer.Argument(..., exists=True, dir_okay=False, help="Video file to publish"),
+    title: str = typer.Option("", "--title", help="TikTok post caption/title"),
+    privacy: str = typer.Option(
+        "SELF_ONLY",
+        "--privacy",
+        help="TikTok creator privacy level",
+    ),
+    disable_comment: bool = typer.Option(False, "--disable-comment", help="Disable comments"),
+    disable_duet: bool = typer.Option(False, "--disable-duet", help="Disable Duet"),
+    disable_stitch: bool = typer.Option(False, "--disable-stitch", help="Disable Stitch"),
+    ai_generated: bool = typer.Option(
+        False, "--ai-generated", help="Label the video as AI-generated content"
+    ),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """Publish a video through the Content Posting API (Direct Post)."""
+    result = TikTokPostingClient().publish_video(
+        file,
+        title=title,
+        privacy_level=privacy,
+        disable_comment=disable_comment,
+        disable_duet=disable_duet,
+        disable_stitch=disable_stitch,
+        is_aigc=ai_generated,
+    )
+    if table:
+        columns = ["publish_id", "status", "fail_reason", "uploaded_bytes"]
+        print_table([result], columns, [c.replace("_", " ").title() for c in columns])
+    else:
+        print_json(result)
+
+
+@app.command("status")
+@command
+def videos_status(
+    publish_id: str = typer.Argument(..., help="TikTok publish_id returned by publish"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(
+        None, "--properties", "-p", help="Comma-separated fields to display"
+    ),
+):
+    """Fetch a Direct Post's publish status by publish_id."""
+    result = TikTokPostingClient().status(publish_id)
+    if properties:
+        result = apply_properties_filter([result], properties)[0]
+    columns = (
+        [field.strip() for field in properties.split(",") if field.strip()]
+        if properties
+        else ["publish_id", "status", "fail_reason", "uploaded_bytes"]
+    )
+    if table:
+        print_table([result], columns, [c.replace("_", " ").title() for c in columns])
+    else:
+        print_json(result)
+
+
+def _print_videos(videos: list, table: bool, properties: Optional[str]) -> None:
+    if properties:
+        videos = apply_properties_filter(videos, properties)
+    if table:
+        columns = [p.strip() for p in properties.split(",")] if properties else _VIDEO_COLUMNS
+        print_table(videos, columns, columns)
+    else:
+        print_json(videos)
+
+
+@app.command("list")
+@command
+def videos_list(
+    username: str = typer.Option(..., "--username", "-u", help=_USERNAME_HELP),
+    studio: bool = typer.Option(False, "--studio", help="Read Studio content for this verified session owner"),
+    expected_account_id: Optional[str] = typer.Option(None, "--expected-account-id", help="Exact numeric owner ID required with --studio"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display results as a table"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
+    filter: Optional[List[str]] = typer.Option(
+        None, "--filter", "-f", help="Filter: field:op:value"
+    ),
+    properties: Optional[str] = typer.Option(
+        None, "--properties", "-p", help="Comma-separated fields to display"
+    ),
+):
+    """List posted videos; --studio uses verified own-account Studio content."""
+    if filter:
+        try:
+            validate_filters(filter)
+        except FilterValidationError as e:
+            raise ClientError(str(e)) from e
+    client = get_web_client()
+    try:
+        if expected_account_id is not None and not studio:
+            raise ClientError("--expected-account-id requires --studio.")
+        videos = (client.list_studio_videos(username, limit=limit, expected_account_id=expected_account_id)
+                  if studio else client.list_posted_videos(username, limit=limit))
+    finally:
+        client.close()
+    if filter:
+        videos = apply_filters(videos, filter)
+    _print_videos(videos, table, properties)
+
+
+@app.command("get")
+@command
+def videos_get(
+    video_id: str = typer.Argument(..., help="TikTok video id"),
+    username: str = typer.Option(..., "--username", "-u", help=_USERNAME_HELP),
+    studio: bool = typer.Option(False, "--studio", help="Read Studio content for this verified session owner"),
+    expected_account_id: Optional[str] = typer.Option(None, "--expected-account-id", help="Exact numeric owner ID required with --studio"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display result as a table"),
+    properties: Optional[str] = typer.Option(
+        None, "--properties", "-p", help="Comma-separated fields to display"
+    ),
+):
+    """Get one of a profile's posted videos by id."""
+    client = get_web_client()
+    try:
+        if expected_account_id is not None and not studio:
+            raise ClientError("--expected-account-id requires --studio.")
+        video = (client.get_studio_video(username, video_id, expected_account_id=expected_account_id)
+                 if studio else client.get_posted_video(username, video_id))
+    finally:
+        client.close()
+    if table:
+        _print_videos([video], True, properties)
+    else:
+        print_json(apply_properties_filter([video], properties)[0] if properties else video)
+
+
+@app.command("metrics")
+@command
+def videos_metrics(
+    video_id: str = typer.Argument(..., help="Own TikTok video ID"),
+    username: str = typer.Option(..., "--username", "-u", help="Verified session owner's TikTok handle"),
+    expected_account_id: Optional[str] = typer.Option(None, "--expected-account-id", help="Fail unless the numeric session owner ID matches exactly"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
+):
+    """Read actual per-post Studio counts; missing metrics remain null.
+
+    Views, likes, comments, shares and favorites are cumulative observed counts.
+    This command does not estimate revenue or substitute account analytics.
+    """
+    client = get_web_client()
+    try:
+        video = client.get_studio_video(username, video_id, expected_account_id=expected_account_id)
+    finally:
+        client.close()
+    result = {key: video[key] for key in ("id", "url", "account_id", "author", "profile", "observed_at", "server_timestamp_ms", "provenance")}
+    result.update(video["metrics"])
+    if properties:
+        result = apply_properties_filter([result], properties)[0]
+    if table:
+        columns = [field.strip() for field in properties.split(",")] if properties else ["id", "views", "likes", "comments", "shares", "favorites", "observed_at"]
+        print_table([result], columns, columns)
+    else:
+        print_json(result)
+
+
+@app.command("delete")
+@command
+def videos_delete(
+    video_id: str = typer.Argument(..., help="TikTok video id to delete"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Confirm permanent deletion"),
+):
+    """Permanently delete one of your TikTok videos."""
+    if not yes:
+        raise ClientError("Refusing to delete TikTok video without --yes.")
+    client = get_web_client()
+    try:
+        print_json(client.delete_video(video_id))
+    finally:
+        client.close()
+
+
+@app.command("privacy")
+@command
+def videos_privacy(
+    video_id: str = typer.Argument(..., help="Own TikTok video ID"),
+    to: str = typer.Option(..., "--to", help="Who can watch: public, friends, or private"),
+    username: str = typer.Option(..., "--username", "-u", help="Verified session owner's TikTok handle"),
+    expected_account_id: str = typer.Option(..., "--expected-account-id", help="Exact numeric session owner ID"),
+):
+    """Set who can watch one own post; fails unless a Studio readback confirms it."""
+    client = get_web_client()
+    try:
+        print_json(client.set_video_privacy(username, video_id, to, expected_account_id=expected_account_id))
+    finally:
+        client.close()
+
+
+@app.command("search")
+@command
+def videos_search(
+    hashtag: str = typer.Argument(..., help="One exact hashtag, with or without #"),
+    limit: int = typer.Option(30, "--limit", "-l", min=1, max=300, help="Maximum matching videos"),
+    max_pages: int = typer.Option(2, "--max-pages", min=1, max=20, help="Maximum native search pages"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display results as table"),
+    filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
+):
+    """Search public videos with an exact hashtag; absent measurements remain null."""
+    try:
+        validate_filters(filter, allowed_fields=["id", "url", "caption", "author", "created_at", "views", "duration", "likes", "comments", "shares", "saves", "matched_hashtags", "observed_at", "provenance"])
+    except FilterValidationError as exc:
+        raise ClientError(str(exc)) from exc
+    client = get_web_client()
+    try:
+        rows = client.search_hashtag_videos(hashtag, limit=limit, max_pages=max_pages)
+    finally:
+        client.close()
+    rows = apply_properties_filter(apply_filters(rows, filter), properties)
+    if table:
+        columns = list(rows[0]) if rows else ["id", "author", "views", "caption"]
+        print_table(rows, columns, [name.replace("_", " ").title() for name in columns])
+    else:
+        print_json(rows)

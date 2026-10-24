@@ -5,7 +5,6 @@ import json
 import mimetypes
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 import time
@@ -13,9 +12,11 @@ import uuid
 from contextlib import contextmanager, nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-from urllib.parse import quote, urlparse
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.error import HTTPError, URLError
+from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 from .config import get_config
 from .utils.notion_markdown import normalize_notion_markdown
@@ -23,46 +24,38 @@ from .utils.notion_markdown import normalize_notion_markdown
 
 NOTION_CONTENT_WRITE_TIMEOUT_SECONDS = 300
 
-STATIC_REPOSITORY_ROOT = Path("/Users/adam/Dropbox/GitRepos/Agents/ATABlogger")
+# Overridable per machine since this repo is Dropbox-synced but the
+# ATABlogger checkout it points at may live at a different path on another
+# host (e.g. a server without Dropbox). Defaults to Adam's Mac layout.
+STATIC_REPOSITORY_ROOT = Path(
+    os.environ.get(
+        "ATA_BLOG_STATIC_REPOSITORY_ROOT",
+        "/Users/adam/Dropbox/GitRepos/Agents/ATABlogger",
+    )
+)
 STATIC_SITE_ROOT = STATIC_REPOSITORY_ROOT / "static-site"
-STATIC_RELEASE_ROOT = STATIC_REPOSITORY_ROOT / "agent_workspaces" / "static-cutover-release"
 STATIC_RELEASE_MANIFEST = STATIC_SITE_ROOT / "dist" / "release-manifest.json"
-STATIC_RELEASE_CONTRACT = STATIC_SITE_ROOT / "scripts" / "release_manifest.mjs"
-STATIC_RELEASE_FIXTURE = (
-    STATIC_SITE_ROOT / "tests" / "fixtures" / "release-contract" / "valid-interface-set.json"
-)
-STATIC_P05_HANDOFF = STATIC_REPOSITORY_ROOT / "agent_workspaces" / "p05_scope_v2" / "handoff.json"
-STATIC_SCANNER = STATIC_REPOSITORY_ROOT / "scripts" / "validate-published-post.sh"
-STATIC_SCANNER_HANDOFF = (
-    STATIC_REPOSITORY_ROOT / "agent_workspaces" / "p13_scope_v2" / "handoff.json"
-)
-STATIC_WORKER_PROOF = STATIC_RELEASE_ROOT / "media-edge" / "direct-worker-proof.json"
-STATIC_CHECKPOINT = STATIC_RELEASE_ROOT / "checkpoints" / "checkpoint-1.json"
-STATIC_BUILD_TOKEN = STATIC_RELEASE_ROOT / "build-token.json"
-STATIC_P05_HANDOFF_SHA256 = "d0c37f46f37ed2de88b4efbfa56cdce1d767bb2fa23e161946beccf887d00ce5"
-STATIC_RELEASE_CONTRACT_SHA256 = "884e3aadf4fb0179f9ac6dde883a8ed3862a685e45256731b099430e1b79a267"
-STATIC_RELEASE_FIXTURE_SHA256 = "f218cd13d9508d83da954cf881a02180da55f3debd00a234cef34ee3165e2481"
-STATIC_SCANNER_SHA256 = "80fb16c457cf2ebbe829eb3592c5be7c40f5d2c2364fd664f126eb6bba14a6ad"
-STATIC_SCANNER_HANDOFF_SHA256 = "76222b4cee8f832f5619d146cc35a5ab7ea15792ea7ede53fcf127995c6e7a57"
-STATIC_WORKER_PROOF_SHA256 = "bb8e2a606c6f751e8303a71e626adda7e71552bf7f57741c97fca9b05aa8734e"
-STATIC_SCANNER_REQUIRED_OPTIONS = [
-    "--base-url",
-    "--media-base-url",
-    "--manifest",
-    "--publisher-journal",
-    "--scheduled-replay",
-    "--deployment-metadata",
-    "--expected-release-id",
-    "--expected-contract-hash",
-    "--expected-post-routes",
-    "--deployment-id",
-    "--deployment-sha256",
-    "--worker-version",
-    "--route-payload-sha256",
-    "--expected-scanner-sha256",
-]
+# The static site's own record of every image and the resized variants its
+# pages reference: the authority for which derivative keys an attachment owns.
+STATIC_MEDIA_INVENTORY = STATIC_SITE_ROOT / "src" / "data" / "media_variants.json"
+# Author bound to first-time static stagings: Adam Bertram (authors.json id 2).
+STATIC_DEFAULT_AUTHOR_ID = 2
+
 STATIC_PAGES_PROJECT = "ata-blog-static"
+STATIC_PAGES_POLL_TIMEOUT_SECONDS = 300
+STATIC_PAGES_POLL_INTERVAL_SECONDS = 2
+STATIC_PAGES_PENDING_STATUSES = frozenset({"idle", "active"})
+STATIC_PAGES_TERMINAL_FAILURE_STATUSES = frozenset({"failure", "canceled"})
 STATIC_MEDIA_BUCKET = "ata-blog-media"
+# Every image lives under this key prefix: the public media URL path the built
+# pages reference.
+_STATIC_MEDIA_KEY_PREFIX = "wp-content/uploads/"
+# Scheduling and publishing a post can run on different hosts, since `posts/`
+# is excluded from Dropbox sync. `_schedule_article` mirrors the resolved
+# featured image here, keyed by page id rather than content hash, so a due
+# publisher on a host with no local copy can recover it without first
+# knowing its bytes. See `_recover_scheduled_featured_image`.
+SCHEDULED_FEATURED_IMAGE_KEY_PREFIX = "wp-content/uploads/publisher/scheduled/"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 EMPTY_UUID = "00000000-0000-4000-8000-000000000000"
@@ -83,6 +76,21 @@ def _artifact_sha256(value: Any) -> str:
     return hashlib.sha256(_canonical_json_bytes(value)).hexdigest()
 
 
+def _is_failed_unbuilt_publisher_journal(journal: Dict[str, Any]) -> bool:
+    """Return whether a validated journal proves no build or later effect ran."""
+    effects = journal["effects"]
+    artifacts = journal["artifacts"]
+    return (
+        journal["state"] == "failed"
+        and effects["corpus_writes"] == 0
+        and effects["builds"] == 0
+        and effects["deployments"] == 0
+        and effects["notion_updates"] == 0
+        and artifacts["build_sha256"] == EMPTY_SHA256
+        and artifacts["deployment_id"] == journal["prior_state"]["deployment_id"]
+    )
+
+
 def _file_sha256(path: Path) -> str:
     """Return a file's SHA-256 without loading it all into memory."""
     digest = hashlib.sha256()
@@ -90,6 +98,100 @@ def _file_sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+# The time zone every naive timestamp in the static corpus is written in.
+# src/lib/routes.js siteLocalIso resolves a corpus timestamp under this zone.
+STATIC_SITE_TIME_ZONE = "America/Chicago"
+
+
+def _corpus_wall_clock(instant: str) -> str:
+    """Return one instant as the naive site-local wall clock the corpus stores.
+
+    All 1,332 imported posts carry pubDate/modDate as a naive site-local wall
+    clock, and the static site resolves a corpus timestamp under exactly that
+    rule. Astro normalizes a YAML timestamp to UTC before a route ever sees it,
+    which erases whatever offset the file carried, so a staged post written
+    with a UTC offset came out of the resolver five or six hours later than it
+    publishes. The only thing that had been correcting it was the harvested
+    published-time override in static-site/src/data/post_seo.json -- a record
+    that exists only for imported posts. A post the static site originates has
+    no such record and never will, so it is staged in the corpus's own
+    convention and needs no correction.
+    """
+    parsed = datetime.fromisoformat(instant.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ClientError(f"Static post publish date must carry a UTC offset: {instant}")
+    local = parsed.astimezone(ZoneInfo(STATIC_SITE_TIME_ZONE))
+    return local.replace(tzinfo=None, microsecond=0).isoformat()
+
+
+def _image_pixel_size(path: Path) -> Tuple[int, int]:
+    """Return one image file's real pixel width and height, read from its header.
+
+    The static site's head needs og:image:width and og:image:height for every
+    post. For an imported post those values were harvested from the live
+    page; for a post the static site originates there is nothing to
+    harvest, and the build never sees the image because the file goes straight
+    to R2. This publisher is the only component that holds the bytes, so it
+    measures them here and stages the result in the post's own frontmatter.
+
+    Only the formats this publisher actually uploads are decoded. An
+    unrecognized file raises instead of yielding a guessed size, because a wrong
+    og:image dimension is a rendering defect on every social card the post ever
+    produces.
+    """
+    header = path.read_bytes()[:64]
+    if header[:8] == b"\x89PNG\r\n\x1a\n":
+        if header[12:16] != b"IHDR":
+            raise ClientError(f"PNG has no leading IHDR chunk: {path}")
+        return (
+            int.from_bytes(header[16:20], "big"),
+            int.from_bytes(header[20:24], "big"),
+        )
+    if header[:4] == b"RIFF" and header[8:12] == b"WEBP":
+        chunk = header[12:16]
+        if chunk == b"VP8X":
+            return (
+                int.from_bytes(header[24:27], "little") + 1,
+                int.from_bytes(header[27:30], "little") + 1,
+            )
+        if chunk == b"VP8 ":
+            if header[23:26] != b"\x9d\x01\x2a":
+                raise ClientError(f"Lossy WebP has no start code: {path}")
+            return (
+                int.from_bytes(header[26:28], "little") & 0x3FFF,
+                int.from_bytes(header[28:30], "little") & 0x3FFF,
+            )
+        if chunk == b"VP8L":
+            if header[20] != 0x2F:
+                raise ClientError(f"Lossless WebP has no signature byte: {path}")
+            bits = int.from_bytes(header[21:25], "little")
+            return ((bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1)
+        raise ClientError(f"Unsupported WebP chunk {chunk!r}: {path}")
+    if header[:2] == b"\xff\xd8":
+        return _jpeg_pixel_size(path)
+    raise ClientError(f"Cannot measure the pixel size of {path}: unrecognized image format")
+
+
+def _jpeg_pixel_size(path: Path) -> Tuple[int, int]:
+    """Return a JPEG's pixel size from its first start-of-frame marker."""
+    data = path.read_bytes()
+    offset = 2
+    while offset + 4 <= len(data):
+        if data[offset] != 0xFF:
+            raise ClientError(f"JPEG segment is not marker-aligned: {path}")
+        marker = data[offset + 1]
+        length = int.from_bytes(data[offset + 2 : offset + 4], "big")
+        # SOF0-SOF15 carry the frame dimensions; DHT (C4), DAC (CC) and the
+        # RSTn markers (D0-D7) share the C0-CF range and do not.
+        if 0xC0 <= marker <= 0xCF and marker not in (0xC4, 0xC8, 0xCC):
+            return (
+                int.from_bytes(data[offset + 7 : offset + 9], "big"),
+                int.from_bytes(data[offset + 5 : offset + 7], "big"),
+            )
+        offset += 2 + length
+    raise ClientError(f"JPEG has no start-of-frame segment: {path}")
 
 
 def _file_md5(path: Path) -> str:
@@ -114,6 +216,69 @@ def _tree_sha256(root: Path) -> str:
                 digest.update(block)
         digest.update(b"\0")
     return digest.hexdigest()
+
+
+def _static_corpus_sha256() -> str:
+    """Match the release manifest's exact static corpus membership hash.
+
+    This must stay byte-for-byte identical to ``release_manifest.mjs``'s
+    ``hashCorpus()``: the same roots (``src/data/posts``, ``src/data/pages``,
+    ``src/partials/pages``), the same fixed data files, and the same record
+    join (``relative_path<TAB>file_sha256`` per file, sorted, then SHA-256 of
+    the newline-terminated concatenation). The build itself does not write into
+    these roots -- its markdown generation targets ``dist/`` -- so when this
+    membership drifts from the JS side the staged hash can never equal the
+    in-transaction build manifest's ``inputs.corpus_sha256`` and the static leg
+    aborts (agent-issues#85). ``test_staged_corpus_hash_matches_release_manifest_hash_corpus``
+    cross-checks the real JS hash against this function on one hermetic staged
+    corpus so a future drift fails the suite instead of a live publish.
+    """
+    roots = (
+        STATIC_SITE_ROOT / "src" / "data" / "posts",
+        STATIC_SITE_ROOT / "src" / "data" / "pages",
+        STATIC_SITE_ROOT / "src" / "partials" / "pages",
+    )
+    files = []
+    for root in roots:
+        if not root.is_dir():
+            raise ClientError(f"Static corpus root is missing: {root}")
+        for candidate in root.rglob("*"):
+            if candidate.is_symlink():
+                raise ClientError(f"Static corpus contains a symbolic link: {candidate}")
+            if candidate.is_file():
+                files.append(candidate)
+            elif not candidate.is_dir():
+                raise ClientError(f"Static corpus contains a non-regular input: {candidate}")
+    for relative_path in (
+        "src/data/authors.json",
+        "src/data/terms.json",
+        "src/data/redirects.json",
+        "src/data/home_featured.json",
+        "src/data/zero_post_authors.json",
+        "src/data/post_seo.json",
+        "src/data/page_seo.json",
+        "src/data/archive_seo.json",
+        # The guid each imported post carried at publish time. It is content,
+        # not configuration: it decides what every feed emits as an item's
+        # identity, so a change here changes the built output and must move the
+        # corpus hash. Mirrors release_manifest.mjs hashCorpus() membership.
+        "src/data/post_guids.json",
+    ):
+        candidate = STATIC_SITE_ROOT / relative_path
+        if candidate.is_symlink() or not candidate.is_file():
+            raise ClientError(f"Static corpus file is missing or non-regular: {candidate}")
+        files.append(candidate)
+
+    records = []
+    for path in sorted(set(files)):
+        if path.stat().st_size == 0:
+            raise ClientError(f"Static corpus file is empty: {path}")
+        relative_path = path.relative_to(STATIC_SITE_ROOT).as_posix()
+        records.append(f"{relative_path}\t{_file_sha256(path)}")
+    if not records:
+        raise ClientError("Static corpus file membership is empty")
+    records.sort()
+    return hashlib.sha256(("\n".join(records) + "\n").encode("utf-8")).hexdigest()
 
 
 def _atomic_write_json(path: Path, value: Any) -> None:
@@ -169,35 +334,20 @@ def _loads_notion_text_json(raw: str) -> Any:
 
 
 class AtaBlogClient:
-    """Wrapper client for wordpress and notion CLIs."""
+    """Client for the notion CLI and the static site publisher."""
 
     def __init__(self):
         self.config = get_config()
-        self._wordpress_checked = False
         # Cache of {property_name: notion_type} from the live database schema.
         # Populated lazily by get_property_types() so a single CLI invocation
         # fetches the schema at most once.
         self._property_types_cache: Optional[Dict[str, str]] = None
+        # Cache of the static site's media inventory, read once per invocation
+        # by the mirroring step that enumerates an attachment's size variants.
+        self._static_media_inventory_cache: Optional[Dict[str, Any]] = None
 
-        # Only check Notion CLI on init - WordPress is checked lazily when needed
         if not self.config.is_notion_available():
             raise ClientError("notion CLI not found. Install it first.")
-
-    def _ensure_wordpress(self):
-        """Lazily check WordPress CLI availability on first WordPress operation."""
-        if not self._wordpress_checked:
-            if not self.config.is_wordpress_available():
-                raise ClientError("wordpress CLI not found. Install it first.")
-            self._wordpress_checked = True
-
-    def _run_wordpress(self, args: List[str], timeout: int = 60) -> subprocess.CompletedProcess:
-        """Run a wordpress CLI command."""
-        self._ensure_wordpress()
-        cmd = ["wordpress"] + args
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        if result.returncode != 0:
-            raise ClientError(f"wordpress error: {result.stderr.strip()}")
-        return result
 
     def _run_notion(self, args: List[str], timeout: int = 60) -> subprocess.CompletedProcess:
         """Run a notion CLI command."""
@@ -245,11 +395,10 @@ class AtaBlogClient:
         if featured_image:
             return AtaBlogClient._validate_featured_image(featured_image)
 
+        compact_page_id = AtaBlogClient._compact_page_id(page_id)
         candidates = [
-            Path("posts") / page_id / "featured_image.webp",
-            Path("posts") / page_id / "featured_image.png",
-            Path("posts") / page_id / "featured_image.jpg",
-            Path("posts") / page_id / "featured_image.jpeg",
+            STATIC_REPOSITORY_ROOT / "posts" / compact_page_id / f"featured_image.{extension}"
+            for extension in ("webp", "png", "jpg", "jpeg")
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -263,29 +412,149 @@ class AtaBlogClient:
             "Run image-gen first or pass --featured-image PATH."
         )
 
+    def _upload_scheduled_featured_image(self, page_id: str, image_path: Path) -> None:
+        """Mirror a just-resolved featured image into R2 under its page-keyed path.
+
+        Called by `_schedule_article` while the image still exists on the
+        scheduling host, so the due publisher can recover it on another host.
+        """
+        key = SCHEDULED_FEATURED_IMAGE_KEY_PREFIX + self._compact_page_id(page_id) + image_path.suffix.lower()
+        content_type = mimetypes.guess_type(image_path.name)[0]
+        if not content_type:
+            raise ClientError(f"Could not determine image content type: {image_path}")
+        self._run_checked_command(
+            [
+                "cloudflare",
+                "r2",
+                "objects",
+                "put",
+                STATIC_MEDIA_BUCKET,
+                key,
+                "--file",
+                str(image_path),
+                "--content-type",
+                content_type,
+            ],
+            timeout=300,
+            label="Scheduled featured image upload",
+        )
+
+    def _existing_scheduled_featured_image(self, key: str) -> Optional[Dict[str, Any]]:
+        """Return the R2 object at one scheduled-featured-image key, else None."""
+        result = self._run_checked_command(
+            ["cloudflare", "r2", "objects", "list", STATIC_MEDIA_BUCKET, "--prefix", key, "--limit", "2"],
+            timeout=300,
+            label="Scheduled featured image lookup",
+        )
+        objects = self._parse_checked_command_json(result, "Scheduled featured image lookup")
+        if not isinstance(objects, list):
+            raise ClientError("Scheduled featured image lookup did not return a JSON array")
+        matches = [item for item in objects if item.get("key") == key]
+        if len(matches) > 1:
+            raise ClientError(f"Scheduled featured image lookup returned duplicate keys for {key}")
+        return matches[0] if matches else None
+
+    def _recover_scheduled_featured_image(self, page_id: str) -> Optional[Path]:
+        """Download the scheduled featured image from R2 to its local conventional path.
+
+        Returns the recovered local path, or None if no host ever scheduled
+        this page with `_upload_scheduled_featured_image`.
+        """
+        compact_page_id = self._compact_page_id(page_id)
+        for extension in ("webp", "png", "jpg", "jpeg"):
+            key = f"{SCHEDULED_FEATURED_IMAGE_KEY_PREFIX}{compact_page_id}.{extension}"
+            remote = self._existing_scheduled_featured_image(key)
+            if remote is None:
+                continue
+            local_path = STATIC_REPOSITORY_ROOT / "posts" / compact_page_id / f"featured_image.{extension}"
+            local_path.parent.mkdir(parents=True, exist_ok=True)
+            self._run_checked_command(
+                [
+                    "cloudflare", "r2", "objects", "get", STATIC_MEDIA_BUCKET, key,
+                    "--output", str(local_path),
+                ],
+                timeout=300,
+                label="Scheduled featured image download",
+            )
+            self._verify_recovered_featured_image(local_path, remote, key)
+            return local_path
+        return None
+
     @staticmethod
-    def _prepare_wordpress_excerpt(excerpt: str) -> str:
-        """Return a WordPress-safe SEO excerpt without mutating Notion metadata."""
-        normalized = " ".join(str(excerpt).split())
-        wordpress_limit = 300
-        target_limit = 200
+    def _verify_recovered_featured_image(local_path: Path, remote: Dict[str, Any], key: str) -> None:
+        """Verify a just-downloaded recovery image's bytes against its R2 object.
 
-        if len(normalized) <= wordpress_limit:
-            return normalized
+        `_validate_featured_image` only checks existence, size, and extension,
+        so a truncated or corrupted download would otherwise pass straight
+        through and publish bad bytes. Compare against the size and MD5 ETag
+        the earlier R2 list lookup already recorded for this object.
+        """
+        try:
+            expected_size = int(remote["size"])
+        except (KeyError, TypeError, ValueError) as exc:
+            local_path.unlink(missing_ok=True)
+            raise ClientError(
+                f"Scheduled featured image object {key} has no valid size"
+            ) from exc
+        expected_etag = str(remote.get("etag") or "").strip('"').lower()
+        actual_size = local_path.stat().st_size
+        actual_etag = _file_md5(local_path)
+        if actual_size != expected_size or actual_etag != expected_etag:
+            local_path.unlink(missing_ok=True)
+            raise ClientError(
+                f"Downloaded scheduled featured image does not match its R2 object {key} "
+                f"(expected size={expected_size} etag={expected_etag}, "
+                f"got size={actual_size} etag={actual_etag})"
+            )
 
-        sentence_cutoffs = [
-            normalized.rfind(mark, 0, target_limit + 1)
-            for mark in (".", "!", "?")
+    def _resolve_featured_image_with_recovery(
+        self, page_id: str, featured_image: Optional[str]
+    ) -> Path:
+        """Resolve the publish-time featured image, recovering it from R2 if needed.
+
+        `_resolve_featured_image` only looks at this host's local filesystem,
+        which is empty for a post scheduled on a different host. Only an
+        implicit (conventional) lookup falls back to R2; an explicit
+        `--featured-image PATH` that is missing fails exactly as before.
+        """
+        try:
+            return self._resolve_featured_image(page_id, featured_image)
+        except ClientError:
+            if featured_image:
+                raise
+            recovered = self._recover_scheduled_featured_image(page_id)
+            if recovered is None:
+                raise
+            return self._validate_featured_image(str(recovered))
+
+    @staticmethod
+    def _require_publish_metadata(article: Dict[str, Any]) -> None:
+        missing = [
+            field for field in ("Keywords", "Category", "Tags", "Excerpt")
+            if not article.get(field)
         ]
-        sentence_cutoff = max(sentence_cutoffs)
-        if sentence_cutoff >= 150:
-            return normalized[: sentence_cutoff + 1]
+        if missing:
+            raise ClientError(f"Missing required Notion fields: {', '.join(missing)}")
 
-        cutoff = normalized.rfind(" ", 0, target_limit + 1)
-        if cutoff < 150:
-            cutoff = target_limit
-        shortened = normalized[:cutoff].rstrip(" ,;:-")
-        return shortened[:wordpress_limit]
+    @staticmethod
+    def _notion_term_names(article: Dict[str, Any], field: str) -> List[str]:
+        """Split one comma-separated Notion taxonomy field into term names."""
+        return [
+            name.strip()
+            for name in str(article.get(field) or "").split(",")
+            if name.strip()
+        ]
+
+    def _sponsored_tag_ids(self, article: Dict[str, Any], page_id: str) -> List[int]:
+        """Return the Sponsored tag id for a Sponsored `Type`, else no ids."""
+        if not article.get("Type"):
+            raise ClientError(f"Notion page {page_id} has no Type")
+        if not str(article["Type"]).startswith("Sponsored"):
+            return []
+        # corpus.py imports this module, so the name is imported here.
+        from .corpus import SPONSORED_TAG_NAME
+
+        return self._resolve_static_term_ids("tags", [SPONSORED_TAG_NAME])
 
     @staticmethod
     def _validate_publish_markdown(markdown_content: str) -> None:
@@ -300,19 +569,6 @@ class AtaBlogClient:
                 "Run the image-gen phase before publishing.\n"
                 + "\n".join(placeholder_lines)
             )
-
-    # WordPress passthrough methods
-    def wordpress_auth_status(self) -> Dict[str, Any]:
-        result = self._run_wordpress(["auth", "status"])
-        return json.loads(result.stdout)
-
-    def list_posts(self, limit: int = 100, filters: Optional[Dict] = None) -> List[Dict]:
-        args = ["posts", "list", "--limit", str(limit)]
-        if filters:
-            filter_str = ",".join(f"{k}={v}" for k, v in filters.items())
-            args.extend(["--filter", filter_str])
-        result = self._run_wordpress(args)
-        return json.loads(result.stdout)
 
     # Notion article methods
     def list_articles(
@@ -597,8 +853,6 @@ class AtaBlogClient:
 
     DEFAULT_IDEA_TEMPLATE_ID = "2e05d9c8-5b2b-8065-8aca-e8da0e179b97"
 
-    VALID_CATEGORIES = ("IT Ops", "Home Ops", "DevOps", "Cloud", "Information Security", "Ebook")
-
     def create_article(
         self,
         title: str,
@@ -614,15 +868,27 @@ class AtaBlogClient:
         Args:
             title: Article title
             excerpt: Article description/synopsis
-            category: Category (must be one of VALID_CATEGORIES)
+            category: Category from the static site's terms.json
             keywords: Optional comma-separated SEO keywords
             post_type: Post type (default: Standard)
             status: Optional status (defaults to Idea)
             template_id: Optional template ID (defaults to Standard ATA Tutorial AI-Created Idea)
         """
-        if category not in self.VALID_CATEGORIES:
+        # Import here because corpus imports this module for its static-site root.
+        # The taxonomy must be read at creation time so this command follows the
+        # same source of truth as categories list and publishing validation.
+        from .corpus import list_terms
+
+        categories = list_terms("categories")
+        category_names = []
+        for term in categories:
+            name = term.get("name") if isinstance(term, dict) else None
+            if not isinstance(name, str) or not name:
+                raise ClientError("Static site categories contain a term with no valid name")
+            category_names.append(name)
+        if category not in category_names:
             raise ClientError(
-                f"Invalid category '{category}'. Must be one of: {', '.join(self.VALID_CATEGORIES)}"
+                f"Invalid category '{category}'. Must be one of: {', '.join(category_names)}"
             )
 
         # NOTE: When --from-template is used, --select flags for Category/Type are
@@ -734,147 +1000,49 @@ class AtaBlogClient:
             raise ClientError("Notion Status property has no options in the live database schema")
         return statuses
 
-    def resolve_category_by_name(self, name: str) -> int:
-        """Find WordPress category ID by exact name match."""
-        result = self._run_wordpress(["categories", "list"])
-        categories = json.loads(result.stdout)
-        for cat in categories:
-            if cat.get("name", "").lower() == name.lower():
-                return cat["id"]
-        raise ClientError(f"Category not found: {name}")
-
-    def resolve_tag_by_name(self, name: str) -> int:
-        """Find WordPress tag ID by exact name match."""
-        return self.resolve_tags_by_names([name])[0]
-
-    def _resolve_tag_ids_from_filter(self, names: List[str]) -> Dict[str, int]:
-        """Find tag IDs with per-name exact filters so deep tag catalogs work."""
-        found: Dict[str, int] = {}
-        for name in names:
-            normalized_name = name.lower()
-            result = self._run_wordpress([
-                "tags", "list", "--filter", f"name:eq:{name}", "--limit", "1000"
-            ])
-            tags = json.loads(result.stdout)
-            for tag in tags:
-                tag_name = tag.get("name")
-                if tag_name and tag_name.lower() == normalized_name:
-                    found[normalized_name] = tag["id"]
-                    break
-        return found
-
-    def resolve_tags_by_names(self, names: List[str]) -> List[int]:
-        """Find WordPress tag IDs by exact name match, reporting all misses."""
-        unique_names = list(dict.fromkeys(name.strip() for name in names if name.strip()))
-        result = self._run_wordpress(["tags", "list", "--limit", "1000"])
-        tags = json.loads(result.stdout)
-        tags_by_name = {
-            tag.get("name", "").lower(): tag["id"]
-            for tag in tags
-            if tag.get("name")
-        }
-        missing_after_bulk = [name for name in unique_names if name.lower() not in tags_by_name]
-        if missing_after_bulk:
-            tags_by_name.update(self._resolve_tag_ids_from_filter(missing_after_bulk))
-        missing = [name for name in unique_names if name.lower() not in tags_by_name]
-        if missing:
-            raise ClientError(f"WordPress tag(s) not found: {', '.join(missing)}")
-        return [tags_by_name[name.strip().lower()] for name in names if name.strip()]
-
-    def check_duplicate_post(self, slug: str) -> bool:
-        """Check if a WordPress post with this slug already exists."""
-        result = self._run_wordpress(["posts", "list", "--filter", f"slug:eq:{slug}"])
-        posts = json.loads(result.stdout)
-        return len(posts) > 0
-
-    # Kept as an override seam for tests; normal runs use the active CLI profile.
-    _RESERVATION_DIR: Optional[Path] = None
-
     # Minimum lead time a returned slot must have over true UTC now. Acts as
     # a defense-in-depth guard independent of the timezone-correctness of the
     # code above it: if a future bug reintroduces a naive/local "now", this
     # still refuses to hand back a slot that isn't safely in the future.
     _MIN_SCHEDULE_LEAD = timedelta(minutes=30)
 
-    def _schedule_reservation_dir(self) -> Path:
-        """Return the active-profile schedule reservation directory."""
-        if self._RESERVATION_DIR is not None:
-            return self._RESERVATION_DIR
-        return self.config.get_profile_data_dir() / "static-publisher" / "schedule-reservations"
+    # Publishing window, in UTC hours. A slot is valid when its hour is in
+    # [_SCHEDULE_WINDOW_START_HOUR, _SCHEDULE_WINDOW_END_HOUR): 09:00 is the
+    # earliest slot of a weekday and 16:00 the latest, so nothing publishes at
+    # or after 5pm UTC.
+    _SCHEDULE_WINDOW_START_HOUR = 9
+    _SCHEDULE_WINDOW_END_HOUR = 17
 
     def _schedule_lock_path(self) -> Path:
-        """Return the one lock serializing schedule reads and reservations."""
-        return self._schedule_reservation_dir() / ".schedule.lock"
+        """Return the one lock serializing slot reads, picks, and the Notion write."""
+        return self._publisher_runtime_root() / "schedule.lock"
 
-    def _read_schedule_reservations(self) -> List[datetime]:
-        """Read pending reservations and reject corrupt reservation state."""
-        times = []
-        reservation_dir = self._schedule_reservation_dir()
-        if not reservation_dir.exists():
-            return times
-        for f in reservation_dir.glob("*.json"):
-            try:
-                data = json.loads(f.read_text())
-                expires = datetime.fromisoformat(data["expires"])
-                slot = datetime.fromisoformat(data["slot"])
-                if expires.tzinfo is None or slot.tzinfo is None:
-                    f.unlink()
-                    continue
-                if expires < datetime.now(timezone.utc):
-                    f.unlink()  # Expired reservation
-                else:
-                    times.append(slot.astimezone(timezone.utc))
-            except (json.JSONDecodeError, KeyError, ValueError) as exc:
-                raise ClientError(f"Corrupt schedule reservation {f}: {exc}") from exc
-        return times
-
-    def _create_schedule_reservation(self, slot: str) -> None:
-        """Create one deterministic reservation while the schedule lock is held."""
-        reservation_dir = self._schedule_reservation_dir()
-        reservation_dir.mkdir(parents=True, exist_ok=True)
-        reservation = {
-            "slot": slot,
-            "expires": (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat(),
-            "pid": os.getpid(),
-        }
-        slot_key = hashlib.sha256(slot.encode("utf-8")).hexdigest()
-        path = reservation_dir / f"{slot_key}.json"
-        try:
-            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError as exc:
-            raise ClientError(f"Schedule slot is already reserved: {slot}") from exc
-        with os.fdopen(descriptor, "wb") as handle:
-            handle.write(_canonical_json_bytes(reservation) + b"\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-
-    def clear_schedule_reservation(self) -> None:
-        """Clear schedule reservations created by this process."""
-        reservation_dir = self._schedule_reservation_dir()
-        if reservation_dir.exists():
-            with self._exclusive_publisher_lock(self._schedule_lock_path()):
-                for path in reservation_dir.glob("*.json"):
-                    document = self._load_required_json(path, "schedule reservation")
-                    if document.get("pid") == os.getpid():
-                        path.unlink()
-
-    def _read_publisher_schedule_slots(self) -> List[datetime]:
-        """Return future slots already committed to publisher runtime records."""
-        runtime_root = self._publisher_runtime_root()
-        if not runtime_root.exists():
-            return []
+    def _read_scheduled_slots(self) -> List[datetime]:
+        """Read occupied slots from the Notion pages in Status Scheduled."""
+        limit = 100
+        pages = self.list_articles(status="Scheduled", limit=limit)
+        if len(pages) >= limit:
+            raise ClientError(
+                f"Scheduled page query reached the {limit}-page list limit; "
+                "occupied slots cannot be read completely"
+            )
         occupied: List[datetime] = []
-        for path in sorted((runtime_root / "transactions").glob("*.runtime.json")):
+        for page in pages:
+            value = page["Publish Date"]
+            if not value:
+                raise ClientError(f"Scheduled Notion page {page['id']} has no Publish Date")
             try:
-                document = json.loads(path.read_text())
-            except json.JSONDecodeError as exc:
-                raise ClientError(f"Corrupt publisher runtime record {path}: {exc}") from exc
-            slot = document.get("scheduled_date")
-            if not slot:
-                continue
-            parsed = datetime.fromisoformat(slot.replace("Z", "+00:00"))
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ClientError(
+                    f"Scheduled Notion page {page['id']} has a Publish Date that is "
+                    f"not one ISO 8601 timestamp: {value}"
+                ) from exc
             if parsed.tzinfo is None:
-                raise ClientError(f"Publisher schedule is not UTC-aware: {path}")
+                raise ClientError(
+                    f"Scheduled Notion page {page['id']} has a Publish Date "
+                    f"without a UTC offset: {value}"
+                )
             occupied.append(parsed.astimezone(timezone.utc))
         return occupied
 
@@ -890,56 +1058,129 @@ class AtaBlogClient:
         truncated = value.replace(minute=0, second=0, microsecond=0)
         return truncated if truncated == value else truncated + timedelta(hours=1)
 
-    def _find_next_schedule_slot_unlocked(self) -> str:
+    @classmethod
+    def _in_schedule_window(cls, value: datetime) -> bool:
+        """Return True when the value's hour is inside the publishing window."""
+        return cls._SCHEDULE_WINDOW_START_HOUR <= value.hour < cls._SCHEDULE_WINDOW_END_HOUR
+
+    @classmethod
+    def _next_window_start(cls, value: datetime) -> datetime:
+        """Return the earliest window opening at or after an out-of-window value.
+
+        Only called for values the window guard rejected, so the hour is either
+        before the window opens (roll forward to today's opening) or at/after it
+        closes (roll forward to tomorrow's opening). Weekend handling stays with
+        the loop's weekend guard, which re-runs on the returned value.
+        """
+        day = value if value.hour < cls._SCHEDULE_WINDOW_START_HOUR else value + timedelta(days=1)
+        return day.replace(
+            hour=cls._SCHEDULE_WINDOW_START_HOUR,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+    @staticmethod
+    def _parse_schedule_window(
+        schedule_after: Optional[str], schedule_before: Optional[str],
+    ) -> Optional[Tuple[datetime, datetime]]:
+        """Parse an optional inclusive/exclusive, timezone-aware scheduling window."""
+        if schedule_after is None and schedule_before is None:
+            return None
+        if schedule_after is None or schedule_before is None:
+            raise ClientError("--schedule-after and --schedule-before must be supplied together")
+        bounds = []
+        for name, value in (("--schedule-after", schedule_after), ("--schedule-before", schedule_before)):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ClientError(f"{name} is not valid ISO 8601: {value}") from exc
+            if parsed.tzinfo is None:
+                raise ClientError(f"{name} must include a UTC offset")
+            bounds.append(parsed.astimezone(timezone.utc))
+        if bounds[0] >= bounds[1]:
+            raise ClientError("--schedule-after must precede --schedule-before")
+        return bounds[0], bounds[1]
+
+    @staticmethod
+    def _require_schedule_in_window(
+        value: str, schedule_window: Optional[Tuple[datetime, datetime]],
+    ) -> None:
+        """Reject a slot outside the frozen [start, end) scheduling window."""
+        if schedule_window is None:
+            return
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ClientError(f"Schedule date is not valid ISO 8601: {value}") from exc
+        if parsed.tzinfo is None:
+            raise ClientError("Schedule date must include a UTC offset")
+        if not schedule_window[0] <= parsed < schedule_window[1]:
+            raise ClientError(f"Schedule date is outside the frozen scheduling window: {value}")
+
+    def find_next_schedule_slot(
+        self, schedule_window: Optional[Tuple[datetime, datetime]] = None,
+    ) -> str:
         """
         Find next available publication slot respecting:
         - Max 2 posts per weekday
         - 4+ hour gap between posts
         - No weekends (roll to Monday)
         - Posts scheduled between 9am-5pm UTC only
-        - Pending reservations from concurrent processes
+
+        Takes no lock and writes nothing: _schedule_article holds the schedule
+        lock across this read, the pick, and the Notion write.
 
         All arithmetic here is in UTC. The host machine's local timezone is
-        never read: the wordpress CLI writes date_gmt (unambiguous UTC), so
-        "now" must be true UTC now, not this process's local wall-clock time.
+        never read: schedule slots are unambiguous UTC, so "now" must be true
+        UTC now, not this process's local wall-clock time.
 
         Returns:
             ISO 8601 UTC datetime string with an explicit +00:00 offset
             (e.g., "2026-01-10T09:00:00+00:00").
         """
-        occupied_times = self._read_publisher_schedule_slots()
-        occupied_times.extend(self._read_schedule_reservations())
+        occupied_times = self._read_scheduled_slots()
 
         # Start from true UTC now, round UP to the next hour boundary so the
         # slot is never earlier than "now" plus a full hour of lead time.
         now = datetime.now(timezone.utc)
         candidate = self._ceil_to_hour(now + timedelta(hours=1))
-
-        # If before 9am, start at 9am
-        if candidate.hour < 9:
-            candidate = candidate.replace(hour=9)
+        if schedule_window is not None:
+            candidate = max(candidate, self._ceil_to_hour(schedule_window[0]))
 
         max_iterations = 100  # Safety limit
         for _ in range(max_iterations):
+            if schedule_window is not None and candidate >= schedule_window[1]:
+                raise ClientError("No available schedule slot inside the frozen scheduling window")
             # Skip weekends (5=Saturday, 6=Sunday)
             if candidate.weekday() >= 5:
                 days_until_monday = 7 - candidate.weekday()
-                candidate = (candidate + timedelta(days=days_until_monday)).replace(hour=9, minute=0)
+                candidate = (candidate + timedelta(days=days_until_monday)).replace(
+                    hour=self._SCHEDULE_WINDOW_START_HOUR, minute=0, second=0, microsecond=0
+                )
+                continue
+
+            # Single publishing-window guard. Every candidate passes through
+            # here before it can be accepted, whatever produced it: the initial
+            # seed, a 4-hour conflict push that ran past 5pm or past midnight,
+            # or the lead-time recovery below. Keeping the window in one place
+            # is what stops an out-of-hours slot from slipping through.
+            if not self._in_schedule_window(candidate):
+                candidate = self._next_window_start(candidate)
                 continue
 
             # Count posts on same day
             same_day = [t for t in occupied_times if t.date() == candidate.date()]
             if len(same_day) >= 2:
-                candidate = (candidate + timedelta(days=1)).replace(hour=9, minute=0)
+                candidate = (candidate + timedelta(days=1)).replace(
+                    hour=self._SCHEDULE_WINDOW_START_HOUR, minute=0, second=0, microsecond=0
+                )
                 continue
 
             # Check 4+ hour gap
             conflicts = [t for t in occupied_times if abs((t - candidate).total_seconds()) < 4 * 3600]
             if conflicts:
                 candidate = candidate + timedelta(hours=4)
-                # If pushed past reasonable hours (after 5pm), go to next day
-                if candidate.hour >= 17:
-                    candidate = (candidate + timedelta(days=1)).replace(hour=9, minute=0)
                 continue
 
             # Defense-in-depth guard: refuse to hand back a slot that is not
@@ -947,37 +1188,34 @@ class AtaBlogClient:
             # matter how "candidate" was derived above.
             if candidate < datetime.now(timezone.utc) + self._MIN_SCHEDULE_LEAD:
                 candidate = self._ceil_to_hour(datetime.now(timezone.utc) + timedelta(hours=1))
-                if candidate.hour < 9:
-                    candidate = candidate.replace(hour=9)
                 continue
 
-            # Found valid slot - reserve it before returning
             slot = candidate.isoformat()
-            self._create_schedule_reservation(slot)
+            self._require_schedule_in_window(slot, schedule_window)
             return slot
 
         raise ClientError("Could not find available schedule slot within iteration limit")
 
-    def find_next_schedule_slot(self) -> str:
-        """Atomically select and reserve the next available UTC schedule slot."""
-        with self._exclusive_publisher_lock(self._schedule_lock_path()):
-            return self._find_next_schedule_slot_unlocked()
-
-    def _reserve_explicit_schedule_slot(self, value: str) -> str:
-        """Validate and atomically reserve an explicit UTC-aware slot."""
+    @staticmethod
+    def _parse_schedule_date(value: str) -> datetime:
+        """Parse --date, rejecting anything but a UTC-offset-aware timestamp."""
         try:
             parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
         except ValueError as exc:
             raise ClientError(f"--date is not valid ISO 8601: {value}") from exc
         if parsed.tzinfo is None:
             raise ClientError("--date must include a UTC offset")
+        return parsed
+
+    def _require_free_explicit_slot(
+        self, value: str, schedule_window: Optional[Tuple[datetime, datetime]] = None,
+    ) -> str:
+        """Validate an explicit UTC-aware slot no Scheduled page occupies."""
+        parsed = self._parse_schedule_date(value)
         slot = parsed.astimezone(timezone.utc).isoformat()
-        with self._exclusive_publisher_lock(self._schedule_lock_path()):
-            occupied = self._read_publisher_schedule_slots()
-            occupied.extend(self._read_schedule_reservations())
-            if any(existing == parsed.astimezone(timezone.utc) for existing in occupied):
-                raise ClientError(f"Schedule slot is already occupied: {slot}")
-            self._create_schedule_reservation(slot)
+        self._require_schedule_in_window(slot, schedule_window)
+        if parsed in self._read_scheduled_slots():
+            raise ClientError(f"Schedule slot is already occupied: {slot}")
         return slot
 
     def _publisher_runtime_root(self) -> Path:
@@ -1017,11 +1255,6 @@ class AtaBlogClient:
             "runtime": transaction_root / f"{idempotency_key}.runtime.json",
             "stage_plan": transaction_root / f"{idempotency_key}.stage-plan.json",
             "backup": transaction_root / f"{idempotency_key}.corpus-backup",
-            "scanner": transaction_root / f"{idempotency_key}.scanner.json",
-            "replay": transaction_root / f"{idempotency_key}.scheduled-replay.json",
-            "deployment_metadata": (
-                transaction_root / f"{idempotency_key}.deployment-metadata.json"
-            ),
         }
 
     def _publisher_page_lock_path(self, page_id: str) -> Path:
@@ -1042,313 +1275,46 @@ class AtaBlogClient:
             raise ClientError(f"Invalid {label} {path}: expected a JSON object")
         return document
 
-    def _p05_gate_a_bindings(self) -> Dict[str, str]:
-        """Load the independently sealed Gate A bindings required by P05."""
-        checkpoint = self._load_required_json(STATIC_CHECKPOINT, "Checkpoint 1")
-        gate_a = checkpoint.get("gate_a")
-        direct_result = gate_a.get("direct_result") if isinstance(gate_a, dict) else None
-        gates = direct_result.get("gates") if isinstance(direct_result, dict) else None
-        if (
-            checkpoint.get("package_id") != "P06"
-            or checkpoint.get("phase_id") != "P06.checkpoint_1"
-            or checkpoint.get("checkpoint_id") != "CHECKPOINT_1"
-            or checkpoint.get("status") != "PASS"
-            or not isinstance(gate_a, dict)
-            or gate_a.get("status") != "PASS"
-            or not isinstance(direct_result, dict)
-            or direct_result.get("valid") is not True
-            or not isinstance(gates, dict)
-        ):
-            raise ClientError("Checkpoint 1 does not bind a passing Gate A")
-
-        baseline = gates.get("baseline")
-        if (
-            not isinstance(baseline, dict)
-            or baseline.get("status") != "pass"
-            or baseline.get("sha256") != gate_a.get("baseline_index_sha256")
-        ):
-            raise ClientError("Checkpoint 1 baseline gate binding is invalid")
-
-        binding_sources = {
-            "expectedBaselineIndexSha256": gate_a.get("baseline_index_sha256"),
-            "expectedBaselineOracleSha256": gate_a.get("baseline_oracle_sha256"),
+    def _resolve_static_term_ids(self, taxonomy: str, names: List[str]) -> List[int]:
+        """Resolve Notion taxonomy names to static term IDs via terms.json."""
+        if not names:
+            raise ClientError(
+                f"Cannot stage a static post without {taxonomy}: the Notion "
+                "page has none set"
+            )
+        terms_path = STATIC_SITE_ROOT / "src" / "data" / "terms.json"
+        terms = self._load_required_json(terms_path, "static corpus terms")
+        entries = terms.get(taxonomy)
+        if not isinstance(entries, list):
+            raise ClientError(f"Static corpus terms has no {taxonomy} list")
+        by_name = {
+            str(entry.get("name", "")).casefold(): int(entry["id"])
+            for entry in entries
+            if isinstance(entry, dict) and entry.get("id") is not None
         }
-        for binding_name, gate_name in (
-            ("expectedRedirectExportSha256", "redirect"),
-            ("expectedMediaInventorySha256", "media"),
-            ("expectedProvenanceLedgerSha256", "provenance"),
-        ):
-            gate = gates.get(gate_name)
-            if not isinstance(gate, dict) or gate.get("status") != "pass":
-                raise ClientError(f"Checkpoint 1 {gate_name} gate binding is invalid")
-            binding_sources[binding_name] = gate.get("sha256")
-
-        for binding_name, value in binding_sources.items():
-            if not re.fullmatch(r"[0-9a-f]{64}", str(value)):
+        ids = []
+        for name in names:
+            key = name.casefold()
+            if key not in by_name:
                 raise ClientError(
-                    f"Checkpoint 1 Gate A binding {binding_name} is not SHA-256"
+                    f"Unknown static corpus {taxonomy} name: {name!r} "
+                    f"(not present in {terms_path})"
                 )
-        return binding_sources
+            ids.append(by_name[key])
+        return ids
 
     def _load_static_release_manifest(self) -> Dict[str, Any]:
-        """Load the integrated manifest and bind the P05/P13 v2 contracts."""
-        p05_handoff = self._load_required_json(STATIC_P05_HANDOFF, "P05 v2 handoff")
-        actual_p05_handoff_hash = _file_sha256(STATIC_P05_HANDOFF)
-        if actual_p05_handoff_hash != STATIC_P05_HANDOFF_SHA256:
-            raise ClientError(
-                "P05 v2 handoff bytes changed: "
-                f"expected {STATIC_P05_HANDOFF_SHA256}, got {actual_p05_handoff_hash}"
-            )
-        p05_sources = p05_handoff.get("source_hashes")
-        if (
-            p05_handoff.get("package_id") != "P05-SCOPE-V2"
-            or p05_handoff.get("phase_id")
-            != "P05.release_interfaces.scope_amendment_v2"
-            or p05_handoff.get("status") != "PASS"
-            or not isinstance(p05_sources, dict)
-            or p05_sources.get("static-site/scripts/release_manifest.mjs")
-            != STATIC_RELEASE_CONTRACT_SHA256
-            or p05_sources.get(
-                "static-site/tests/fixtures/release-contract/valid-interface-set.json"
-            )
-            != STATIC_RELEASE_FIXTURE_SHA256
-            or p05_handoff.get("release_contract_v2", {}).get("schema_version")
-            != "ata-static-release/v2"
-        ):
-            raise ClientError("P05 v2 handoff does not bind the release contract")
-        if (
-            not STATIC_RELEASE_CONTRACT.is_file()
-            or _file_sha256(STATIC_RELEASE_CONTRACT)
-            != STATIC_RELEASE_CONTRACT_SHA256
-            or not STATIC_RELEASE_FIXTURE.is_file()
-            or _file_sha256(STATIC_RELEASE_FIXTURE) != STATIC_RELEASE_FIXTURE_SHA256
-        ):
-            raise ClientError("P05 v2 release contract or fixture bytes changed")
-
-        handoff = self._load_required_json(STATIC_SCANNER_HANDOFF, "P13 scanner handoff")
-        actual_handoff_hash = _file_sha256(STATIC_SCANNER_HANDOFF)
-        if actual_handoff_hash != STATIC_SCANNER_HANDOFF_SHA256:
-            raise ClientError(
-                "P13 scanner handoff bytes changed: "
-                f"expected {STATIC_SCANNER_HANDOFF_SHA256}, got {actual_handoff_hash}"
-            )
-        p13_inputs = handoff.get("inputs")
-        p13_sources = handoff.get("source_hashes")
-        scanner_contract = handoff.get("scanner_contract")
-        deployment_binding = (
-            scanner_contract.get("deployment_binding")
-            if isinstance(scanner_contract, dict)
-            else None
-        )
-        if (
-            handoff.get("package_id") != "P13-SCOPE-V2"
-            or handoff.get("phase_id")
-            != "P13.scanner_freeze.scope_amendment_v2"
-            or handoff.get("status") != "PASS"
-            or not isinstance(p13_inputs, dict)
-            or p13_inputs.get("p05_scope_v2_handoff", {}).get("sha256")
-            != STATIC_P05_HANDOFF_SHA256
-            or not isinstance(p13_sources, dict)
-            or p13_sources.get("scripts/validate-published-post.sh")
-            != STATIC_SCANNER_SHA256
-            or not isinstance(scanner_contract, dict)
-            or scanner_contract.get("release_schema") != "ata-static-release/v2"
-            or scanner_contract.get("required_options")
-            != STATIC_SCANNER_REQUIRED_OPTIONS
-            or not isinstance(deployment_binding, dict)
-            or deployment_binding.get("static_identity_headers_required") is not False
-            or deployment_binding.get("direct_media_worker_headers")
-            != ["x-ata-worker-version", "x-ata-route-payload-sha256"]
-        ):
-            raise ClientError("P13 v2 handoff does not bind the frozen P14 contract")
+        """Load and shape-check the build's own release manifest."""
         manifest = self._load_required_json(STATIC_RELEASE_MANIFEST, "release manifest")
         if manifest.get("schema_version") != "ata-static-release/v2":
             raise ClientError("Release manifest schema is not ata-static-release/v2")
         release_id = manifest.get("release_id")
         contract_hash = manifest.get("contract_hash")
-        scanner_hash = manifest.get("inputs", {}).get("scanner_implementation_sha256")
         if not isinstance(release_id, str) or not release_id:
             raise ClientError("Release manifest has no release_id")
         if not re.fullmatch(r"[0-9a-f]{64}", str(contract_hash)):
             raise ClientError("Release manifest contract_hash is not SHA-256")
-        if scanner_hash != STATIC_SCANNER_SHA256:
-            raise ClientError(
-                "Release manifest scanner hash does not match frozen P13: "
-                f"expected {STATIC_SCANNER_SHA256}, got {scanner_hash}"
-            )
-        if not STATIC_SCANNER.is_file():
-            raise ClientError(f"Frozen P13 scanner is missing: {STATIC_SCANNER}")
-        actual_scanner_hash = _file_sha256(STATIC_SCANNER)
-        if actual_scanner_hash != STATIC_SCANNER_SHA256:
-            raise ClientError(
-                "Frozen P13 scanner bytes changed: "
-                f"expected {STATIC_SCANNER_SHA256}, got {actual_scanner_hash}"
-            )
-        gate_a_bindings = self._p05_gate_a_bindings()
-        validation = self._run_checked_command(
-            [
-                "node",
-                "--input-type=module",
-                "--eval",
-                (
-                    "import {readFileSync} from 'node:fs';"
-                    "const contract=await import(process.argv[1]);"
-                    "const manifest=JSON.parse(readFileSync(process.argv[2],'utf8'));"
-                    "const bindings=JSON.parse(process.argv[3]);"
-                    "console.log(JSON.stringify(contract.validateReleaseManifest(manifest,bindings)));"
-                ),
-                STATIC_RELEASE_CONTRACT.as_uri(),
-                str(STATIC_RELEASE_MANIFEST),
-                json.dumps(gate_a_bindings, separators=(",", ":"), sort_keys=True),
-            ],
-            timeout=60,
-            label="P05 release manifest validation",
-        )
-        try:
-            validation_result = json.loads(validation.stdout)
-        except json.JSONDecodeError as exc:
-            raise ClientError(f"P05 release validator returned invalid JSON: {exc}") from exc
-        if validation_result.get("valid") is not True:
-            errors = validation_result.get("errors")
-            detail = "; ".join(errors) if isinstance(errors, list) else str(errors)
-            raise ClientError(f"P05 release manifest validation failed: {detail}")
         return manifest
-
-    @staticmethod
-    def _probe_static_worker_endpoint(
-        endpoint: str,
-        object_key: str,
-        manifest: Dict[str, Any],
-    ) -> None:
-        """Require one direct Worker response with P13's exact identity headers."""
-        request = Request(
-            f"{endpoint.rstrip('/')}/{quote(object_key, safe='/')}",
-            method="HEAD",
-        )
-        try:
-            with urlopen(request, timeout=10) as response:
-                status = response.status
-                worker_version = response.headers.get("x-ata-worker-version")
-                route_hash = response.headers.get("x-ata-route-payload-sha256")
-        except OSError as exc:
-            raise ClientError(f"Direct Worker endpoint is unreachable: {exc}") from exc
-        if status != 200:
-            raise ClientError(f"Direct Worker endpoint returned HTTP {status}")
-        if worker_version != manifest["worker"]["version"]:
-            raise ClientError("Direct Worker version header does not match the release")
-        if route_hash != manifest["worker"]["route_payload_sha256"]:
-            raise ClientError("Direct Worker route payload header does not match the release")
-
-    def _resolve_static_media_base_url(self, manifest: Dict[str, Any]) -> str:
-        """Return a live, immutable, zero-production-route Worker endpoint."""
-        proof = self._load_required_json(STATIC_WORKER_PROOF, "P12 direct Worker proof")
-        actual_hash = _file_sha256(STATIC_WORKER_PROOF)
-        if actual_hash != STATIC_WORKER_PROOF_SHA256:
-            raise ClientError(
-                "P12 direct Worker proof bytes changed: "
-                f"expected {STATIC_WORKER_PROOF_SHA256}, got {actual_hash}"
-            )
-        completion = proof.get("completion")
-        route = proof.get("route_safety_and_precedence")
-        runtime = proof.get("worker_runtime")
-        source = runtime.get("source") if isinstance(runtime, dict) else None
-        deployment = runtime.get("deployment") if isinstance(runtime, dict) else None
-        next_owner = proof.get("next_owner_contract")
-        dependency_bindings = proof.get("dependency_bindings")
-        binding = (
-            dependency_bindings.get("media_edge_contract")
-            if isinstance(dependency_bindings, dict)
-            else None
-        )
-        if (
-            proof.get("artifact_kind") != "static_cutover_direct_worker_proof"
-            or proof.get("package_id") != "P12"
-            or proof.get("phase_id") != "P12.direct_worker_proof"
-            or proof.get("status") != "PASS"
-            or not isinstance(completion, dict)
-            or completion.get("gate_c2") != "GREEN"
-            or completion.get("unresolved_blocker_count") != 0
-            or not isinstance(route, dict)
-            or route.get("status") != "PASS_ZERO_PRODUCTION_ROUTES"
-            or route.get("target_worker_route_count") != 0
-            or not isinstance(binding, dict)
-            or binding.get("sha256")
-            != manifest["inputs"]["media_edge_proof_sha256"]
-        ):
-            raise ClientError("P12 direct Worker proof is not a hash-current zero-route PASS")
-        if (
-            not isinstance(source, dict)
-            or source.get("status") != "EXACT_MATCH"
-            or source.get("local_sha256") != manifest["worker"]["script_sha256"]
-            or source.get("remote_sha256") != manifest["worker"]["script_sha256"]
-        ):
-            raise ClientError("Worker source does not match the release manifest")
-        if (
-            not isinstance(deployment, dict)
-            or deployment.get("status") != "ACTIVE_EXACT_VERSION"
-            or deployment.get("version_id") != manifest["worker"]["version"]
-            or not isinstance(next_owner, dict)
-            or next_owner.get("worker_version_id") != manifest["worker"]["version"]
-            or next_owner.get("pending_route_sha256")
-            != manifest["worker"]["route_payload_sha256"]
-        ):
-            raise ClientError("Worker deployment identity does not match the release manifest")
-        endpoint = runtime.get("direct_endpoint")
-        parsed = urlparse(str(endpoint))
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or not parsed.hostname.endswith(".workers.dev")
-            or parsed.path not in ("", "/")
-        ):
-            raise ClientError("P12 proof has no direct HTTPS workers.dev endpoint")
-        verification = proof.get("verification")
-        direct_http = (
-            verification.get("direct_http")
-            if isinstance(verification, dict)
-            else None
-        )
-        objects = direct_http.get("objects") if isinstance(direct_http, dict) else None
-        first_object = objects[0] if isinstance(objects, list) and objects else None
-        if (
-            not isinstance(direct_http, dict)
-            or direct_http.get("status") != "PASS"
-            or not isinstance(first_object, dict)
-            or first_object.get("status") != "PASS"
-            or not isinstance(first_object.get("key"), str)
-        ):
-            raise ClientError("P12 proof has no passing direct Worker object probe")
-        endpoint = str(endpoint).rstrip("/")
-        self._probe_static_worker_endpoint(endpoint, first_object["key"], manifest)
-        return endpoint
-
-    @staticmethod
-    def _find_named_value(value: Any, key: str) -> List[Any]:
-        """Return every exact-key value in a nested JSON-compatible value."""
-        found: List[Any] = []
-        if isinstance(value, dict):
-            for candidate_key, candidate_value in value.items():
-                if candidate_key == key:
-                    found.append(candidate_value)
-                found.extend(AtaBlogClient._find_named_value(candidate_value, key))
-        elif isinstance(value, list):
-            for candidate in value:
-                found.extend(AtaBlogClient._find_named_value(candidate, key))
-        return found
-
-    def _prior_pages_deployment_id(self) -> str:
-        """Read the one Gate A prior Pages deployment identifier."""
-        checkpoint = self._load_required_json(STATIC_CHECKPOINT, "Checkpoint 1")
-        values = list(dict.fromkeys(self._find_named_value(checkpoint, "pages_deployment_id")))
-        if len(values) != 1:
-            raise ClientError(
-                "Checkpoint 1 must contain exactly one pages_deployment_id; "
-                f"found {len(values)}"
-            )
-        try:
-            return str(uuid.UUID(str(values[0])))
-        except ValueError as exc:
-            raise ClientError("Checkpoint 1 pages_deployment_id is not a UUID") from exc
 
     @staticmethod
     def _source_revision(
@@ -1378,6 +1344,24 @@ class AtaBlogClient:
             raise ClientError("Could not derive a non-empty static post slug")
         return slug
 
+    def _notion_slug(self, article: Dict[str, Any], page_id: str) -> Optional[str]:
+        """Return the Notion `Slug` value, the one supplied-slug source."""
+        if "Slug" not in article:
+            raise ClientError(
+                f"Notion page {page_id} has no 'Slug' property; add a rich_text "
+                "property named Slug to the posts database"
+            )
+        value = str(article["Slug"] or "").strip()
+        if not value:
+            return None
+        normalized = self._static_slug(value, None)
+        if normalized != value:
+            raise ClientError(
+                f"Notion Slug '{value}' on page {page_id} is not a normalized slug; "
+                f"the publisher would change it to '{normalized}'"
+            )
+        return value
+
     @staticmethod
     def _find_static_post(slug: str) -> Optional[Path]:
         """Find the unique corpus record for a slug."""
@@ -1391,6 +1375,34 @@ class AtaBlogClient:
                     matches.append(path)
         if len(matches) > 1:
             raise ClientError(f"Static corpus contains duplicate slug '{slug}'")
+        return matches[0] if matches else None
+
+    @staticmethod
+    def _find_static_post_by_notion_page_id(page_id: str) -> Optional[Path]:
+        """Find the unique staged corpus record for a Notion page id.
+
+        A staged (wpId 0) post's durable identity is its notionPageId, not
+        its slug -- the slug is re-derived from the Notion page's title on
+        every staging call and can legitimately change between two publish
+        attempts for the same page (a title edit in Notion). Looking the
+        existing record up only by slug (as `_find_static_post` does) misses
+        that case: a slug change makes the lookup return None, so the
+        caller treats an already-staged page as brand new and writes a
+        second corpus file under the new slug, leaving two records with the
+        same notionPageId/route id -- one live, one an orphaned duplicate.
+        This lookup lets staging recognize "already staged under a
+        different slug" and update that same file in place instead.
+        """
+        post_root = STATIC_SITE_ROOT / "src" / "data" / "posts"
+        matches = []
+        marker = f'notionPageId: "{page_id}"'
+        if post_root.exists():
+            for path in post_root.glob("*.md"):
+                head = path.read_text(errors="strict").split("---", 2)
+                if len(head) >= 3 and marker in head[1].splitlines():
+                    matches.append(path)
+        if len(matches) > 1:
+            raise ClientError(f"Static corpus contains duplicate notionPageId '{page_id}'")
         return matches[0] if matches else None
 
     @staticmethod
@@ -1418,9 +1430,15 @@ class AtaBlogClient:
         paths: Dict[str, Path],
     ) -> Dict[str, Any]:
         """Write one deterministic corpus record and preserve its exact preimage."""
+        sponsored_tag_ids = self._sponsored_tag_ids(article, page_id)
         post_root = STATIC_SITE_ROOT / "src" / "data" / "posts"
         post_root.mkdir(parents=True, exist_ok=True)
-        target = self._find_static_post(slug)
+        # notionPageId is this record's durable identity; slug is a derived
+        # display attribute that can change between staging attempts (a
+        # Notion title edit). Prefer the identity lookup so a slug change
+        # updates the existing staged file in place instead of creating a
+        # second, duplicate-route-id file under the new slug.
+        target = self._find_static_post_by_notion_page_id(page_id) or self._find_static_post(slug)
         if paths["backup"].exists():
             if target is None:
                 target = post_root / f"notion-{page_id}-{slug}.md"
@@ -1452,6 +1470,16 @@ class AtaBlogClient:
         extension = image_path.suffix.lower()
         object_key = f"wp-content/uploads/publisher/{page_id}/{image_hash}{extension}"
         image_url = f"{STATIC_SITE_ORIGIN}/{object_key}"
+        # The featured image's real pixel size, measured from this exact file.
+        # The static build emits og:image:width/height and the JSON-LD
+        # ImageObject dimensions for every post. A migrated post takes them
+        # from src/data/post_seo.json, which was harvested once at import
+        # and therefore only ever covers imported posts. A post the static
+        # site originates has no such
+        # record and never will, so its dimensions come from the image itself
+        # -- and this publisher is the only component that holds the bytes,
+        # because the file goes straight to R2 and the build never sees it.
+        image_width, image_height = _image_pixel_size(image_path)
         title = str(article.get("Title") or article.get("title") or "Untitled")
         excerpt = " ".join(str(article.get("Excerpt") or "").split())
         replacements = {
@@ -1459,10 +1487,42 @@ class AtaBlogClient:
             "slug": json.dumps(slug, ensure_ascii=False),
             "title": json.dumps(title, ensure_ascii=False),
             "description": json.dumps(excerpt, ensure_ascii=False),
-            "pubDate": publish_date,
-            "modDate": publish_date,
+            "pubDate": _corpus_wall_clock(publish_date),
+            "modDate": _corpus_wall_clock(publish_date),
             "featuredImage": json.dumps(image_url, ensure_ascii=False),
+            "featuredImageWidth": str(image_width),
+            "featuredImageHeight": str(image_height),
         }
+        # The corpus loaders require authorId, categoryIds, tagIds, and wpId on
+        # every post. A first-time post has no prior frontmatter, so bind
+        # the default author, resolve real taxonomy IDs from the post's
+        # Notion metadata against the static corpus terms, and stage wpId 0,
+        # the corpus marker for a post the static site originated.
+        if not any(line.startswith("authorId:") for line in frontmatter):
+            replacements["authorId"] = str(STATIC_DEFAULT_AUTHOR_ID)
+        if not any(line.startswith("categoryIds:") for line in frontmatter):
+            replacements["categoryIds"] = json.dumps(
+                self._resolve_static_term_ids(
+                    "categories", self._notion_term_names(article, "Category")
+                )
+            )
+        # A restaged record keeps its tagIds bytes; the line is rewritten only
+        # when it is absent or the post's Type adds the Sponsored tag to it.
+        tag_lines = [line for line in frontmatter if line.startswith("tagIds:")]
+        if tag_lines:
+            try:
+                tag_ids = json.loads(tag_lines[0].split(":", 1)[1])
+            except json.JSONDecodeError as exc:
+                raise ClientError(f"Static post has an invalid tagIds line: {target}") from exc
+        else:
+            tag_ids = self._resolve_static_term_ids(
+                "tags", self._notion_term_names(article, "Tags")
+            )
+        sponsored_ids = [term_id for term_id in sponsored_tag_ids if term_id not in tag_ids]
+        if not tag_lines or sponsored_ids:
+            replacements["tagIds"] = json.dumps(tag_ids + sponsored_ids)
+        if not any(line.startswith("wpId:") for line in frontmatter):
+            replacements["wpId"] = "0"
         for key, value in replacements.items():
             self._replace_frontmatter_value(frontmatter, key, value)
         rendered = (
@@ -1485,7 +1545,7 @@ class AtaBlogClient:
             "object_key": object_key,
             "image_url": image_url,
             "image_path": str(image_path),
-            "corpus_sha256": _tree_sha256(post_root),
+            "corpus_sha256": _static_corpus_sha256(),
         }
 
     @staticmethod
@@ -1508,6 +1568,17 @@ class AtaBlogClient:
             diagnostic = result.stderr.strip() or result.stdout.strip() or "no diagnostic output"
             raise ClientError(f"{label} failed (exit {result.returncode}): {diagnostic}")
         return result
+
+    @staticmethod
+    def _parse_checked_command_json(
+        result: subprocess.CompletedProcess,
+        label: str,
+    ) -> Any:
+        """Decode one successful command's JSON stdout with its operation label."""
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise ClientError(f"{label} returned invalid JSON: {exc}") from exc
 
     def _existing_static_media_receipt(
         self,
@@ -1551,7 +1622,7 @@ class AtaBlogClient:
             raise ClientError(
                 "Existing content-addressed media object does not match local bytes"
             )
-        return {"recovered": True, "object": existing}
+        return {"key": stage["object_key"], "recovered": True, "object": existing}
 
     def _upload_static_media(self, stage: Dict[str, Any]) -> Dict[str, Any]:
         """Upload or recover one content-addressed image in the canonical R2 bucket."""
@@ -1585,9 +1656,328 @@ class AtaBlogClient:
                 raise ClientError("Static media upload did not return a JSON object")
         return {"receipt": receipt, "image_url": stage["image_url"]}
 
+    def _find_inline_static_media_urls(self, markdown_content: str) -> List[Dict[str, str]]:
+        """Return every uploads-path URL referenced in a post body, excluding the featured-image path.
+
+        The featured image is uploaded separately by `_upload_static_media` under
+        a content-addressed `wp-content/uploads/publisher/{page_id}/...` key.
+        Inline content images are referenced in post bodies as plain uploads
+        paths, e.g. `https://adamtheautomator.com/wp-content/uploads/2026/09/foo.png`.
+        Those are never uploaded by the featured-image path, so this discovers
+        every one of them so the caller can mirror it into R2 under the
+        identical uploads-path key.
+        """
+        origin = urlparse(STATIC_SITE_ORIGIN)
+        found: Dict[str, str] = {}
+        for match in re.finditer(r"https?://[^\s\"'<>()\[\]{},]+", markdown_content):
+            parsed = urlparse(match.group(0))
+            if parsed.scheme != origin.scheme or parsed.netloc != origin.netloc:
+                continue
+            if not parsed.path.startswith("/wp-content/uploads/"):
+                continue
+            if parsed.path.startswith("/wp-content/uploads/publisher/"):
+                continue
+            key = unquote(parsed.path.lstrip("/"))
+            found.setdefault(key, f"{STATIC_SITE_ORIGIN}/{key}")
+        return [{"key": key, "url": url} for key, url in sorted(found.items())]
+
+    def _static_media_keys_for_reference(self, key: str) -> List[str]:
+        """Return every bucket key belonging to the attachment that owns `key`.
+
+        The mirroring step used to copy only the exact URL a post body
+        referenced, so the responsive derivatives generated for each image
+        (thumbnail, medium, medium_large, large, 1536x1536, 2048x2048, plus
+        this theme's featured-small/featured-large) never reached R2 -- the
+        2026-09-05 parity audit measured 112 missing derivative keys across 15
+        attachments created since 2026-08-26. The built static site emits those
+        variants in `srcset`, so every one of them has to be mirrored at its
+        identical wp-content/uploads key.
+
+        The size family is read from the static site's own media inventory,
+        `src/data/media_variants.json`, which is the same record the site
+        builds its `srcset` from, so it is exactly what the pages reference.
+
+        The reference may itself be a derivative, so an attachment matches
+        either by its own path or by declaring this filename among its
+        variants.
+        """
+        inventory = self._static_media_inventory()
+        relative = key[len(_STATIC_MEDIA_KEY_PREFIX):]
+        filename = relative.rsplit("/", 1)[-1]
+        directory = relative.rsplit("/", 1)[0] if "/" in relative else ""
+        matches = [
+            path
+            for path, record in inventory.items()
+            if path == relative
+            or (
+                path.rsplit("/", 1)[0] == directory
+                and any(variant[0] == filename for variant in record.get("v", []))
+            )
+        ]
+        if not matches:
+            raise ClientError(
+                f"No media inventory attachment publishes {key}. The static "
+                "mirror cannot enumerate its size variants. An image added "
+                "after the inventory was captured has no record yet: see "
+                "adbertram/agent-issues#343."
+            )
+        if len(matches) > 1:
+            raise ClientError(
+                f"{key} is published by {len(matches)} media inventory attachments"
+            )
+        attachment = matches[0]
+        attachment_directory = attachment.rsplit("/", 1)[0]
+        variant_keys = [f"{_STATIC_MEDIA_KEY_PREFIX}{attachment}"] + [
+            f"{_STATIC_MEDIA_KEY_PREFIX}{attachment_directory}/{variant[0]}"
+            for variant in inventory[attachment].get("v", [])
+        ]
+        if key not in variant_keys:
+            raise ClientError(
+                f"Media inventory attachment {attachment!r} matched {key} but "
+                "does not declare it among its own variant keys"
+            )
+        return sorted(dict.fromkeys(variant_keys))
+
+    def _static_media_inventory(self) -> Dict[str, Any]:
+        """Load the static site's media inventory once per publisher instance."""
+        if self._static_media_inventory_cache is None:
+            document = self._load_required_json(
+                STATIC_MEDIA_INVENTORY, "static media inventory"
+            )
+            attachments = document.get("attachments")
+            if not isinstance(attachments, dict) or not attachments:
+                raise ClientError(
+                    f"Static media inventory has no attachments: {STATIC_MEDIA_INVENTORY}"
+                )
+            self._static_media_inventory_cache = attachments
+        return self._static_media_inventory_cache
+
+    @staticmethod
+    def _r2_put_subcommand(key: str) -> str:
+        """Return the R2 upload subcommand that can represent this key.
+
+        Cloudflare's REST edge WAF answers any object path containing a
+        literal '..' with a 403 HTML challenge before R2 sees the request,
+        even percent-encoded. Those keys have to go through the R2
+        S3-compatible transport instead. Bucket *listing* is unaffected
+        because the key travels as a `prefix` query parameter, not as a path
+        segment, so `_existing_static_inline_media_key` needs no equivalent.
+        """
+        return "put-s3" if ".." in key else "put"
+
+    def _existing_static_inline_media_key(self, key: str) -> Optional[Dict[str, Any]]:
+        """Return the R2 object for one exact uploads-path key if it already exists, else None.
+
+        Unlike the featured image's content-addressed key, an uploads-path key has
+        no local source file to re-derive bytes from, so existence is proven by
+        exact key presence in the bucket listing rather than by byte identity.
+        """
+        result = self._run_checked_command(
+            [
+                "cloudflare",
+                "r2",
+                "objects",
+                "list",
+                STATIC_MEDIA_BUCKET,
+                "--prefix",
+                key,
+                "--limit",
+                "2",
+            ],
+            timeout=300,
+            label="Inline static media receipt lookup",
+        )
+        objects = self._parse_checked_command_json(result, "Inline static media receipt lookup")
+        if not isinstance(objects, list):
+            raise ClientError("Inline static media receipt lookup did not return a JSON array")
+        matches = [item for item in objects if item.get("key") == key]
+        if len(matches) > 1:
+            raise ClientError("Inline static media receipt lookup returned duplicate exact keys")
+        return matches[0] if matches else None
+
+    @staticmethod
+    def _fetch_static_origin_bytes(url: str, *, attempts: int = 5) -> Tuple[bytes, Optional[str]]:
+        """Download one object from the live site origin, retrying on transient failures.
+
+        Mirrors static-site/scripts/migrate_wp_media.mjs's fetchWithRetry: retry
+        with exponential backoff only on a 5xx/429/network error against this
+        single site origin; any other HTTP status fails immediately. This
+        is a resilience retry against one fixed source, not a fallback to a
+        different source.
+        """
+        last_error: Optional[BaseException] = None
+        for attempt in range(1, attempts + 1):
+            try:
+                request = Request(
+                    url, headers={"User-Agent": "ata-static-media-inline-backfill/1.0"}
+                )
+                with urlopen(request, timeout=60) as response:
+                    data = response.read()
+                    content_length = response.headers.get("Content-Length")
+                    if content_length is not None and int(content_length) != len(data):
+                        raise ClientError(
+                            f"{url}: Content-Length {content_length} does not match "
+                            f"downloaded byte count {len(data)}"
+                        )
+                    return data, response.headers.get("Content-Type")
+            except HTTPError as exc:
+                if exc.code < 500 and exc.code != 429:
+                    raise ClientError(
+                        f"{url}: HTTP {exc.code} fetching inline media from the site origin"
+                    ) from exc
+                last_error = exc
+            except URLError as exc:
+                last_error = exc
+            if attempt < attempts:
+                time.sleep(0.5 * (2 ** (attempt - 1)))
+        raise ClientError(
+            f"{url}: failed to fetch inline media from the site origin after "
+            f"{attempts} attempts: {last_error}"
+        )
+
+    def _mirror_static_inline_media_key(self, key: str) -> Dict[str, Any]:
+        """Mirror one uploads-path key into R2 and verify it landed.
+
+        Idempotent: an already-present key is recorded as recovered without
+        re-downloading or re-uploading anything.
+        """
+        url = f"{STATIC_SITE_ORIGIN}/{key}"
+        existing = self._existing_static_inline_media_key(key)
+        if existing is not None:
+            return {"key": key, "url": url, "recovered": True, "object": existing}
+        data, origin_content_type = self._fetch_static_origin_bytes(url)
+        content_type = (
+            origin_content_type.split(";")[0].strip()
+            if origin_content_type
+            else mimetypes.guess_type(key)[0]
+        )
+        if not content_type:
+            raise ClientError(f"Could not determine content type for inline media: {url}")
+        handle = tempfile.NamedTemporaryFile(suffix=Path(key).suffix, delete=False)
+        try:
+            handle.write(data)
+            handle.close()
+            temp_path = Path(handle.name)
+            result = self._run_checked_command(
+                [
+                    "cloudflare",
+                    "r2",
+                    "objects",
+                    self._r2_put_subcommand(key),
+                    STATIC_MEDIA_BUCKET,
+                    key,
+                    "--file",
+                    str(temp_path),
+                    "--content-type",
+                    content_type,
+                ],
+                timeout=300,
+                label="Inline static media upload",
+            )
+            receipt = self._parse_checked_command_json(result, "Inline static media upload")
+            if not isinstance(receipt, dict):
+                raise ClientError("Inline static media upload did not return a JSON object")
+        finally:
+            Path(handle.name).unlink(missing_ok=True)
+        verify = self._existing_static_inline_media_key(key)
+        if verify is None or int(verify.get("size", -1)) != len(data):
+            raise ClientError(
+                f"Inline static media upload for {key} did not verify in R2 after upload"
+            )
+        return {"key": key, "url": url, "recovered": False, "object": receipt}
+
+    def _upload_static_inline_media(self, markdown_content: str) -> List[Dict[str, Any]]:
+        """Mirror every inline uploads-path image referenced in a post body into R2.
+
+        A post body references one URL per image, but each attachment owns a
+        family of resized derivatives and the built static site emits those
+        variants in `srcset`. So each reference is expanded through the media
+        inventory into the attachment's full key family,
+        and every key in it is mirrored at its identical wp-content/uploads
+        path. Mirroring only the referenced URL is the defect the 2026-09-05
+        media parity audit measured as 112 missing derivative keys.
+
+        For each key not already present in the bucket, the bytes are
+        downloaded from the live site origin, uploaded to R2 under that
+        identical key, then re-verified for presence and byte count before the
+        receipt is recorded. Idempotent: a resumed run re-checks bucket
+        presence per key and skips anything already uploaded.
+        """
+        receipts: List[Dict[str, Any]] = []
+        mirrored: set = set()
+        for reference in self._find_inline_static_media_urls(markdown_content):
+            for key in self._static_media_keys_for_reference(reference["key"]):
+                if key in mirrored:
+                    continue
+                mirrored.add(key)
+                receipts.append(self._mirror_static_inline_media_key(key))
+        return receipts
+
+    @staticmethod
+    def _validate_recorded_static_media(runtime: Dict[str, Any]) -> None:
+        """Require the persisted receipt before skipping a recorded media effect.
+
+        A record written before inline mirroring existed carries no `inline`
+        key at all: that is a pre-`inline` record, not a corrupt one, and the
+        media stage completes it with `_migrate_recorded_static_media` before
+        the effect is accepted as recorded. An `inline` key that is *present*
+        is always held to the receipt contract.
+        """
+        media = runtime.get("media")
+        receipt = media.get("receipt") if isinstance(media, dict) else None
+        inline = media.get("inline") if isinstance(media, dict) else None
+        inline_is_valid = isinstance(inline, list) and all(
+            isinstance(item, dict) and isinstance(item.get("key"), str) and item["key"]
+            for item in inline
+        )
+        if (
+            not isinstance(media, dict)
+            or not isinstance(receipt, dict)
+            or not receipt
+            or not isinstance(receipt.get("key"), str)
+            or not receipt["key"]
+            or receipt["key"] != runtime.get("object_key")
+            or media.get("image_url") != runtime.get("image_url")
+            or ("inline" in media and not inline_is_valid)
+        ):
+            raise ClientError("Corrupt publisher runtime: recorded media receipt is invalid")
+
+    @staticmethod
+    def _recorded_static_media_predates_inline(runtime: Dict[str, Any]) -> bool:
+        """Return whether the recorded media receipt predates inline mirroring.
+
+        Only the featured image was uploaded then, so the record holds its
+        receipt and `image_url` and nothing else.
+        """
+        media = runtime.get("media")
+        return isinstance(media, dict) and bool(media) and "inline" not in media
+
+    def _migrate_recorded_static_media(
+        self,
+        runtime: Dict[str, Any],
+        markdown_content: str,
+        runtime_path: Path,
+    ) -> bool:
+        """Complete a pre-`inline` recorded media effect with its inline receipts.
+
+        Such a record cannot prove the post body's images ever reached the
+        bucket -- the inline half did not exist when it was written -- so
+        accepting the record as-is would publish a page whose inline images
+        are missing. The migration re-runs the inline mirroring (idempotent
+        per key) and writes the receipts back, leaving the featured image's
+        own content-addressed receipt untouched.
+        """
+        if not self._recorded_static_media_predates_inline(runtime):
+            return False
+        media = dict(runtime["media"])
+        media["inline"] = self._upload_static_inline_media(markdown_content)
+        runtime["media"] = media
+        _atomic_write_json(runtime_path, runtime)
+        return True
+
     def _recover_static_build(
         self,
-        expected_release_ref: Dict[str, str],
+        expected_release_ref: Optional[Dict[str, str]],
         staged_corpus_sha256: str,
     ) -> Optional[Dict[str, Any]]:
         """Recover a completed build from its P05 manifest after a hard crash."""
@@ -1598,10 +1988,9 @@ class AtaBlogClient:
             "release_id": manifest["release_id"],
             "contract_hash": manifest["contract_hash"],
         }
-        if (
-            actual_release_ref != expected_release_ref
-            or manifest["inputs"].get("corpus_sha256") != staged_corpus_sha256
-        ):
+        if manifest["inputs"].get("corpus_sha256") != staged_corpus_sha256:
+            return None
+        if expected_release_ref is not None and actual_release_ref != expected_release_ref:
             return None
         return {
             "build_sha256": _tree_sha256(STATIC_SITE_ROOT / "dist"),
@@ -1611,7 +2000,7 @@ class AtaBlogClient:
 
     def _run_static_build(
         self,
-        expected_release_ref: Dict[str, str],
+        expected_release_ref: Optional[Dict[str, str]],
         staged_corpus_sha256: str,
     ) -> Dict[str, Any]:
         """Run or recover the one locked, manifest-producing static build."""
@@ -1637,7 +2026,7 @@ class AtaBlogClient:
             "release_id": manifest["release_id"],
             "contract_hash": manifest["contract_hash"],
         }
-        if actual_release_ref != expected_release_ref:
+        if expected_release_ref is not None and actual_release_ref != expected_release_ref:
             raise ClientError(
                 "Build release identity drifted from the journal: "
                 f"expected {expected_release_ref}, got {actual_release_ref}"
@@ -1652,30 +2041,134 @@ class AtaBlogClient:
             "recovered": False,
         }
 
+    def _bind_static_build_release(
+        self,
+        *,
+        journal: Dict[str, Any],
+        runtime: Dict[str, Any],
+        build: Dict[str, Any],
+        paths: Dict[str, Path],
+    ) -> Dict[str, Any]:
+        """Bind the first staged build identity, then keep it immutable."""
+        manifest = build["manifest"]
+        staged_corpus_sha256 = journal["artifacts"]["staged_corpus_sha256"]
+        if manifest["inputs"].get("corpus_sha256") != staged_corpus_sha256:
+            raise ClientError(
+                "Build manifest corpus hash does not match the staged publisher corpus"
+            )
+        actual_release_ref = {
+            "release_id": manifest["release_id"],
+            "contract_hash": manifest["contract_hash"],
+        }
+        unbound_release_ref = {"release_id": None, "contract_hash": None}
+        for label, release_ref in (
+            ("journal", journal.get("release_ref")),
+            ("runtime", runtime.get("release_ref")),
+        ):
+            if release_ref not in (unbound_release_ref, actual_release_ref):
+                raise ClientError(
+                    f"Static publisher cannot rebind {label} release identity: "
+                    f"expected {release_ref}, got {actual_release_ref}"
+                )
+
+        journal["release_ref"] = actual_release_ref
+        journal["artifacts"]["build_sha256"] = build["build_sha256"]
+        _atomic_write_json(paths["journal"], journal)
+        runtime["release_ref"] = actual_release_ref
+        runtime["build_sha256"] = build["build_sha256"]
+        _atomic_write_json(paths["runtime"], runtime)
+        journal["effects"]["builds"] = 1
+        _atomic_write_json(paths["journal"], journal)
+        return manifest
+
+    @staticmethod
+    def _static_preview_receipt_state(
+        payload: Dict[str, Any],
+        *,
+        branch: str,
+        commit_hash: str,
+        commit_message: str,
+    ) -> tuple[str, str]:
+        """Return one exact transaction receipt's deployment id and stage status."""
+        trigger = payload.get("deployment_trigger")
+        metadata = trigger.get("metadata") if isinstance(trigger, dict) else None
+        latest_stage = payload.get("latest_stage")
+        actual = {
+            "environment": payload.get("environment"),
+            "branch": metadata.get("branch") if isinstance(metadata, dict) else None,
+            "commit_hash": (
+                metadata.get("commit_hash") if isinstance(metadata, dict) else None
+            ),
+            "commit_message": (
+                metadata.get("commit_message") if isinstance(metadata, dict) else None
+            ),
+        }
+        expected = {
+            "environment": "preview",
+            "branch": branch,
+            "commit_hash": commit_hash,
+            "commit_message": commit_message,
+        }
+        if actual != expected:
+            raise ClientError(
+                "Pages preview receipt identity mismatch: "
+                f"expected {json.dumps(expected, sort_keys=True)}, "
+                f"got {json.dumps(actual, sort_keys=True)}"
+            )
+        try:
+            deployment_id = str(uuid.UUID(str(payload["id"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ClientError("Pages preview returned no UUID deployment id") from exc
+        status = latest_stage.get("status") if isinstance(latest_stage, dict) else None
+        valid_statuses = (
+            {"success"}
+            | STATIC_PAGES_PENDING_STATUSES
+            | STATIC_PAGES_TERMINAL_FAILURE_STATUSES
+        )
+        if status not in valid_statuses:
+            raise ClientError(
+                "Pages preview returned unsupported latest_stage status: "
+                f"{status!r}"
+            )
+        return deployment_id, status
+
+    @staticmethod
+    def _validate_static_preview_identity(
+        payload: Dict[str, Any],
+        *,
+        branch: str,
+        commit_hash: str,
+        commit_message: str,
+    ) -> str:
+        """Require the exact successful Pages preview owned by this transaction."""
+        deployment_id, status = AtaBlogClient._static_preview_receipt_state(
+            payload,
+            branch=branch,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+        if status != "success":
+            raise ClientError(
+                "Pages preview receipt identity mismatch: "
+                f'expected status "success", got {status!r}'
+            )
+        return deployment_id
+
     @staticmethod
     def _normalize_static_preview_deployment(
         payload: Dict[str, Any],
         *,
         branch: str,
         commit_hash: str,
+        commit_message: str,
     ) -> Dict[str, Any]:
         """Validate one exact successful preview deployment receipt."""
-        trigger = payload.get("deployment_trigger")
-        metadata = trigger.get("metadata") if isinstance(trigger, dict) else None
-        latest_stage = payload.get("latest_stage")
-        if (
-            payload.get("env") != "preview"
-            or not isinstance(metadata, dict)
-            or metadata.get("branch") != branch
-            or metadata.get("commit_hash") != commit_hash
-            or not isinstance(latest_stage, dict)
-            or latest_stage.get("status") != "success"
-        ):
-            raise ClientError("Pages preview receipt does not match branch, commit, or status")
-        try:
-            deployment_id = str(uuid.UUID(str(payload["id"])))
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ClientError("Pages preview returned no UUID deployment id") from exc
+        deployment_id = AtaBlogClient._validate_static_preview_identity(
+            payload,
+            branch=branch,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
         short_id = payload.get("short_id")
         if short_id != deployment_id[:8]:
             raise ClientError("Pages preview short_id does not match deployment id")
@@ -1692,6 +2185,7 @@ class AtaBlogClient:
         if (
             not isinstance(files, dict)
             or not files
+            or "/release-manifest.json" not in files
             or any(
                 not isinstance(path, str)
                 or not path.startswith("/")
@@ -1699,7 +2193,9 @@ class AtaBlogClient:
                 for path, digest in files.items()
             )
         ):
-            raise ClientError("Pages preview returned no valid deployment files map")
+            raise ClientError(
+                "Pages preview returned no valid release-bound deployment files map"
+            )
         return {
             "deployment_id": deployment_id,
             "deployment_url": deployment_url.rstrip("/"),
@@ -1707,13 +2203,84 @@ class AtaBlogClient:
             "deployment_sha256": _artifact_sha256(payload),
         }
 
+    def _wait_for_static_preview(
+        self,
+        deployment_id: str,
+        *,
+        branch: str,
+        commit_hash: str,
+        commit_message: str,
+    ) -> Dict[str, Any]:
+        """Hydrate one Pages deployment UUID until it succeeds or fails."""
+        deadline = time.monotonic() + STATIC_PAGES_POLL_TIMEOUT_SECONDS
+        observed_statuses = []
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                observed = " -> ".join(observed_statuses) or "none"
+                raise ClientError(
+                    f"Pages preview deployment {deployment_id} did not reach success "
+                    f"within {STATIC_PAGES_POLL_TIMEOUT_SECONDS} seconds; "
+                    f"observed statuses: {observed}"
+                )
+            result = self._run_checked_command(
+                [
+                    "cloudflare",
+                    "pages",
+                    "deployments",
+                    "get",
+                    STATIC_PAGES_PROJECT,
+                    deployment_id,
+                ],
+                timeout=max(1, min(300, int(remaining))),
+                label="Pages preview receipt fetch",
+            )
+            deployment = self._parse_checked_command_json(
+                result,
+                "Pages preview receipt fetch",
+            )
+            if not isinstance(deployment, dict):
+                raise ClientError(
+                    "Pages preview receipt fetch did not return a JSON object"
+                )
+            received_id, status = self._static_preview_receipt_state(
+                deployment,
+                branch=branch,
+                commit_hash=commit_hash,
+                commit_message=commit_message,
+            )
+            if received_id != deployment_id:
+                raise ClientError(
+                    "Pages preview receipt deployment id mismatch: "
+                    f"expected {deployment_id}, got {received_id}"
+                )
+            observed_statuses.append(status)
+            if status == "success":
+                return self._normalize_static_preview_deployment(
+                    deployment,
+                    branch=branch,
+                    commit_hash=commit_hash,
+                    commit_message=commit_message,
+                )
+            if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+                raise ClientError(
+                    f"Pages preview deployment {deployment_id} reached terminal "
+                    f"status {status}; observed statuses: "
+                    f"{' -> '.join(observed_statuses)}"
+                )
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                continue
+            time.sleep(min(STATIC_PAGES_POLL_INTERVAL_SECONDS, remaining))
+
     def _existing_static_preview(
         self,
         *,
         branch: str,
         commit_hash: str,
+        commit_message: str,
     ) -> Optional[Dict[str, Any]]:
-        """Recover one Pages preview by its deterministic branch and commit."""
+        """Recover one Pages preview by its exact transaction identity."""
         result = self._run_checked_command(
             [
                 "cloudflare",
@@ -1729,43 +2296,63 @@ class AtaBlogClient:
             timeout=300,
             label="Pages preview receipt lookup",
         )
-        try:
-            deployments = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            raise ClientError(f"Pages preview receipt lookup returned invalid JSON: {exc}") from exc
+        deployments = self._parse_checked_command_json(
+            result,
+            "Pages preview receipt lookup",
+        )
         if not isinstance(deployments, list):
             raise ClientError("Pages preview receipt lookup did not return a JSON array")
-        matches = []
+        branch_matches = []
         for deployment in deployments:
+            if not isinstance(deployment, dict):
+                raise ClientError(
+                    "Pages preview receipt lookup returned a non-object deployment"
+                )
             trigger = deployment.get("deployment_trigger")
             metadata = trigger.get("metadata") if isinstance(trigger, dict) else None
-            if (
-                isinstance(metadata, dict)
-                and metadata.get("branch") == branch
-                and metadata.get("commit_hash") == commit_hash
-            ):
-                matches.append(deployment)
-        if len(matches) > 1:
-            raise ClientError("Multiple Pages previews match the transaction identity")
-        if not matches:
+            if isinstance(metadata, dict) and metadata.get("branch") == branch:
+                branch_matches.append(deployment)
+        if len(branch_matches) > 1:
+            raise ClientError("Multiple Pages previews match the transaction branch")
+        if not branch_matches:
             return None
-        return self._normalize_static_preview_deployment(
-            matches[0],
+        deployment_id, status = self._static_preview_receipt_state(
+            branch_matches[0],
             branch=branch,
             commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+        if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+            raise ClientError(
+                f"Pages preview deployment {deployment_id} reached terminal status "
+                f"{status}"
+            )
+        return self._wait_for_static_preview(
+            deployment_id,
+            branch=branch,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
         )
 
     def _deploy_static_preview(
         self,
         idempotency_key: str,
         source_revision: str,
+        release_id: str,
     ) -> Dict[str, Any]:
-        """Create or recover the transaction's deterministic Pages preview."""
-        branch = f"publisher-{idempotency_key[:16]}"
+        """Create or recover the transaction's deterministic Pages preview.
+
+        The branch identity includes the release id so a reseal between
+        attempts (which changes the built manifest) gets a fresh deployment
+        instead of recovering a stale preview that can never pass readiness.
+        """
+        branch = f"publisher-{idempotency_key[:16]}-{release_id[-8:]}"
         commit_hash = source_revision[:40]
+        commit_message = f"ata-blog publisher {idempotency_key}"
         existing = self._existing_static_preview(
             branch=branch,
             commit_hash=commit_hash,
+            commit_message=commit_message,
         )
         if existing is not None:
             return existing
@@ -1781,240 +2368,437 @@ class AtaBlogClient:
                 "--branch",
                 branch,
                 "--commit-message",
-                f"ata-blog publisher {idempotency_key}",
+                commit_message,
                 "--commit-hash",
                 commit_hash,
             ],
             timeout=1800,
             label="Pages preview upload",
         )
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            raise ClientError(f"Pages preview returned invalid JSON: {exc}") from exc
+        payload = self._parse_checked_command_json(result, "Pages preview")
         if not isinstance(payload, dict):
             raise ClientError("Pages preview did not return a JSON object")
-        return self._normalize_static_preview_deployment(
+        deployment_id, status = self._static_preview_receipt_state(
             payload,
             branch=branch,
             commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+        if status == "success":
+            return self._normalize_static_preview_deployment(
+                payload,
+                branch=branch,
+                commit_hash=commit_hash,
+                commit_message=commit_message,
+            )
+        if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+            raise ClientError(
+                f"Pages preview deployment {deployment_id} reached terminal status "
+                f"{status}"
+            )
+        return self._wait_for_static_preview(
+            deployment_id,
+            branch=branch,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
         )
 
-    def _persist_static_deployment_metadata(
+    def _validate_static_deployment_metadata(
         self,
         deployment: Dict[str, Any],
-        path: Path,
     ) -> Dict[str, Any]:
-        """Persist the exact Pages metadata whose canonical hash P13 consumes."""
+        """Confirm a Pages preview receipt's embedded metadata hash is self-consistent."""
         metadata = deployment.get("deployment")
         if not isinstance(metadata, dict):
             raise ClientError("Pages preview receipt has no deployment metadata")
         actual_sha256 = _artifact_sha256(metadata)
         if deployment.get("deployment_sha256") != actual_sha256:
             raise ClientError("Pages preview deployment metadata hash mismatch")
-        if path.exists():
-            existing = self._load_required_json(path, "Pages deployment metadata")
-            if existing != metadata:
-                raise ClientError("Saved Pages deployment metadata does not match receipt")
-        else:
-            _atomic_write_json(path, metadata)
         return metadata
 
-    @staticmethod
-    def _scheduled_replay_document(journal: Dict[str, Any]) -> Dict[str, Any]:
-        """Create P13's exact zero-effect replay input for this idempotency key."""
-        evidence = {
-            "idempotency_key": journal["idempotency"]["key"],
-            "deployment_id": journal["artifacts"]["deployment_id"],
-            "effects": journal["effects"],
-        }
-        return {
-            "same_revision": True,
-            "corpus_writes": 0,
-            "builds": 0,
-            "deployments": 0,
-            "notion_updates": 0,
-            "evidence_sha256": _artifact_sha256(evidence),
-        }
-
-    def _run_static_scanner(
-        self,
-        *,
-        manifest: Dict[str, Any],
-        journal_path: Path,
-        replay_path: Path,
-        deployment_metadata_path: Path,
-        scanner_path: Path,
-        deployment: Dict[str, Any],
-        deployment_sha256: str,
-        media_base_url: str,
-    ) -> Dict[str, Any]:
-        """Invoke, never reimplement, the frozen P13 acceptance scanner."""
-        post_count = sum(
-            route.get("kind") == "post"
-            for route in manifest.get("routes", {}).get("current", [])
-        )
-        worker = manifest.get("worker", {})
-        command = [
-            str(STATIC_SCANNER),
-            "--base-url",
-            deployment["deployment_url"],
-            "--media-base-url",
-            media_base_url,
-            "--manifest",
-            str(STATIC_RELEASE_MANIFEST),
-            "--publisher-journal",
-            str(journal_path),
-            "--scheduled-replay",
-            str(replay_path),
-            "--deployment-metadata",
-            str(deployment_metadata_path),
-            "--expected-release-id",
-            manifest["release_id"],
-            "--expected-contract-hash",
-            manifest["contract_hash"],
-            "--expected-post-routes",
-            str(post_count),
-            "--deployment-id",
-            deployment["deployment_id"],
-            "--deployment-sha256",
-            deployment_sha256,
-            "--worker-version",
-            worker["version"],
-            "--route-payload-sha256",
-            worker["route_payload_sha256"],
-            "--expected-scanner-sha256",
-            STATIC_SCANNER_SHA256,
-        ]
+    def _current_production_deployment_id(self) -> str:
+        """Read the live production deployment a failed promotion rolls back to."""
         result = self._run_checked_command(
-            command,
-            cwd=STATIC_REPOSITORY_ROOT,
-            timeout=3600,
-            label="Published preview acceptance",
+            [
+                "cloudflare",
+                "pages",
+                "deployments",
+                "list",
+                STATIC_PAGES_PROJECT,
+                "--env",
+                "production",
+                "--limit",
+                "1",
+            ],
+            timeout=300,
+            label="Pages production deployment lookup",
         )
+        deployments = self._parse_checked_command_json(
+            result,
+            "Pages production deployment lookup",
+        )
+        if (
+            not isinstance(deployments, list)
+            or len(deployments) != 1
+            or not isinstance(deployments[0], dict)
+        ):
+            raise ClientError(
+                "Pages production deployment lookup did not return exactly one "
+                "deployment"
+            )
+        current = deployments[0]
+        latest_stage = current.get("latest_stage")
+        status = latest_stage.get("status") if isinstance(latest_stage, dict) else None
+        if current.get("environment") != "production" or status != "success":
+            raise ClientError(
+                "Current Pages production deployment is not a successful "
+                "production deployment"
+            )
         try:
-            scanner_result = json.loads(result.stdout)
-        except json.JSONDecodeError as exc:
-            raise ClientError(f"P13 scanner returned invalid JSON: {exc}") from exc
-        self._validate_static_scanner_result(
-            scanner_result,
-            manifest=manifest,
-            deployment=deployment,
-            deployment_sha256=deployment_sha256,
-        )
-        _atomic_write_json(scanner_path, scanner_result)
-        return scanner_result
+            return str(uuid.UUID(str(current["id"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ClientError(
+                "Current Pages production deployment has no UUID id"
+            ) from exc
 
     @staticmethod
-    def _validate_static_scanner_result(
-        scanner_result: Dict[str, Any],
+    def _static_promotion_receipt_state(
+        payload: Dict[str, Any],
         *,
-        manifest: Dict[str, Any],
-        deployment: Dict[str, Any],
-        deployment_sha256: str,
-    ) -> None:
-        """Validate the exact frozen P13 result envelope and identity bindings."""
-        fields = {
-            "schema_version", "passed", "exit_code", "release_ref",
-            "deployment_ref", "scanner_implementation_sha256", "section_ids",
-            "sections",
+        commit_hash: str,
+        commit_message: str,
+    ) -> tuple[str, str]:
+        """Return one exact production receipt's deployment id and stage status."""
+        trigger = payload.get("deployment_trigger")
+        metadata = trigger.get("metadata") if isinstance(trigger, dict) else None
+        latest_stage = payload.get("latest_stage")
+        actual = {
+            "environment": payload.get("environment"),
+            "commit_hash": (
+                metadata.get("commit_hash") if isinstance(metadata, dict) else None
+            ),
+            "commit_message": (
+                metadata.get("commit_message") if isinstance(metadata, dict) else None
+            ),
         }
-        if not isinstance(scanner_result, dict) or set(scanner_result) != fields:
-            raise ClientError("P13 scanner result fields do not match the frozen contract")
-        release_ref = {
-            "release_id": manifest["release_id"],
-            "contract_hash": manifest["contract_hash"],
+        expected = {
+            "environment": "production",
+            "commit_hash": commit_hash,
+            "commit_message": commit_message,
         }
-        worker = manifest["worker"]
-        deployment_ref = {
-            "deployment_id": deployment["deployment_id"],
-            "deployment_sha256": deployment_sha256,
-            "worker_version": worker["version"],
-            "route_payload_sha256": worker["route_payload_sha256"],
-        }
-        section_ids = ["routes", "content-media", "vendor-publisher"]
-        if (
-            scanner_result["schema_version"] != "ata-static-scanner-result/v1"
-            or scanner_result["passed"] is not True
-            or scanner_result["exit_code"] != 0
-            or scanner_result["release_ref"] != release_ref
-            or scanner_result["deployment_ref"] != deployment_ref
-            or scanner_result["scanner_implementation_sha256"] != STATIC_SCANNER_SHA256
-            or scanner_result["section_ids"] != section_ids
-            or not isinstance(scanner_result["sections"], list)
-            or [section.get("section_id") for section in scanner_result["sections"]]
-            != section_ids
-        ):
-            raise ClientError("P13 scanner did not accept the exact bound Pages preview")
-        section_fields = {
-            "schema_version", "section_id", "release_ref", "deployment_ref",
-            "scanner_implementation_sha256", "checks", "failures",
-        }
-        for section in scanner_result["sections"]:
-            if (
-                not isinstance(section, dict)
-                or set(section) != section_fields
-                or section["schema_version"] != "ata-static-acceptance-section/v1"
-                or section["release_ref"] != release_ref
-                or section["deployment_ref"] != deployment_ref
-                or section["scanner_implementation_sha256"] != STATIC_SCANNER_SHA256
-                or not isinstance(section["checks"], list)
-                or section["failures"] != []
-            ):
-                raise ClientError("P13 scanner acceptance section is corrupt or stale")
-
-    def _load_existing_scanner_result(
-        self,
-        path: Path,
-        *,
-        manifest: Dict[str, Any],
-        deployment: Dict[str, Any],
-        deployment_sha256: str,
-    ) -> Optional[Dict[str, Any]]:
-        """Reuse a durable accepted result after a crash before transition write."""
-        if not path.exists():
-            return None
-        result = self._load_required_json(path, "P13 scanner result")
-        self._validate_static_scanner_result(
-            result,
-            manifest=manifest,
-            deployment=deployment,
-            deployment_sha256=deployment_sha256,
+        if actual != expected:
+            raise ClientError(
+                "Pages production receipt identity mismatch: "
+                f"expected {json.dumps(expected, sort_keys=True)}, "
+                f"got {json.dumps(actual, sort_keys=True)}"
+            )
+        try:
+            deployment_id = str(uuid.UUID(str(payload["id"])))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ClientError(
+                "Pages production promotion returned no UUID deployment id"
+            ) from exc
+        status = latest_stage.get("status") if isinstance(latest_stage, dict) else None
+        valid_statuses = (
+            {"success"}
+            | STATIC_PAGES_PENDING_STATUSES
+            | STATIC_PAGES_TERMINAL_FAILURE_STATUSES
         )
-        return result
+        if status not in valid_statuses:
+            raise ClientError(
+                "Pages production promotion returned unsupported latest_stage "
+                f"status: {status!r}"
+            )
+        return deployment_id, status
+
+    @staticmethod
+    def _normalize_static_promotion_deployment(
+        payload: Dict[str, Any],
+        *,
+        commit_hash: str,
+        commit_message: str,
+    ) -> Dict[str, Any]:
+        """Validate one exact successful production deployment receipt."""
+        deployment_id, status = AtaBlogClient._static_promotion_receipt_state(
+            payload,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+        if status != "success":
+            raise ClientError(
+                "Pages production receipt identity mismatch: "
+                f'expected status "success", got {status!r}'
+            )
+        files = payload.get("files")
+        if (
+            not isinstance(files, dict)
+            or not files
+            or "/release-manifest.json" not in files
+            or any(
+                not isinstance(path, str)
+                or not path.startswith("/")
+                or not re.fullmatch(r"[0-9a-f]{32}", str(digest))
+                for path, digest in files.items()
+            )
+        ):
+            raise ClientError(
+                "Pages production promotion returned no valid release-bound "
+                "deployment files map"
+            )
+        return {
+            "deployment_id": deployment_id,
+            "deployment": payload,
+            "deployment_sha256": _artifact_sha256(payload),
+        }
+
+    def _wait_for_static_promotion(
+        self,
+        deployment_id: str,
+        *,
+        commit_hash: str,
+        commit_message: str,
+    ) -> Dict[str, Any]:
+        """Hydrate one production deployment UUID until it succeeds or fails."""
+        deadline = time.monotonic() + STATIC_PAGES_POLL_TIMEOUT_SECONDS
+        observed_statuses = []
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                observed = " -> ".join(observed_statuses) or "none"
+                raise ClientError(
+                    f"Pages production deployment {deployment_id} did not reach "
+                    f"success within {STATIC_PAGES_POLL_TIMEOUT_SECONDS} seconds; "
+                    f"observed statuses: {observed}"
+                )
+            result = self._run_checked_command(
+                [
+                    "cloudflare",
+                    "pages",
+                    "deployments",
+                    "get",
+                    STATIC_PAGES_PROJECT,
+                    deployment_id,
+                ],
+                timeout=max(1, min(300, int(remaining))),
+                label="Pages production receipt fetch",
+            )
+            deployment = self._parse_checked_command_json(
+                result,
+                "Pages production receipt fetch",
+            )
+            if not isinstance(deployment, dict):
+                raise ClientError(
+                    "Pages production receipt fetch did not return a JSON object"
+                )
+            received_id, status = self._static_promotion_receipt_state(
+                deployment,
+                commit_hash=commit_hash,
+                commit_message=commit_message,
+            )
+            if received_id != deployment_id:
+                raise ClientError(
+                    "Pages production receipt deployment id mismatch: "
+                    f"expected {deployment_id}, got {received_id}"
+                )
+            observed_statuses.append(status)
+            if status == "success":
+                return self._normalize_static_promotion_deployment(
+                    deployment,
+                    commit_hash=commit_hash,
+                    commit_message=commit_message,
+                )
+            if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+                raise ClientError(
+                    f"Pages production deployment {deployment_id} reached terminal "
+                    f"status {status}; observed statuses: "
+                    f"{' -> '.join(observed_statuses)}"
+                )
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                continue
+            time.sleep(min(STATIC_PAGES_POLL_INTERVAL_SECONDS, remaining))
+
+    def _existing_static_promotion(
+        self,
+        *,
+        commit_hash: str,
+        commit_message: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Recover one production deployment by its exact transaction identity."""
+        result = self._run_checked_command(
+            [
+                "cloudflare",
+                "pages",
+                "deployments",
+                "list",
+                STATIC_PAGES_PROJECT,
+                "--env",
+                "production",
+                "--limit",
+                "100",
+            ],
+            timeout=300,
+            label="Pages production receipt lookup",
+        )
+        deployments = self._parse_checked_command_json(
+            result,
+            "Pages production receipt lookup",
+        )
+        if not isinstance(deployments, list):
+            raise ClientError(
+                "Pages production receipt lookup did not return a JSON array"
+            )
+        matches = []
+        for deployment in deployments:
+            if not isinstance(deployment, dict):
+                raise ClientError(
+                    "Pages production receipt lookup returned a non-object deployment"
+                )
+            trigger = deployment.get("deployment_trigger")
+            metadata = trigger.get("metadata") if isinstance(trigger, dict) else None
+            if (
+                isinstance(metadata, dict)
+                and metadata.get("commit_message") == commit_message
+            ):
+                matches.append(deployment)
+        if len(matches) > 1:
+            raise ClientError(
+                "Multiple Pages production deployments match this transaction"
+            )
+        if not matches:
+            return None
+        deployment_id, status = self._static_promotion_receipt_state(
+            matches[0],
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+        if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+            raise ClientError(
+                f"Pages production deployment {deployment_id} reached terminal "
+                f"status {status}"
+            )
+        if status == "success":
+            return self._normalize_static_promotion_deployment(
+                matches[0],
+                commit_hash=commit_hash,
+                commit_message=commit_message,
+            )
+        return self._wait_for_static_promotion(
+            deployment_id,
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
 
     def _promote_static_release(
         self,
         manifest: Dict[str, Any],
         deployment: Dict[str, Any],
+        *,
+        journal: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Refuse production promotion outside P20's hash-current Gate D journal."""
-        gate_path = STATIC_RELEASE_ROOT / "cutover" / "gate-d.json"
-        gate = self._load_required_json(gate_path, "Gate D approval")
-        expected_ref = {
-            "release_id": manifest["release_id"],
-            "contract_hash": manifest["contract_hash"],
-        }
-        if gate.get("release_ref") != expected_ref:
-            raise ClientError("Gate D release_ref is stale")
-        pages = gate.get("pages_approval", {})
-        uploads = gate.get("uploads_route_approval", {})
-        if pages.get("approved") is not True or uploads.get("approved") is not True:
-            raise ClientError("Gate D does not contain both required approvals")
-        if pages.get("deployment_id") != deployment["deployment_id"]:
-            raise ClientError("Gate D Pages approval is for a different deployment")
-        raise ClientError(
-            "Production promotion is owned by P20's cutover operator; "
-            "the static publisher will not create a second Pages deployment"
-        )
+        """Promote this transaction's build to the production deployment.
 
-    def _post_promotion_validate(
+        The promotion re-uses the exact dist/ tree the bound preview was
+        uploaded from (the global build lock is still held), and is
+        recovered rather than repeated when a prior attempt already created
+        it.
+        """
+        idempotency_key = journal["idempotency"]["key"]
+        commit_hash = journal["source"]["source_revision"][:40]
+        commit_message = f"ata-blog promotion {idempotency_key}"
+        promoted = self._existing_static_promotion(
+            commit_hash=commit_hash,
+            commit_message=commit_message,
+        )
+        if promoted is None:
+            result = self._run_checked_command(
+                [
+                    "cloudflare",
+                    "pages",
+                    "deployments",
+                    "create",
+                    STATIC_PAGES_PROJECT,
+                    "--directory",
+                    str(STATIC_SITE_ROOT / "dist"),
+                    "--commit-message",
+                    commit_message,
+                    "--commit-hash",
+                    commit_hash,
+                ],
+                timeout=1800,
+                label="Pages production promotion",
+            )
+            payload = self._parse_checked_command_json(
+                result,
+                "Pages production promotion",
+            )
+            if not isinstance(payload, dict):
+                raise ClientError(
+                    "Pages production promotion did not return a JSON object"
+                )
+            promotion_id, status = self._static_promotion_receipt_state(
+                payload,
+                commit_hash=commit_hash,
+                commit_message=commit_message,
+            )
+            if status in STATIC_PAGES_TERMINAL_FAILURE_STATUSES:
+                raise ClientError(
+                    f"Pages production deployment {promotion_id} reached terminal "
+                    f"status {status}"
+                )
+            if status == "success":
+                promoted = self._normalize_static_promotion_deployment(
+                    payload,
+                    commit_hash=commit_hash,
+                    commit_message=commit_message,
+                )
+            else:
+                promoted = self._wait_for_static_promotion(
+                    promotion_id,
+                    commit_hash=commit_hash,
+                    commit_message=commit_message,
+                )
+        return {
+            "promotion_id": promoted["deployment_id"],
+            "promotion_sha256": promoted["deployment_sha256"],
+            "preview_deployment_id": deployment["deployment_id"],
+            "release_ref": {
+                "release_id": manifest["release_id"],
+                "contract_hash": manifest["contract_hash"],
+            },
+            "custom_domain": STATIC_SITE_ORIGIN,
+        }
+
+    def _apply_static_promotion(
         self,
+        *,
         manifest: Dict[str, Any],
         deployment: Dict[str, Any],
+        journal: Dict[str, Any],
+        runtime: Dict[str, Any],
+        paths: Dict[str, Path],
     ) -> None:
-        """P20 override seam for production validation after promotion."""
-        raise ClientError("Post-promotion validation is owned by P20")
+        """Record and perform this transaction's single production promotion.
+
+        A resumed transaction whose runtime already carries the promotion does
+        not create a second production deployment and does not re-read the
+        rollback target, so replay stays effect-free.
+        """
+        if runtime.get("promotion_applied") is True:
+            return
+        if not runtime.get("prior_production_deployment_id"):
+            runtime["prior_production_deployment_id"] = (
+                self._current_production_deployment_id()
+            )
+            _atomic_write_json(paths["runtime"], runtime)
+        runtime["promotion"] = self._promote_static_release(
+            manifest,
+            deployment,
+            journal=journal,
+        )
+        runtime["promotion_applied"] = True
+        runtime["promotion_rolled_back"] = False
+        _atomic_write_json(paths["runtime"], runtime)
 
     def _rollback_static_promotion(self, prior_deployment_id: str) -> None:
         """Roll Pages back only when a production promotion was actually recorded."""
@@ -2050,14 +2834,12 @@ class AtaBlogClient:
             ("reserved", "staged"),
             ("staged", "built"),
             ("built", "deployed"),
-            ("deployed", "accepted"),
-            ("accepted", "notion_updated"),
+            ("deployed", "notion_updated"),
             ("notion_updated", "completed"),
             ("reserved", "failed"),
             ("staged", "failed"),
             ("built", "failed"),
             ("deployed", "failed"),
-            ("accepted", "failed"),
             ("notion_updated", "failed"),
             ("failed", "reserved"),
         }
@@ -2081,6 +2863,7 @@ class AtaBlogClient:
         *,
         expected_page_id: str,
         expected_source_revision: str,
+        allow_historical_release_ref: bool = False,
     ) -> None:
         """Fail closed on corruption or stale P05 publisher-journal state."""
         outer = {
@@ -2092,7 +2875,7 @@ class AtaBlogClient:
             "idempotency": {"key"},
             "source": {"page_id", "source_revision"},
             "prior_state": {"corpus_sha256", "deployment_id", "notion_state_sha256"},
-            "artifacts": {"staged_corpus_sha256", "build_sha256", "deployment_id", "scanner_result_sha256"},
+            "artifacts": {"staged_corpus_sha256", "build_sha256", "deployment_id"},
             "effects": {"corpus_writes", "media_upload_sets", "builds", "deployments", "notion_updates"},
         }
         if set(journal) != outer:
@@ -2106,7 +2889,33 @@ class AtaBlogClient:
             "release_id": manifest["release_id"],
             "contract_hash": manifest["contract_hash"],
         }
-        if journal["release_ref"] != release_ref:
+        unbound_release_ref = {"release_id": None, "contract_hash": None}
+        may_bind_first_build = (
+            journal["effects"]["builds"] == 0
+            and journal["state"] in {"reserved", "staged", "failed"}
+        )
+        legacy_unbuilt_failure = _is_failed_unbuilt_publisher_journal(journal)
+        historical_release_ref = allow_historical_release_ref and (
+            re.fullmatch(
+                r"ata-static-[0-9a-f]{24}",
+                str(journal["release_ref"]["release_id"]),
+            )
+            is not None
+            and re.fullmatch(
+                r"[0-9a-f]{64}",
+                str(journal["release_ref"]["contract_hash"]),
+            )
+            is not None
+        )
+        if journal["release_ref"] == unbound_release_ref and not may_bind_first_build:
+            raise ClientError(
+                "Corrupt publisher journal: unbound release_ref after first build"
+            )
+        if journal["release_ref"] not in (release_ref, unbound_release_ref) and not (
+            legacy_unbuilt_failure or historical_release_ref
+        ):
+            if allow_historical_release_ref:
+                raise ClientError("Corrupt publisher journal: invalid historical release_ref")
             raise ClientError("Stale publisher journal: release_ref does not match current manifest")
         source = journal["source"]
         if source != {
@@ -2120,7 +2929,7 @@ class AtaBlogClient:
         for field in ("corpus_sha256", "notion_state_sha256"):
             if not re.fullmatch(r"[0-9a-f]{64}", str(journal["prior_state"][field])):
                 raise ClientError(f"Corrupt publisher journal: prior_state.{field}")
-        for field in ("staged_corpus_sha256", "build_sha256", "scanner_result_sha256"):
+        for field in ("staged_corpus_sha256", "build_sha256"):
             if not re.fullmatch(r"[0-9a-f]{64}", str(journal["artifacts"][field])):
                 raise ClientError(f"Corrupt publisher journal: artifacts.{field}")
         for field in ("deployment_id",):
@@ -2132,17 +2941,28 @@ class AtaBlogClient:
         for field, count in journal["effects"].items():
             if count not in (0, 1):
                 raise ClientError(f"Corrupt publisher journal: effects.{field} is not 0 or 1")
+        effects = journal["effects"]
+        if effects["builds"] == 0 and (
+            effects["deployments"] != 0 or effects["notion_updates"] != 0
+        ):
+            raise ClientError(
+                "Corrupt publisher journal: downstream effects exist before build"
+            )
+        if effects["deployments"] == 0 and effects["notion_updates"] != 0:
+            raise ClientError(
+                "Corrupt publisher journal: Notion effect exists before deployment"
+            )
         allowed_states = {
-            "reserved", "staged", "built", "deployed", "accepted",
+            "reserved", "staged", "built", "deployed",
             "notion_updated", "completed", "failed",
         }
         if journal["state"] not in allowed_states or not isinstance(journal["events"], list):
             raise ClientError("Corrupt publisher journal: invalid state or events")
         transitions = {
             "reserved->staged", "staged->built", "built->deployed",
-            "deployed->accepted", "accepted->notion_updated",
+            "deployed->notion_updated",
             "notion_updated->completed", "reserved->failed", "staged->failed",
-            "built->failed", "deployed->failed", "accepted->failed",
+            "built->failed", "deployed->failed",
             "notion_updated->failed", "failed->reserved",
         }
         prior_to = None
@@ -2178,11 +2998,8 @@ class AtaBlogClient:
     ) -> Dict[str, Any]:
         """Create the exact frozen P05 journal document."""
         key = self._publisher_idempotency_key(page_id, source_revision)
-        prior_corpus = _tree_sha256(STATIC_SITE_ROOT / "src" / "data" / "posts")
-        release_ref = {
-            "release_id": manifest["release_id"],
-            "contract_hash": manifest["contract_hash"],
-        }
+        prior_corpus = _static_corpus_sha256()
+        release_ref = {"release_id": None, "contract_hash": None}
         reserved_evidence = {
             "idempotency_key": key,
             "prior_corpus_sha256": prior_corpus,
@@ -2203,7 +3020,6 @@ class AtaBlogClient:
                 "staged_corpus_sha256": prior_corpus,
                 "build_sha256": EMPTY_SHA256,
                 "deployment_id": prior_deployment_id,
-                "scanner_result_sha256": EMPTY_SHA256,
             },
             "effects": {
                 "corpus_writes": 0,
@@ -2244,7 +3060,7 @@ class AtaBlogClient:
             target.unlink(missing_ok=True)
         else:
             _atomic_write_bytes(target, backup)
-        actual = _tree_sha256(STATIC_SITE_ROOT / "src" / "data" / "posts")
+        actual = _static_corpus_sha256()
         if actual != journal["prior_state"]["corpus_sha256"]:
             raise ClientError(
                 "Corpus rollback hash mismatch: "
@@ -2252,6 +3068,23 @@ class AtaBlogClient:
             )
         journal["effects"]["corpus_writes"] = 0
         runtime["corpus_rolled_back"] = True
+        # The backup and stage-plan are a one-shot snapshot of the corpus
+        # taken by the FIRST staging call this idempotency key ever made.
+        # Once that write is rolled back, the snapshot is spent: a retry's
+        # _stage_static_article must re-derive target/original/created from
+        # the current filesystem via the live notionPageId/slug lookups,
+        # not replay this stale capture. Leaving these files in place after
+        # a successful rollback previously caused a real corpus file to be
+        # deleted on a later retry: the backup was captured back when an
+        # older lookup bug treated an already-staged page as brand new
+        # (empty backup, created=True); after that bug was fixed, retries
+        # kept trusting the poisoned empty backup instead of the live
+        # lookup, so the rollback that followed a later, unrelated failure
+        # deleted the real file instead of restoring it. Clearing both
+        # files here forces every post-rollback retry to recapture the
+        # truth fresh.
+        paths["backup"].unlink(missing_ok=True)
+        paths["stage_plan"].unlink(missing_ok=True)
 
     def _publisher_result(
         self,
@@ -2264,6 +3097,8 @@ class AtaBlogClient:
     ) -> Dict[str, Any]:
         """Return the stable public result for a completed transaction."""
         deployment_url = runtime["deployment_url"]
+        promoted = runtime.get("promotion_applied") is True
+        public_base_url = STATIC_SITE_ORIGIN if promoted else deployment_url
         slug = runtime["slug"]
         baseline = initial_effects or {field: 0 for field in journal["effects"]}
         invocation_effects = {
@@ -2273,10 +3108,10 @@ class AtaBlogClient:
         return {
             "notion_page_id": journal["source"]["page_id"],
             "status": runtime["status"],
-            "scheduled_date": runtime.get("scheduled_date"),
-            "static_url": f"{deployment_url}/{slug}/",
+            "static_url": f"{public_base_url}/{slug}/",
             "deployment_id": journal["artifacts"]["deployment_id"],
             "deployment_url": deployment_url,
+            "promoted": promoted,
             "release_ref": journal["release_ref"],
             "source_revision": journal["source"]["source_revision"],
             "idempotency_key": journal["idempotency"]["key"],
@@ -2308,17 +3143,6 @@ class AtaBlogClient:
         actual = {key: runtime.get(key) for key in expected}
         if actual != expected:
             raise ClientError("Stale publisher runtime: source identity mismatch")
-        if runtime.get("scanner_handoff_sha256") != STATIC_SCANNER_HANDOFF_SHA256:
-            raise ClientError("Stale publisher runtime: P13 scanner handoff mismatch")
-        media_base_url = runtime.get("media_base_url")
-        parsed_media_url = urlparse(str(media_base_url))
-        if (
-            parsed_media_url.scheme != "https"
-            or not parsed_media_url.hostname
-            or not parsed_media_url.hostname.endswith(".workers.dev")
-            or parsed_media_url.path not in ("", "/")
-        ):
-            raise ClientError("Corrupt publisher runtime: invalid media_base_url")
         deployment = runtime.get("deployment")
         deployment_sha256 = runtime.get("deployment_sha256")
         if deployment is not None or deployment_sha256 is not None:
@@ -2345,40 +3169,10 @@ class AtaBlogClient:
                 )
 
     @contextmanager
-    def _static_build_lock(
-        self,
-        paths: Dict[str, Path],
-        manifest: Dict[str, Any],
-    ):
-        """Hold the global transferable token and the active-profile build lock."""
-        if not STATIC_BUILD_TOKEN.is_file():
-            raise ClientError(f"Required build token is missing: {STATIC_BUILD_TOKEN}")
-        descriptor = os.open(STATIC_BUILD_TOKEN, os.O_RDONLY)
-        try:
-            try:
-                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except BlockingIOError as exc:
-                raise ClientError("Global build token is already held") from exc
-            with os.fdopen(os.dup(descriptor), "r", encoding="utf-8") as handle:
-                try:
-                    token = json.load(handle)
-                except json.JSONDecodeError as exc:
-                    raise ClientError(f"Corrupt build token {STATIC_BUILD_TOKEN}: {exc}") from exc
-            if not isinstance(token, dict):
-                raise ClientError("Invalid build token: expected a JSON object")
-            if token.get("holder") != "root-coordinator" or token.get("released_at") is not None:
-                raise ClientError("Build token is not currently held by root-coordinator")
-            if token.get("release_id") != manifest["release_id"]:
-                raise ClientError("Build token release_id is stale")
-            if token.get("contract_hash") != manifest["contract_hash"]:
-                raise ClientError("Build token contract_hash is stale")
-            if not re.fullmatch(r"[0-9a-f]{64}", str(token.get("build_sha256"))):
-                raise ClientError("Build token has no bound build_sha256")
-            with self._exclusive_publisher_lock(paths["build_lock"], blocking=False):
-                yield
-        finally:
-            fcntl.flock(descriptor, fcntl.LOCK_UN)
-            os.close(descriptor)
+    def _static_build_lock(self, paths: Dict[str, Path]):
+        """Hold the active profile's non-blocking static build lock."""
+        with self._exclusive_publisher_lock(paths["build_lock"], blocking=False):
+            yield
 
     def _load_existing_publisher_journal(
         self,
@@ -2420,13 +3214,70 @@ class AtaBlogClient:
             revision = source.get("source_revision")
             if not isinstance(revision, str):
                 raise ClientError(f"Corrupt competing publisher journal: {path}")
+            failed = document.get("state") == "failed"
             self._validate_publisher_journal(
                 document,
                 manifest,
                 expected_page_id=page_id,
                 expected_source_revision=revision,
+                allow_historical_release_ref=failed,
             )
-            if document["state"] not in {"completed", "failed"}:
+            if failed:
+                key = document["idempotency"]["key"]
+                if path.name != f"{key}.journal.json":
+                    raise ClientError(f"Corrupt competing publisher journal: {path}")
+                runtime_path = path.with_name(f"{key}.runtime.json")
+                runtime = self._load_required_json(
+                    runtime_path,
+                    "competing publisher runtime",
+                )
+                self._validate_publisher_runtime(
+                    runtime,
+                    page_id=page_id,
+                    source_revision=revision,
+                    idempotency_key=key,
+                    completed=False,
+                )
+                effects = document["effects"]
+                no_effects = all(count == 0 for count in effects.values())
+                rollback_proven = (
+                    effects["corpus_writes"] == 0
+                    and effects["notion_updates"] == 0
+                    and (
+                        no_effects
+                        or runtime.get("corpus_rolled_back") is True
+                    )
+                    and runtime.get("rollback_error") in (None, "")
+                    and not runtime.get("promotion_applied")
+                    and runtime.get("release_ref") == document["release_ref"]
+                    and isinstance(runtime.get("failure_stage"), str)
+                    and bool(runtime["failure_stage"])
+                    and isinstance(runtime.get("failure_message"), str)
+                    and bool(runtime["failure_message"])
+                )
+                if not rollback_proven:
+                    raise ClientError(
+                        f"Failed competing publisher revision has unproven effects: {path}"
+                    )
+                if effects["media_upload_sets"] == 1:
+                    self._validate_recorded_static_media(runtime)
+                if effects["builds"] == 1 and runtime.get("build_sha256") != (
+                    document["artifacts"]["build_sha256"]
+                ):
+                    raise ClientError(
+                        f"Failed competing publisher revision has unproven effects: {path}"
+                    )
+                if effects["deployments"] == 1 and (
+                    runtime.get("deployment_id")
+                    != document["artifacts"]["deployment_id"]
+                    or not isinstance(runtime.get("deployment"), dict)
+                    or not runtime.get("deployment_sha256")
+                ):
+                    raise ClientError(
+                        f"Failed competing publisher revision has unproven effects: {path}"
+                    )
+                continue
+            if document["state"] != "completed":
                 raise ClientError(
                     "Competing publisher revision is active for page "
                     f"{page_id}: {revision}"
@@ -2464,23 +3315,16 @@ class AtaBlogClient:
             "deployed": (
                 "corpus_writes", "media_upload_sets", "builds", "deployments",
             ),
-            "accepted": (
-                "corpus_writes", "media_upload_sets", "builds", "deployments",
-            ),
             "notion_updated": tuple(effects),
             "completed": tuple(effects),
         }
         if state in requirements and any(effects[field] != 1 for field in requirements[state]):
             raise ClientError(f"Corrupt publisher journal: effects do not support {state}")
-        if state in {"deployed", "accepted", "notion_updated", "completed"}:
+        if state in {"deployed", "notion_updated", "completed"}:
             try:
                 uuid.UUID(str(artifacts["deployment_id"]))
             except ValueError as exc:
                 raise ClientError("Corrupt publisher journal: deployed state has no UUID") from exc
-        if state in {"accepted", "notion_updated", "completed"} and (
-            artifacts["scanner_result_sha256"] == EMPTY_SHA256
-        ):
-            raise ClientError("Corrupt publisher journal: accepted state has no scanner result")
 
     def _resume_active_static_transaction(
         self,
@@ -2498,9 +3342,10 @@ class AtaBlogClient:
         self._assert_resume_effects(journal)
         initial_effects = dict(journal["effects"])
         release_ref = journal["release_ref"]
+        unbound_release_ref = {"release_id": None, "contract_hash": None}
         current_stage = "build-lock acquisition"
         try:
-            with self._static_build_lock(paths, manifest):
+            with self._static_build_lock(paths):
                 if journal["state"] == "reserved":
                     if journal["effects"]["corpus_writes"] == 0:
                         current_stage = "staging"
@@ -2523,10 +3368,18 @@ class AtaBlogClient:
                         stage = runtime
                     if journal["effects"]["media_upload_sets"] == 0:
                         current_stage = "media"
-                        runtime["media"] = self._upload_static_media(stage)
+                        media = self._upload_static_media(stage)
+                        media["inline"] = self._upload_static_inline_media(markdown_content)
+                        runtime["media"] = media
                         journal["effects"]["media_upload_sets"] = 1
                         _atomic_write_json(paths["runtime"], runtime)
                         _atomic_write_json(paths["journal"], journal)
+                    else:
+                        current_stage = "media"
+                        self._migrate_recorded_static_media(
+                            runtime, markdown_content, paths["runtime"]
+                        )
+                        self._validate_recorded_static_media(runtime)
                     self._transition_publisher_journal(
                         journal,
                         "staged",
@@ -2537,15 +3390,19 @@ class AtaBlogClient:
                 if journal["state"] == "staged":
                     current_stage = "build"
                     if journal["effects"]["builds"] == 0:
+                        expected_build_release_ref = (
+                            None if release_ref == unbound_release_ref else release_ref
+                        )
                         build = self._run_static_build(
-                            release_ref,
+                            expected_build_release_ref,
                             journal["artifacts"]["staged_corpus_sha256"],
                         )
-                        runtime["build_sha256"] = build["build_sha256"]
-                        journal["artifacts"]["build_sha256"] = build["build_sha256"]
-                        journal["effects"]["builds"] = 1
-                        _atomic_write_json(paths["runtime"], runtime)
-                        _atomic_write_json(paths["journal"], journal)
+                        manifest = self._bind_static_build_release(
+                            journal=journal,
+                            runtime=runtime,
+                            build=build,
+                            paths=paths,
+                        )
                     self._transition_publisher_journal(
                         journal,
                         "built",
@@ -2559,6 +3416,7 @@ class AtaBlogClient:
                         deployment = self._deploy_static_preview(
                             journal["idempotency"]["key"],
                             journal["source"]["source_revision"],
+                            journal["release_ref"]["release_id"],
                         )
                         runtime.update(deployment)
                         journal["artifacts"]["deployment_id"] = deployment["deployment_id"]
@@ -2572,10 +3430,7 @@ class AtaBlogClient:
                             "deployment": runtime["deployment"],
                             "deployment_sha256": runtime["deployment_sha256"],
                         }
-                    self._persist_static_deployment_metadata(
-                        deployment,
-                        paths["deployment_metadata"],
-                    )
+                    self._validate_static_deployment_metadata(deployment)
                     self._transition_publisher_journal(
                         journal, "deployed", deployment, paths["journal"]
                     )
@@ -2587,47 +3442,16 @@ class AtaBlogClient:
                     "deployment_sha256": runtime["deployment_sha256"],
                 }
                 if journal["state"] == "deployed":
-                    current_stage = "preview acceptance"
-                    replay = self._scheduled_replay_document(journal)
-                    _atomic_write_json(paths["replay"], replay)
-                    scanner_result = self._load_existing_scanner_result(
-                        paths["scanner"],
-                        manifest=manifest,
-                        deployment=deployment,
-                        deployment_sha256=runtime["deployment_sha256"],
-                    )
-                    if scanner_result is None:
-                        scanner_result = self._run_static_scanner(
-                            manifest=manifest,
-                            journal_path=paths["journal"],
-                            replay_path=paths["replay"],
-                            deployment_metadata_path=paths["deployment_metadata"],
-                            scanner_path=paths["scanner"],
-                            deployment=deployment,
-                            deployment_sha256=runtime["deployment_sha256"],
-                            media_base_url=runtime["media_base_url"],
-                        )
-                    journal["artifacts"]["scanner_result_sha256"] = _artifact_sha256(
-                        scanner_result
-                    )
-                    self._transition_publisher_journal(
-                        journal,
-                        "accepted",
-                        journal["artifacts"]["scanner_result_sha256"],
-                        paths["journal"],
-                    )
-
-                if journal["state"] == "accepted":
                     public_base_url = deployment["deployment_url"]
                     if runtime["status"] == "publish":
                         current_stage = "promotion"
-                        runtime["promotion"] = self._promote_static_release(
-                            manifest, deployment
+                        self._apply_static_promotion(
+                            manifest=manifest,
+                            deployment=deployment,
+                            journal=journal,
+                            runtime=runtime,
+                            paths=paths,
                         )
-                        runtime["promotion_applied"] = True
-                        _atomic_write_json(paths["runtime"], runtime)
-                        current_stage = "post-promotion validation"
-                        self._post_promotion_validate(manifest, deployment)
                         public_base_url = STATIC_SITE_ORIGIN
                     current_stage = "Notion update"
                     public_url = f"{public_base_url}/{runtime['slug']}/"
@@ -2656,11 +3480,7 @@ class AtaBlogClient:
                     )
 
                 if journal["state"] == "notion_updated":
-                    current_stage = "schedule cleanup"
-                    self.clear_schedule_reservation()
                     _atomic_write_json(paths["runtime"], runtime)
-                    replay = self._scheduled_replay_document(journal)
-                    _atomic_write_json(paths["replay"], replay)
                     self._transition_publisher_journal(
                         journal, "completed", journal["effects"], paths["journal"]
                     )
@@ -2691,9 +3511,14 @@ class AtaBlogClient:
             rollback_errors = []
             if runtime.get("promotion_applied"):
                 try:
-                    self._rollback_static_promotion(journal["prior_state"]["deployment_id"])
+                    self._rollback_static_promotion(
+                        runtime["prior_production_deployment_id"]
+                    )
                 except Exception as rollback_exc:
                     rollback_errors.append(f"production rollback: {rollback_exc}")
+                else:
+                    runtime["promotion_applied"] = False
+                    runtime["promotion_rolled_back"] = True
             try:
                 self._restore_static_corpus(runtime, journal, paths)
             except Exception as rollback_exc:
@@ -2715,9 +3540,6 @@ class AtaBlogClient:
         *,
         page_id: str,
         status: str,
-        slug: Optional[str],
-        date: Optional[str],
-        auto_schedule: bool,
         check_duplicates: bool,
         featured_image: Optional[str],
         force: bool,
@@ -2727,9 +3549,6 @@ class AtaBlogClient:
             return self._publish_static_transaction_locked(
                 page_id=page_id,
                 status=status,
-                slug=slug,
-                date=date,
-                auto_schedule=auto_schedule,
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
@@ -2740,51 +3559,23 @@ class AtaBlogClient:
         *,
         page_id: str,
         status: str,
-        slug: Optional[str],
-        date: Optional[str],
-        auto_schedule: bool,
         check_duplicates: bool,
         featured_image: Optional[str],
         force: bool,
     ) -> Dict[str, Any]:
         """Run or resume the single journaled static publication transaction."""
-        if status not in {"draft", "publish"}:
-            raise ClientError("Static publish status must be draft or publish")
-        if date and auto_schedule:
-            raise ClientError("Use either --date or --auto-schedule, not both")
-        if status == "publish":
-            raise ClientError(
-                "Production promotion is owned by P20 and requires its hash-current "
-                "Gate D transaction; use --status draft for a P14 preview"
-            )
-        if date:
-            try:
-                parsed_date = datetime.fromisoformat(date.replace("Z", "+00:00"))
-            except ValueError as exc:
-                raise ClientError(f"--date is not valid ISO 8601: {date}") from exc
-            if parsed_date.tzinfo is None:
-                raise ClientError("--date must include a UTC offset")
-
         article = self.get_article(page_id)
         title = str(article.get("Title") or article.get("title") or "Untitled")
-        missing = [
-            field for field in ("Keywords", "Category", "Tags", "Excerpt")
-            if not article.get(field)
-        ]
-        if missing:
-            raise ClientError(f"Missing required Notion fields: {', '.join(missing)}")
+        self._require_publish_metadata(article)
         markdown_content = self.get_article_markdown(page_id)
         self._validate_publish_markdown(markdown_content)
-        image_path = self._resolve_featured_image(page_id, featured_image)
+        image_path = self._resolve_featured_image_with_recovery(page_id, featured_image)
         source_revision = self._source_revision(article, markdown_content, image_path)
         idempotency_key = self._publisher_idempotency_key(page_id, source_revision)
         paths = self._publisher_paths(page_id, idempotency_key)
         manifest = self._load_static_release_manifest()
-        release_ref = {
-            "release_id": manifest["release_id"],
-            "contract_hash": manifest["contract_hash"],
-        }
-        final_slug = self._static_slug(title, slug)
+        unbound_release_ref = {"release_id": None, "contract_hash": None}
+        final_slug = self._static_slug(title, self._notion_slug(article, page_id))
 
         with nullcontext():
             journal = self._load_existing_publisher_journal(
@@ -2799,28 +3590,6 @@ class AtaBlogClient:
                     idempotency_key=idempotency_key,
                     completed=True,
                 )
-                deployment = {
-                    "deployment_id": runtime["deployment_id"],
-                    "deployment_url": runtime["deployment_url"],
-                    "deployment": runtime["deployment"],
-                    "deployment_sha256": runtime["deployment_sha256"],
-                }
-                self._persist_static_deployment_metadata(
-                    deployment,
-                    paths["deployment_metadata"],
-                )
-                scanner_result = self._load_existing_scanner_result(
-                    paths["scanner"],
-                    manifest=manifest,
-                    deployment=deployment,
-                    deployment_sha256=runtime["deployment_sha256"],
-                )
-                if scanner_result is None or _artifact_sha256(scanner_result) != (
-                    journal["artifacts"]["scanner_result_sha256"]
-                ):
-                    raise ClientError("Completed publisher journal has no bound P13 receipt")
-                replay = self._scheduled_replay_document(journal)
-                _atomic_write_json(paths["replay"], replay)
                 return self._publisher_result(journal, runtime, paths, replayed=True)
 
             self._reject_competing_publisher_revision(
@@ -2837,7 +3606,9 @@ class AtaBlogClient:
                 existing_post = self._find_static_post(final_slug)
                 article_url_slug = None
                 if article.get("Published URL"):
-                    article_url_slug = self._slug_from_url(str(article["Published URL"]))
+                    article_url_slug = self._slug_from_url(
+                        str(article["Published URL"]), required=False
+                    )
                 if (
                     check_duplicates
                     and existing_post is not None
@@ -2847,7 +3618,6 @@ class AtaBlogClient:
                     raise ClientError(
                         f"Static post with slug '{final_slug}' already exists"
                     )
-            media_base_url = self._resolve_static_media_base_url(manifest)
             if journal is None:
                 runtime = {
                     "schema_version": "ata-static-publisher-runtime/v1",
@@ -2856,11 +3626,8 @@ class AtaBlogClient:
                     "idempotency_key": idempotency_key,
                     "slug": final_slug,
                     "status": status,
-                    "scheduled_date": None,
                     "publish_date": None,
-                    "release_ref": release_ref,
-                    "scanner_handoff_sha256": STATIC_SCANNER_HANDOFF_SHA256,
-                    "media_base_url": media_base_url,
+                    "release_ref": unbound_release_ref,
                     "failure_stage": None,
                     "failure_message": None,
                     "rollback_error": None,
@@ -2874,12 +3641,76 @@ class AtaBlogClient:
                     idempotency_key=idempotency_key,
                     completed=False,
                 )
-                if runtime.get("release_ref") != release_ref:
+                may_bind_first_build = (
+                    journal["effects"]["builds"] == 0
+                    and journal["state"] in {"reserved", "staged", "failed"}
+                )
+                journal_release_ref = journal["release_ref"]
+                runtime_release_ref = runtime.get("release_ref")
+                if may_bind_first_build:
+                    first_build_was_journaled = (
+                        journal_release_ref != unbound_release_ref
+                        and journal["artifacts"]["build_sha256"] != EMPTY_SHA256
+                    )
+                    failed_unbuilt_candidate = (
+                        _is_failed_unbuilt_publisher_journal(journal)
+                        and journal["events"][-1]["from"] == "staged"
+                        and journal["events"][-1]["to"] == "failed"
+                        and journal["effects"]["media_upload_sets"] == 1
+                        and runtime.get("failure_stage")
+                        in {"build", "build-lock acquisition"}
+                        and runtime.get("corpus_rolled_back") is True
+                        and runtime.get("rollback_error") in (None, "")
+                        and not runtime.get("build_sha256")
+                        and runtime.get("corpus_sha256")
+                        == journal["artifacts"]["staged_corpus_sha256"]
+                        and runtime_release_ref == journal_release_ref
+                    )
+                    if failed_unbuilt_candidate:
+                        self._validate_recorded_static_media(runtime)
+                        current_prior_corpus = _static_corpus_sha256()
+                        legacy_prior_corpus = _tree_sha256(
+                            STATIC_SITE_ROOT / "src" / "data" / "posts"
+                        )
+                        recorded_prior_corpus = journal["prior_state"]["corpus_sha256"]
+                        if recorded_prior_corpus == legacy_prior_corpus:
+                            journal["prior_state"][
+                                "corpus_sha256"
+                            ] = current_prior_corpus
+                            journal["artifacts"][
+                                "staged_corpus_sha256"
+                            ] = current_prior_corpus
+                            runtime["corpus_sha256"] = current_prior_corpus
+                            _atomic_write_json(paths["journal"], journal)
+                            _atomic_write_json(paths["runtime"], runtime)
+                        elif recorded_prior_corpus != current_prior_corpus:
+                            raise ClientError(
+                                "Stale publisher journal: rolled-back corpus hash mismatch"
+                            )
+                    if journal_release_ref == unbound_release_ref:
+                        if runtime_release_ref != unbound_release_ref:
+                            raise ClientError(
+                                "Stale publisher runtime: release_ref mismatch"
+                            )
+                    elif first_build_was_journaled:
+                        if runtime_release_ref not in (
+                            journal_release_ref,
+                            unbound_release_ref,
+                        ):
+                            raise ClientError(
+                                "Stale publisher runtime: release_ref mismatch"
+                            )
+                    elif failed_unbuilt_candidate:
+                        journal["release_ref"] = unbound_release_ref
+                        runtime["release_ref"] = unbound_release_ref
+                        _atomic_write_json(paths["journal"], journal)
+                        _atomic_write_json(paths["runtime"], runtime)
+                    else:
+                        raise ClientError(
+                            "Corrupt publisher transaction: unproven first-build binding"
+                        )
+                elif runtime_release_ref != journal["release_ref"]:
                     raise ClientError("Stale publisher runtime: release_ref mismatch")
-                if runtime.get("scanner_handoff_sha256") != STATIC_SCANNER_HANDOFF_SHA256:
-                    raise ClientError("Stale publisher runtime: P13 scanner handoff mismatch")
-                if runtime.get("media_base_url") != media_base_url:
-                    raise ClientError("Stale publisher runtime: media_base_url mismatch")
                 if runtime.get("slug") != final_slug or runtime.get("status") != status:
                     raise ClientError("Retry options do not match the existing publisher runtime")
                 if journal["state"] != "failed":
@@ -2896,10 +3727,10 @@ class AtaBlogClient:
 
             current_stage = "build-lock acquisition"
             try:
-                with self._static_build_lock(paths, manifest):
+                with self._static_build_lock(paths):
                     if journal is None:
                         current_stage = "transaction reservation"
-                        prior_deployment_id = self._prior_pages_deployment_id()
+                        prior_deployment_id = EMPTY_UUID
                         journal = self._new_publisher_journal(
                             page_id=page_id,
                             source_revision=source_revision,
@@ -2908,16 +3739,8 @@ class AtaBlogClient:
                             prior_deployment_id=prior_deployment_id,
                         )
                         _atomic_write_json(paths["journal"], journal)
-                        current_stage = "schedule reservation"
-                        scheduled_date = None
-                        if auto_schedule:
-                            scheduled_date = self.find_next_schedule_slot()
-                        elif date:
-                            scheduled_date = self._reserve_explicit_schedule_slot(date)
-                        runtime["scheduled_date"] = scheduled_date
                         runtime["publish_date"] = (
-                            scheduled_date
-                            or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+                            datetime.now(timezone.utc).replace(microsecond=0).isoformat()
                         )
                         _atomic_write_json(paths["runtime"], runtime)
                     else:
@@ -2950,10 +3773,17 @@ class AtaBlogClient:
                     if journal["effects"]["media_upload_sets"] == 0:
                         current_stage = "media"
                         media = self._upload_static_media(stage)
+                        media["inline"] = self._upload_static_inline_media(markdown_content)
                         runtime["media"] = media
                         journal["effects"]["media_upload_sets"] = 1
                         _atomic_write_json(paths["runtime"], runtime)
                         _atomic_write_json(paths["journal"], journal)
+                    else:
+                        current_stage = "media"
+                        self._migrate_recorded_static_media(
+                            runtime, markdown_content, paths["runtime"]
+                        )
+                        self._validate_recorded_static_media(runtime)
                     self._transition_publisher_journal(
                         journal,
                         "staged",
@@ -2966,15 +3796,21 @@ class AtaBlogClient:
 
                     if journal["effects"]["builds"] == 0:
                         current_stage = "build"
+                        expected_build_release_ref = (
+                            None
+                            if journal["release_ref"] == unbound_release_ref
+                            else journal["release_ref"]
+                        )
                         build = self._run_static_build(
-                            release_ref,
+                            expected_build_release_ref,
                             journal["artifacts"]["staged_corpus_sha256"],
                         )
-                        runtime["build_sha256"] = build["build_sha256"]
-                        journal["artifacts"]["build_sha256"] = build["build_sha256"]
-                        journal["effects"]["builds"] = 1
-                        _atomic_write_json(paths["runtime"], runtime)
-                        _atomic_write_json(paths["journal"], journal)
+                        manifest = self._bind_static_build_release(
+                            journal=journal,
+                            runtime=runtime,
+                            build=build,
+                            paths=paths,
+                        )
                     self._transition_publisher_journal(
                         journal,
                         "built",
@@ -2985,7 +3821,9 @@ class AtaBlogClient:
                     if journal["effects"]["deployments"] == 0:
                         current_stage = "preview upload"
                         deployment = self._deploy_static_preview(
-                            idempotency_key, source_revision
+                            idempotency_key,
+                            source_revision,
+                            journal["release_ref"]["release_id"],
                         )
                         runtime.update(deployment)
                         journal["artifacts"]["deployment_id"] = deployment["deployment_id"]
@@ -2999,10 +3837,7 @@ class AtaBlogClient:
                             "deployment": runtime["deployment"],
                             "deployment_sha256": runtime["deployment_sha256"],
                         }
-                    self._persist_static_deployment_metadata(
-                        deployment,
-                        paths["deployment_metadata"],
-                    )
+                    self._validate_static_deployment_metadata(deployment)
                     self._transition_publisher_journal(
                         journal,
                         "deployed",
@@ -3010,38 +3845,16 @@ class AtaBlogClient:
                         paths["journal"],
                     )
 
-                    current_stage = "preview acceptance"
-                    replay = self._scheduled_replay_document(journal)
-                    _atomic_write_json(paths["replay"], replay)
-                    scanner_result = self._run_static_scanner(
-                        manifest=manifest,
-                        journal_path=paths["journal"],
-                        replay_path=paths["replay"],
-                        deployment_metadata_path=paths["deployment_metadata"],
-                        scanner_path=paths["scanner"],
-                        deployment=deployment,
-                        deployment_sha256=runtime["deployment_sha256"],
-                        media_base_url=runtime["media_base_url"],
-                    )
-                    journal["artifacts"]["scanner_result_sha256"] = _artifact_sha256(
-                        scanner_result
-                    )
-                    self._transition_publisher_journal(
-                        journal,
-                        "accepted",
-                        journal["artifacts"]["scanner_result_sha256"],
-                        paths["journal"],
-                    )
-
                     public_base_url = deployment["deployment_url"]
                     if status == "publish":
                         current_stage = "promotion"
-                        promotion = self._promote_static_release(manifest, deployment)
-                        runtime["promotion"] = promotion
-                        runtime["promotion_applied"] = True
-                        _atomic_write_json(paths["runtime"], runtime)
-                        current_stage = "post-promotion validation"
-                        self._post_promotion_validate(manifest, deployment)
+                        self._apply_static_promotion(
+                            manifest=manifest,
+                            deployment=deployment,
+                            journal=journal,
+                            runtime=runtime,
+                            paths=paths,
+                        )
                         public_base_url = STATIC_SITE_ORIGIN
 
                     current_stage = "Notion update"
@@ -3067,8 +3880,6 @@ class AtaBlogClient:
                         },
                         paths["journal"],
                     )
-                    current_stage = "schedule cleanup"
-                    self.clear_schedule_reservation()
                     _atomic_write_json(paths["runtime"], runtime)
                     self._transition_publisher_journal(
                         journal,
@@ -3102,10 +3913,13 @@ class AtaBlogClient:
                 if runtime.get("promotion_applied"):
                     try:
                         self._rollback_static_promotion(
-                            journal["prior_state"]["deployment_id"]
+                            runtime["prior_production_deployment_id"]
                         )
                     except Exception as rollback_exc:
                         rollback_errors.append(f"production rollback: {rollback_exc}")
+                    else:
+                        runtime["promotion_applied"] = False
+                        runtime["promotion_rolled_back"] = True
                 try:
                     self._restore_static_corpus(runtime, journal, paths)
                 except Exception as rollback_exc:
@@ -3123,62 +3937,311 @@ class AtaBlogClient:
                     f"Static publisher failed during {current_stage}: {failure}"
                 ) from failure
 
-    @staticmethod
-    def _static_cutover_active() -> bool:
-        """Return True only when the static-site cutover handoff artifacts exist.
+    def _preview_static_transaction(
+        self,
+        *,
+        page_id: str,
+        check_duplicates: bool,
+        featured_image: Optional[str],
+        force: bool,
+    ) -> Dict[str, Any]:
+        """Build and deploy a Cloudflare Pages preview without publishing.
 
-        The static migration is considered active only when the P05/P13 v2
-        handoffs and the integrated release manifest are all present. While the
-        cutover is not active (none of these artifacts exist on disk), live
-        publishing must fall back to the classic WordPress path so the weekly
-        scheduling pipeline keeps working.
+        Preview is deliberately separate from the journaled publish transaction.
+        It may stage corpus/media and build while the per-profile build lock is held,
+        but it restores the corpus and reseals that restored corpus before
+        returning. It never updates Notion and therefore cannot satisfy or poison
+        a later production publish journal for the same source revision.
         """
-        return (
-            STATIC_P05_HANDOFF.is_file()
-            and STATIC_SCANNER_HANDOFF.is_file()
-            and STATIC_RELEASE_MANIFEST.is_file()
-        )
+        with self._exclusive_publisher_lock(self._publisher_page_lock_path(page_id)):
+            article = self.get_article(page_id)
+            title = str(article.get("Title") or article.get("title") or "Untitled")
+            self._require_publish_metadata(article)
+            markdown_content = self.get_article_markdown(page_id)
+            self._validate_publish_markdown(markdown_content)
+            image_path = self._resolve_featured_image(page_id, featured_image)
+            source_revision = self._source_revision(article, markdown_content, image_path)
+            preview_key = hashlib.sha256(
+                f"preview\n{page_id}\n{source_revision}\n".encode("utf-8")
+            ).hexdigest()
+            paths = self._publisher_paths(page_id, preview_key)
+            final_slug = self._static_slug(
+                title, self._notion_slug(article, page_id)
+            )
+
+            if not force and article.get("Published URL"):
+                raise ClientError(
+                    f"Post already published at: {article['Published URL']}. "
+                    "Use --force to preview a published post."
+                )
+            existing_post = self._find_static_post(final_slug)
+            article_url_slug = None
+            if article.get("Published URL"):
+                article_url_slug = self._slug_from_url(
+                    str(article["Published URL"]), required=False
+                )
+            if (
+                check_duplicates
+                and existing_post is not None
+                and article_url_slug != final_slug
+                and not force
+            ):
+                raise ClientError(
+                    f"Static post with slug '{final_slug}' already exists"
+                )
+
+            prior_corpus_sha256 = _static_corpus_sha256()
+            runtime: Dict[str, Any] = {
+                "schema_version": "ata-static-preview-runtime/v1",
+                "page_id": page_id,
+                "source_revision": source_revision,
+                "preview_key": preview_key,
+                "slug": final_slug,
+                "status": "preview",
+                "publish_date": (
+                    datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+                ),
+                "failure_stage": None,
+                "failure_message": None,
+                "rollback_error": None,
+            }
+            deployment: Optional[Dict[str, Any]] = None
+            current_stage = "build-lock acquisition"
+
+            with self._static_build_lock(paths):
+                try:
+                    current_stage = "staging"
+                    stage = self._stage_static_article(
+                        page_id=page_id,
+                        slug=final_slug,
+                        article=article,
+                        markdown_content=markdown_content,
+                        image_path=image_path,
+                        publish_date=runtime["publish_date"],
+                        paths=paths,
+                    )
+                    runtime.update(stage)
+                    runtime["corpus_rolled_back"] = False
+                    _atomic_write_json(paths["runtime"], runtime)
+
+                    current_stage = "media"
+                    media = self._upload_static_media(stage)
+                    media["inline"] = self._upload_static_inline_media(markdown_content)
+                    runtime["media"] = media
+                    _atomic_write_json(paths["runtime"], runtime)
+
+                    current_stage = "build"
+                    build = self._run_static_build(None, stage["corpus_sha256"])
+                    preview_release_ref = {
+                        "release_id": build["manifest"]["release_id"],
+                        "contract_hash": build["manifest"]["contract_hash"],
+                    }
+                    runtime["release_ref"] = preview_release_ref
+                    runtime["build_sha256"] = build["build_sha256"]
+
+                    current_stage = "preview upload"
+                    deployment = self._deploy_static_preview(
+                        preview_key,
+                        source_revision,
+                        build["manifest"]["release_id"],
+                    )
+                    self._validate_static_deployment_metadata(deployment)
+                    runtime.update(deployment)
+                    _atomic_write_json(paths["runtime"], runtime)
+                except Exception as exc:
+                    failure = exc if isinstance(exc, ClientError) else ClientError(str(exc))
+                    runtime["failure_stage"] = current_stage
+                    runtime["failure_message"] = str(failure)
+                    _atomic_write_json(paths["runtime"], runtime)
+                    raise failure
+                finally:
+                    cleanup_errors: List[str] = []
+                    try:
+                        if paths["backup"].is_file() or paths["stage_plan"].is_file():
+                            preview_journal = {
+                                "prior_state": {"corpus_sha256": prior_corpus_sha256},
+                                "effects": {"corpus_writes": 1},
+                            }
+                            self._restore_static_corpus(runtime, preview_journal, paths)
+                    except Exception as exc:
+                        cleanup_errors.append(f"corpus restore: {exc}")
+
+                    try:
+                        restored_corpus_sha256 = _static_corpus_sha256()
+                        if restored_corpus_sha256 != prior_corpus_sha256:
+                            raise ClientError(
+                                "Preview cleanup corpus hash mismatch: "
+                                f"expected {prior_corpus_sha256}, "
+                                f"got {restored_corpus_sha256}"
+                            )
+                        cleanup_build = self._run_static_build(
+                            None, restored_corpus_sha256
+                        )
+                        runtime["cleanup_release_ref"] = {
+                            "release_id": cleanup_build["manifest"]["release_id"],
+                            "contract_hash": cleanup_build["manifest"]["contract_hash"],
+                        }
+                        runtime["cleanup_build_sha256"] = cleanup_build["build_sha256"]
+                    except Exception as exc:
+                        cleanup_errors.append(f"release reseal: {exc}")
+
+                    if cleanup_errors:
+                        runtime["rollback_error"] = "; ".join(cleanup_errors)
+                        _atomic_write_json(paths["runtime"], runtime)
+                        raise ClientError(
+                            "Static preview cleanup failed: "
+                            + runtime["rollback_error"]
+                        )
+
+            if deployment is None:
+                raise ClientError("Static preview produced no deployment receipt")
+
+            preview_url = f"{deployment['deployment_url']}/{final_slug}/"
+            return {
+                "notion_page_id": page_id,
+                "status": "preview",
+                "preview_url": preview_url,
+                "static_url": preview_url,
+                "deployment_id": deployment["deployment_id"],
+                "deployment_url": deployment["deployment_url"],
+                "promoted": False,
+                "notion_updated": False,
+                "corpus_restored": True,
+                "source_revision": source_revision,
+                "preview_key": preview_key,
+                "warnings": [],
+            }
+
+    def _schedule_article(
+        self,
+        *,
+        page_id: str,
+        status: str,
+        date: Optional[str],
+        auto_schedule: bool,
+        check_duplicates: bool,
+        schedule_window: Optional[Tuple[datetime, datetime]],
+    ) -> Dict[str, Any]:
+        """Validate a post, then write Status=Scheduled and its Publish Date.
+
+        Nothing is staged, uploaded, built, deployed, or journaled here: the
+        due publisher's `--status publish` run does all of that later, without
+        flags, so every gate it cannot satisfy itself is enforced now.
+        """
+        if date is not None and auto_schedule:
+            raise ClientError("Use either --date or --auto-schedule, not both")
+        if status in {"publish", "preview"}:
+            raise ClientError(
+                f"--status {status} cannot be combined with --date or --auto-schedule: "
+                "scheduling never deploys or promotes"
+            )
+        if date is not None:
+            self._parse_schedule_date(date)
+
+        # One lock across page read -> read-slots -> pick -> Notion write. The
+        # Scheduled page is the durable record of both facts a second scheduler
+        # needs: this page is no longer Ready to Publish, and its slot is taken.
+        with self._exclusive_publisher_lock(self._schedule_lock_path()):
+            article = self.get_article(page_id)
+            if article.get("Status") != "Ready to Publish":
+                raise ClientError(
+                    f"Notion page {page_id} must be 'Ready to Publish' to be scheduled; "
+                    f"current status is '{article.get('Status')}'"
+                )
+            if not article.get("Title"):
+                raise ClientError(f"Notion page {page_id} has no Title")
+            self._require_publish_metadata(article)
+            self._validate_publish_markdown(self.get_article_markdown(page_id))
+            scheduled_image_path = self._resolve_featured_image(page_id, None)
+            self._upload_scheduled_featured_image(page_id, scheduled_image_path)
+            self._resolve_static_term_ids(
+                "categories", self._notion_term_names(article, "Category")
+            )
+            self._resolve_static_term_ids("tags", self._notion_term_names(article, "Tags"))
+            self._sponsored_tag_ids(article, page_id)
+            final_slug = self._static_slug(
+                str(article["Title"]), self._notion_slug(article, page_id)
+            )
+            if check_duplicates and self._find_static_post(final_slug) is not None:
+                raise ClientError(f"Static post with slug '{final_slug}' already exists")
+            if auto_schedule:
+                slot = self.find_next_schedule_slot(schedule_window)
+            else:
+                slot = self._require_free_explicit_slot(date, schedule_window)
+            self.update_article(page_id, status="Scheduled", properties={"Publish Date": slot})
+        return {
+            "notion_page_id": page_id,
+            "status": "Scheduled",
+            "scheduled_date": slot,
+            "slug": final_slug,
+        }
 
     def publish_article(
         self,
         page_id: str,
         status: str = "draft",
-        slug: Optional[str] = None,
         date: Optional[str] = None,
         auto_schedule: bool = False,
         check_duplicates: bool = True,
         featured_image: Optional[str] = None,
         force: bool = False,
+        schedule_after: Optional[str] = None,
+        schedule_before: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Publish a Notion article to WordPress.
+        Schedule a Notion article, or publish it to the static site.
 
-        Uses the journaled static-site transaction when the static cutover is
-        active (P05/P13 handoff artifacts present); otherwise falls back to the
-        classic WordPress publish path so live publishing keeps working while
-        the static migration is not yet cut over.
+        With date or auto_schedule this only schedules: it validates the post
+        and sets Status=Scheduled plus Publish Date. Otherwise it runs the
+        static transaction: build, deploy, and (status="publish") promote.
+        The URL slug is the page's Notion `Slug`, or derived from its title
+        when that property is empty.
 
         Args:
             page_id: Notion page ID
-            status: WordPress status (draft, publish, future)
-            slug: Optional custom URL slug (auto-generated from title if not provided)
-            date: Optional schedule date (ISO 8601). If auto_schedule, this is ignored.
-            auto_schedule: If True, automatically find next available slot
+            status: draft, preview, or publish. preview deploys a Cloudflare Pages preview without mutating Notion.
+            date: Schedule-only: explicit slot (ISO 8601 with a UTC offset)
+            auto_schedule: Schedule-only: pick the next available slot
             check_duplicates: If True, error if slug already exists
             featured_image: Optional path to featured image file to upload and attach
             force: If True, skip the already-published check
+            schedule_after: Inclusive bound for the scheduled slot
+            schedule_before: Exclusive bound for the scheduled slot
 
-        Returns dict with wordpress_post, notion_page_id, schedule info,
-        and optional featured_image/schema status (classic path), or the
-        stable deployment, release, journal, and schedule result (static path).
+        Returns the schedule result (status "Scheduled", scheduled_date, slug),
+        the preview result (status "preview", preview_url, deployment_id), or
+        the journaled static transaction result dict (static_url, deployment_id,
+        promoted, journal state, effects).
         """
-        if not self._static_cutover_active():
-            return self._publish_article_classic(
+        if status not in {"draft", "preview", "publish"}:
+            raise ClientError("Static publish status must be draft, preview, or publish")
+        # The static corpus and build accept only the undashed page id, while
+        # Notion and the due-post scan hand out the dashed form.
+        page_id = self._compact_page_id(page_id)
+        schedule_window = self._parse_schedule_window(schedule_after, schedule_before)
+        # An empty --date (an unset shell variable) is still a schedule request:
+        # it must fail as a bad date, never fall through to a promotion.
+        if date is not None or auto_schedule:
+            if featured_image:
+                raise ClientError(
+                    "--featured-image cannot be used when scheduling: the due publisher "
+                    "runs without flags and reads posts/<page-id>/featured_image.*"
+                )
+            return self._schedule_article(
                 page_id=page_id,
                 status=status,
-                slug=slug,
                 date=date,
                 auto_schedule=auto_schedule,
+                check_duplicates=check_duplicates,
+                schedule_window=schedule_window,
+            )
+        if schedule_window is not None:
+            raise ClientError(
+                "--schedule-after/--schedule-before require --auto-schedule or --date"
+            )
+        if status == "preview":
+            return self._preview_static_transaction(
+                page_id=page_id,
                 check_duplicates=check_duplicates,
                 featured_image=featured_image,
                 force=force,
@@ -3186,266 +4249,59 @@ class AtaBlogClient:
         return self._publish_static_transaction(
             page_id=page_id,
             status=status,
-            slug=slug,
-            date=date,
-            auto_schedule=auto_schedule,
             check_duplicates=check_duplicates,
             featured_image=featured_image,
             force=force,
         )
 
-    def _publish_article_classic(
-        self,
-        page_id: str,
-        status: str = "draft",
-        slug: Optional[str] = None,
-        date: Optional[str] = None,
-        auto_schedule: bool = False,
-        check_duplicates: bool = True,
-        featured_image: Optional[str] = None,
-        force: bool = False,
-    ) -> Dict[str, Any]:
+    def backfill_scheduled_featured_images(self) -> Dict[str, Any]:
+        """Mirror local featured images to R2 for pages `Scheduled` before the mirror existed.
+
+        `_schedule_article` only started mirroring the resolved featured image
+        to R2 once `_upload_scheduled_featured_image` shipped. A page that was
+        already `Scheduled` before then has no R2 object for
+        `_resolve_featured_image_with_recovery` to recover, so its due
+        `--status publish` run still fails off-host with the original error.
+        Run this once, on every host that might hold the local image for an
+        already-`Scheduled` page, to close that gap.
         """
-        Classic WordPress publish path (pre-static-rewrite behavior).
-
-        Args:
-            page_id: Notion page ID
-            status: WordPress status (draft, publish, future)
-            slug: Optional custom URL slug (auto-generated from title if not provided)
-            date: Optional schedule date (ISO 8601). If auto_schedule, this is ignored.
-            auto_schedule: If True, automatically find next available slot
-            check_duplicates: If True, error if slug already exists
-            featured_image: Optional path to featured image file to upload and attach
-            force: If True, skip the already-published check
-
-        Returns dict with wordpress_post, notion_page_id, schedule info,
-        and optional featured_image/schema status
-        """
-        warnings = []
-
-        # 0. Validate featured image before doing anything (fail early)
-        image_path = self._validate_featured_image(featured_image)
-
-        # 1. Get article metadata from Notion
-        article = self.get_article(page_id)
-
-        # 1b. Check if already published (unless --force)
-        if not force:
-            published_url = article.get("Published URL")
-            if published_url:
-                raise ClientError(
-                    f"Post already published at: {published_url}. "
-                    f"Use --force to republish."
-                )
-        title = article.get("Title") or article.get("title") or "Untitled"
-
-        # 2. Validate required fields
-        keywords = article.get("Keywords", "")
-        category_name = article.get("Category")
-        tags_str = article.get("Tags", "")
-        excerpt = article.get("Excerpt", "")
-
-        missing = []
-        if not keywords:
-            missing.append("Keywords")
-        if not category_name:
-            missing.append("Category")
-        if not tags_str:
-            missing.append("Tags")
-        if not excerpt:
-            missing.append("Excerpt")
-
-        if missing:
-            raise ClientError(f"Missing required Notion fields: {', '.join(missing)}")
-
-        # 2b. Read Schema Type from Notion (already fetched above)
-        schema_type_raw = article.get("Schema Type", "")
-        # Schema Type may be a comma-separated multi_select value
-        if schema_type_raw:
-            schema_type_str = schema_type_raw.split(",")[0].strip()
-        else:
-            schema_type_str = "Article"
-            warnings.append("Schema Type missing in Notion, defaulting to 'Article'")
-
-        # 3. Upload featured image before creating post (fail early)
-        from .utils.images import upload_to_wordpress
-        try:
-            featured_image_result = upload_to_wordpress(image_path)
-        except RuntimeError as e:
-            raise ClientError(f"Featured image upload failed: {e}")
-        if not featured_image_result.get("id"):
-            raise ClientError("Featured image upload did not return a WordPress media ID")
-
-        # 4. Generate slug (or use custom) and check for duplicates
-        if slug:
-            # Use provided custom slug - validate and clean it
-            slug = re.sub(r'[^a-z0-9-]', '', slug.lower())[:50].rstrip('-')
-        else:
-            # Auto-generate slug from title
-            # Stop words to remove from slugs (prepositions, articles, conjunctions)
-            stop_words = {
-                'a', 'an', 'the', 'and', 'or', 'but', 'nor', 'for', 'yet', 'so',
-                'to', 'of', 'in', 'on', 'at', 'by', 'with', 'from', 'as', 'into',
-                'through', 'during', 'before', 'after', 'above', 'below', 'between',
-                'under', 'over', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-                'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-                'should', 'may', 'might', 'must', 'shall', 'can', 'your', 'you',
-                'how', 'what', 'when', 'where', 'why', 'which', 'who', 'whom',
-            }
-            # Split title into words, filter out stop words
-            words = title.lower().split()
-            filtered_words = [w for w in words if w not in stop_words]
-            # Clean each word (remove special chars)
-            cleaned_words = [re.sub(r'[^a-z0-9]', '', w) for w in filtered_words]
-            cleaned_words = [w for w in cleaned_words if w]  # Remove empty strings
-            # Build slug by adding words until we hit 50 char limit
-            slug_parts = []
-            current_length = 0
-            for word in cleaned_words:
-                # +1 for the hyphen (except first word)
-                addition = len(word) + (1 if slug_parts else 0)
-                if current_length + addition <= 50:
-                    slug_parts.append(word)
-                    current_length += addition
-                else:
-                    break
-            slug = '-'.join(slug_parts)
-        if check_duplicates and self.check_duplicate_post(slug):
-            raise ClientError(f"WordPress post with slug '{slug}' already exists")
-
-        # 5. Resolve category and tags to IDs
-        category_id = self.resolve_category_by_name(category_name)
-        tag_names = [t.strip() for t in tags_str.split(",") if t.strip()]
-        tag_ids = [self.resolve_tag_by_name(name) for name in tag_names]
-
-        # 6. Determine schedule date
-        effective_date = None
-        effective_status = status
-        if auto_schedule:
-            effective_date = self.find_next_schedule_slot()
-            effective_status = "future"
-        elif date:
-            effective_date = date
-            effective_status = "future"
-
-        # 7. Get content as markdown
-        markdown_content = self.get_article_markdown(page_id)
-
-        # 8. Process images - download from Notion, upload to WordPress
-        from .utils.images import process_images_for_wordpress
-        markdown_content = process_images_for_wordpress(
-            markdown_content=markdown_content,
-            article_slug=slug,
-            verbose=True
-        )
-
-        # 9. Save to temp file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
-            f.write(markdown_content)
-            temp_path = f.name
-
-        try:
-            # 10. Build wordpress CLI command
-            args = [
-                "posts", "create",
-                "--from-markdown", temp_path,
-                "--title", title,
-                "--slug", slug,
-                "--status", effective_status,
-                "--categories", str(category_id),
-                "--tags", ",".join(str(t) for t in tag_ids),
-                "--excerpt", excerpt,
-                "--meta", f"rank_math_focus_keyword={keywords}",
-            ]
-            if effective_date:
-                args.extend(["--date", effective_date])
-
-            result = self._run_wordpress(args)
-            post = json.loads(result.stdout)
-            post_id = post.get("id")
-
-            # 10b. Clear schedule reservation now that post is committed to WordPress
-            if auto_schedule:
-                self.clear_schedule_reservation()
-
-            # 11. Attach featured image and apply schema in a single update call
-            fi_status = {"attached": False}
-            schema_status = {"type": schema_type_str, "applied": False}
-
-            if featured_image_result or schema_type_str:
-                update_args = ["posts", "update"]
-
-                if featured_image_result:
-                    update_args.extend(["--featured-media", str(featured_image_result["id"])])
-                    fi_status["media_id"] = featured_image_result["id"]
-                    fi_status["source_url"] = featured_image_result.get("source_url")
-
-                # Build schema JSON
-                from .commands.schema import _build_schema_json, SchemaType, ProficiencyLevel
-                schema_type_map = {
-                    "Article": SchemaType.ARTICLE,
-                    "TechArticle": SchemaType.TECH_ARTICLE,
-                    "Review": SchemaType.REVIEW,
-                }
-                schema_enum = schema_type_map.get(schema_type_str, SchemaType.ARTICLE)
-                proficiency = ProficiencyLevel.INTERMEDIATE if schema_enum == SchemaType.TECH_ARTICLE else None
-                schema_json = _build_schema_json(schema_type=schema_enum, proficiency=proficiency)
-                update_args.extend(["--meta", f"rank_math_schemas={schema_json}"])
-                update_args.append(str(post_id))
-
-                update_result = self._run_wordpress(update_args)
-                updated_post = json.loads(update_result.stdout)
-                attached_media_id = int(updated_post.get("featured_media") or 0)
-                expected_media_id = int(featured_image_result["id"])
-                if attached_media_id != expected_media_id:
-                    raise ClientError(
-                        "Featured image attachment failed: "
-                        f"post {post_id} has featured_media "
-                        f"{attached_media_id}, expected {expected_media_id}"
-                    )
-                fi_status["attached"] = True
-                schema_status["applied"] = True
-
-            # 12. Update Notion with Published status and URL
-            wp_url = post.get("link") or post.get("url", "")
-            wp_edit_url = f"https://adamtheautomator.com/wp-admin/post.php?post={post_id}&action=edit"
-            self._run_notion([
-                "database", "page", "update", page_id,
-                "--status", "Status:Published",
-                "--url", f"Published URL:{wp_url}"
-            ])
-
-            result_dict = {
-                "wordpress_post": post,
-                "notion_page_id": page_id,
-                "status": effective_status,
-                "scheduled_date": effective_date,
-                "wordpress_url": wp_url,
-                "wordpress_edit_url": wp_edit_url,
-                "warnings": warnings,
-            }
-
-            result_dict["featured_image"] = fi_status
-
-            if schema_type_str:
-                result_dict["schema"] = schema_status
-
-            return result_dict
-        finally:
-            Path(temp_path).unlink(missing_ok=True)
+        mirrored: List[str] = []
+        already_mirrored: List[str] = []
+        no_local_image: List[str] = []
+        for article in self.list_articles(status="Scheduled", limit=1000):
+            page_id = article["id"]
+            compact_page_id = self._compact_page_id(page_id)
+            try:
+                image_path = self._resolve_featured_image(page_id, None)
+            except ClientError:
+                no_local_image.append(compact_page_id)
+                continue
+            key = SCHEDULED_FEATURED_IMAGE_KEY_PREFIX + compact_page_id + image_path.suffix.lower()
+            if self._existing_scheduled_featured_image(key) is not None:
+                already_mirrored.append(compact_page_id)
+                continue
+            self._upload_scheduled_featured_image(page_id, image_path)
+            mirrored.append(compact_page_id)
+        return {
+            "mirrored": mirrored,
+            "already_mirrored": already_mirrored,
+            "no_local_image": no_local_image,
+        }
 
     @staticmethod
-    def _slug_from_url(url: str) -> str:
-        """Derive a WordPress slug from a post URL.
+    def _slug_from_url(url: str, required: bool = True) -> Optional[str]:
+        """Derive a post slug from a post URL.
 
         Handles trailing slashes and query/fragment suffixes. Raises if the
-        URL has no usable path segment.
+        URL has no usable path segment, unless required=False -- callers that
+        only compare slugs pass required=False to get None instead of an
+        error.
         """
-        from urllib.parse import urlparse
-
         path = urlparse(url).path.strip("/")
         if not path:
-            raise ClientError(f"Cannot derive a slug from URL: {url!r}")
+            if required:
+                raise ClientError(f"Cannot derive a slug from URL: {url!r}")
+            return None
         # The slug is the last non-empty path segment.
         return path.split("/")[-1]
 
@@ -3453,39 +4309,28 @@ class AtaBlogClient:
     def detect_id_kind(identifier: str) -> str:
         """Classify an unpublish target identifier.
 
-        Returns one of: "notion_page", "wordpress_id", "wordpress_url",
-        "slug". Detection is deterministic and fails fast for empty input.
+        Returns one of: "notion_page", "url", "slug". Detection is
+        deterministic and fails fast for empty input.
         """
-        import re
-
         value = identifier.strip()
         if not value:
             raise ClientError("Target identifier must not be empty")
 
         if value.lower().startswith(("http://", "https://")):
-            return "wordpress_url"
-
-        # Pure integer -> WordPress post ID.
-        if value.isdigit():
-            return "wordpress_id"
+            return "url"
 
         # 32-hex Notion page ID, dashed or undashed.
         compact = value.replace("-", "")
         if len(compact) == 32 and re.fullmatch(r"[0-9a-fA-F]{32}", compact):
             return "notion_page"
 
-        # Everything else is treated as a WordPress slug.
+        # Everything else is treated as a static post slug.
         return "slug"
 
-    def _wordpress_post_by_slug(self, slug: str) -> Optional[Dict[str, Any]]:
-        """Return the WordPress post matching an exact slug, or None."""
-        result = self._run_wordpress(
-            ["posts", "list", "--filter", f"slug:eq:{slug}", "--limit", "2"]
-        )
-        posts = json.loads(result.stdout)
-        if not posts:
-            return None
-        return posts[0]
+    @staticmethod
+    def _compact_page_id(page_id: str) -> str:
+        """Return the undashed lowercase page id the static corpus records."""
+        return page_id.replace("-", "").lower()
 
     def _notion_page_by_published_url(self, url: str) -> Optional[Dict[str, Any]]:
         """Return the ATA Notion page whose Published URL matches, or None."""
@@ -3503,58 +4348,42 @@ class AtaBlogClient:
         return pages[0]
 
     def resolve_unpublish_target(self, identifier: str) -> Dict[str, Any]:
-        """Resolve an identifier to both the Notion page and WordPress post.
+        """Resolve an identifier to both the Notion page and the static post.
 
         Returns a dict:
             {
               "id_kind": "...",
-              "notion_page": <article dict>,        # required, always resolved
-              "wordpress_post": <post dict> | None, # None if WP side absent
+              "notion_page": <article dict>,   # required, always resolved
+              "static_post": <Path> | None,    # None if absent from the corpus
+              "slug": <str> | None,
             }
 
         Fails fast (ClientError) when the Notion page cannot be resolved. A
-        missing WordPress post is returned as None (already absent), not an
-        error, so the Notion reset can still proceed.
+        Notion page with no corpus record resolves its static post as None
+        (already absent), so the Notion reset can still proceed.
         """
         kind = self.detect_id_kind(identifier)
 
-        notion_page: Optional[Dict[str, Any]] = None
-        wordpress_post: Optional[Dict[str, Any]] = None
-
         if kind == "notion_page":
             notion_page = self.get_article(identifier)
+            page_id = self._compact_page_id(str(notion_page.get("id") or identifier))
             published_url = notion_page.get("Published URL")
-            if published_url:
-                slug = self._slug_from_url(published_url)
-                wordpress_post = self._wordpress_post_by_slug(slug)
-            # No Published URL -> WP post cannot be resolved; treat as absent.
+            slug = self._slug_from_url(published_url) if published_url else None
+            # A post the static site originated is bound to its Notion page
+            # id; an imported post carries no page id and is bound by slug.
+            static_post = self._find_static_post_by_notion_page_id(page_id)
+            if static_post is None and slug:
+                static_post = self._find_static_post(slug)
         else:
-            # WordPress-first kinds: resolve the WP post, then the Notion page
-            # by matching its Published URL.
-            if kind == "wordpress_id":
-                result = self._run_wordpress(["posts", "get", identifier])
-                wordpress_post = json.loads(result.stdout)
-            elif kind == "wordpress_url":
-                slug = self._slug_from_url(identifier)
-                wordpress_post = self._wordpress_post_by_slug(slug)
-            elif kind == "slug":
-                wordpress_post = self._wordpress_post_by_slug(identifier)
-            else:  # pragma: no cover - detect_id_kind enumerates all kinds
-                raise ClientError(f"Unhandled identifier kind: {kind}")
-
-            if not wordpress_post:
+            slug = self._slug_from_url(identifier) if kind == "url" else identifier.strip()
+            static_post = self._find_static_post(slug)
+            if static_post is None:
                 raise ClientError(
-                    f"Could not resolve a WordPress post from {identifier!r} "
-                    f"(kind: {kind})"
+                    f"Could not resolve a static post from {identifier!r} (kind: {kind})"
                 )
-
-            wp_url = wordpress_post.get("link") or wordpress_post.get("url")
-            if not wp_url:
-                raise ClientError(
-                    "Resolved WordPress post has no link/url; cannot match a "
-                    "Notion page"
-                )
-            notion_page = self._notion_page_by_published_url(wp_url)
+            notion_page = self._notion_page_by_published_url(
+                f"{STATIC_SITE_ORIGIN}/{slug}/"
+            )
 
         if not notion_page:
             raise ClientError(
@@ -3565,28 +4394,216 @@ class AtaBlogClient:
         return {
             "id_kind": kind,
             "notion_page": notion_page,
-            "wordpress_post": wordpress_post,
+            "static_post": static_post,
+            "slug": slug,
+        }
+
+    def _unpublish_paths(self, idempotency_key: str) -> Dict[str, Path]:
+        """Return the active-profile paths for one unpublish transaction."""
+        root = self._publisher_runtime_root()
+        return {
+            "build_lock": root / "locks" / "build.lock",
+            "runtime": root / "unpublish" / f"{idempotency_key}.runtime.json",
+            "backup": root / "unpublish" / f"{idempotency_key}.corpus-backup",
+        }
+
+    def _page_publisher_journals(self, page_id: str) -> List[Tuple[Path, Dict[str, Any]]]:
+        """Return every publisher journal recorded for one Notion page."""
+        transaction_root = self._publisher_runtime_root() / "transactions"
+        journals = []
+        if transaction_root.exists():
+            for path in sorted(transaction_root.glob("*.journal.json")):
+                document = self._load_required_json(path, "publisher journal")
+                source = document.get("source")
+                if not isinstance(source, dict) or not isinstance(source.get("page_id"), str):
+                    raise ClientError(f"Corrupt publisher journal: {path}")
+                if self._compact_page_id(source["page_id"]) == page_id:
+                    journals.append((path, document))
+        return journals
+
+    def _retire_publisher_transactions(self, page_id: str) -> List[str]:
+        """Move a page's finished publish transactions out of the replay path.
+
+        A completed journal makes `publish` replay its recorded result for the
+        same source revision. Once the post is removed from the site that
+        result is no longer true, so the records move aside and a later
+        publish of the same revision runs a real transaction.
+        """
+        retired_root = (
+            self._publisher_runtime_root()
+            / "unpublished"
+            / datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        )
+        retired = []
+        for journal_path, _document in self._page_publisher_journals(page_id):
+            key = journal_path.name[: -len(".journal.json")]
+            for transaction_file in sorted(journal_path.parent.glob(f"{key}.*")):
+                retired_root.mkdir(parents=True, exist_ok=True)
+                destination = retired_root / transaction_file.name
+                os.replace(transaction_file, destination)
+                retired.append(str(destination))
+        return retired
+
+    def _unpublish_static_transaction(
+        self,
+        *,
+        page_id: str,
+        static_post: Path,
+        status: str,
+    ) -> Dict[str, Any]:
+        """Remove one post from the static site, then reset its Notion page.
+
+        The corpus record is deleted and the site goes through the same
+        build, preview deployment, and production promotion a publish uses.
+        Any failure before the Notion reset commits rolls production back to
+        the prior deployment and restores the exact corpus record.
+        """
+        original = static_post.read_bytes()
+        source_revision = hashlib.sha256(
+            b"unpublish\n" + hashlib.sha256(original).hexdigest().encode("ascii")
+        ).hexdigest()
+        idempotency_key = self._publisher_idempotency_key(page_id, source_revision)
+        paths = self._unpublish_paths(idempotency_key)
+        journal = {
+            "idempotency": {"key": idempotency_key},
+            "source": {"page_id": page_id, "source_revision": source_revision},
+        }
+        runtime: Dict[str, Any] = {
+            "schema_version": "ata-static-unpublish-runtime/v1",
+            "page_id": page_id,
+            "source_revision": source_revision,
+            "idempotency_key": idempotency_key,
+            "article_path": str(static_post),
+            "failure_stage": None,
+            "failure_message": None,
+            "rollback_error": None,
+        }
+
+        with self._exclusive_publisher_lock(self._publisher_page_lock_path(page_id)):
+            for journal_path, document in self._page_publisher_journals(page_id):
+                if document.get("state") not in {"completed", "failed"}:
+                    raise ClientError(
+                        f"A publisher transaction is still active for page {page_id}: "
+                        f"{journal_path}"
+                    )
+            current_stage = "build-lock acquisition"
+            prior_corpus_sha256 = _static_corpus_sha256()
+            try:
+                with self._static_build_lock(paths):
+                    current_stage = "corpus removal"
+                    _atomic_write_bytes(paths["backup"], original)
+                    static_post.unlink()
+                    runtime["corpus_sha256"] = _static_corpus_sha256()
+                    _atomic_write_json(paths["runtime"], runtime)
+
+                    current_stage = "build"
+                    build = self._run_static_build(None, runtime["corpus_sha256"])
+                    manifest = build["manifest"]
+                    runtime["release_ref"] = {
+                        "release_id": manifest["release_id"],
+                        "contract_hash": manifest["contract_hash"],
+                    }
+                    runtime["build_sha256"] = build["build_sha256"]
+
+                    current_stage = "preview upload"
+                    deployment = self._deploy_static_preview(
+                        idempotency_key,
+                        source_revision,
+                        manifest["release_id"],
+                    )
+                    self._validate_static_deployment_metadata(deployment)
+                    runtime.update(deployment)
+                    _atomic_write_json(paths["runtime"], runtime)
+
+                    current_stage = "promotion"
+                    self._apply_static_promotion(
+                        manifest=manifest,
+                        deployment=deployment,
+                        journal=journal,
+                        runtime=runtime,
+                        paths=paths,
+                    )
+
+                    current_stage = "Notion update"
+                    self.update_article(
+                        page_id,
+                        status=status,
+                        properties=dict(self.UNPUBLISH_ARTIFACT_FIELDS),
+                    )
+            except Exception as exc:
+                failure = exc if isinstance(exc, ClientError) else ClientError(str(exc))
+                runtime["failure_stage"] = current_stage
+                runtime["failure_message"] = str(failure)
+                rollback_errors = []
+                if runtime.get("promotion_applied"):
+                    try:
+                        self._rollback_static_promotion(
+                            runtime["prior_production_deployment_id"]
+                        )
+                    except Exception as rollback_exc:
+                        rollback_errors.append(f"production rollback: {rollback_exc}")
+                    else:
+                        runtime["promotion_applied"] = False
+                        runtime["promotion_rolled_back"] = True
+                try:
+                    if paths["backup"].is_file() and not static_post.exists():
+                        _atomic_write_bytes(static_post, paths["backup"].read_bytes())
+                    restored_corpus_sha256 = _static_corpus_sha256()
+                    if restored_corpus_sha256 != prior_corpus_sha256:
+                        raise ClientError(
+                            "Corpus rollback hash mismatch: "
+                            f"expected {prior_corpus_sha256}, got {restored_corpus_sha256}"
+                        )
+                except Exception as rollback_exc:
+                    rollback_errors.append(f"corpus rollback: {rollback_exc}")
+                if rollback_errors:
+                    runtime["rollback_error"] = "; ".join(rollback_errors)
+                _atomic_write_json(paths["runtime"], runtime)
+                if rollback_errors:
+                    raise ClientError(
+                        f"Static unpublish failed during {current_stage}: {failure}; "
+                        f"rollback failed: {runtime['rollback_error']}"
+                    ) from failure
+                raise ClientError(
+                    f"Static unpublish failed during {current_stage}: {failure}"
+                ) from failure
+
+            retired = self._retire_publisher_transactions(page_id)
+            _atomic_write_json(paths["runtime"], runtime)
+
+        return {
+            "deployment_id": runtime["deployment_id"],
+            "promotion_id": runtime["promotion"]["promotion_id"],
+            "release_ref": runtime["release_ref"],
+            "backup_path": str(paths["backup"]),
+            "retired_transactions": retired,
         }
 
     def unpublish_article(
         self,
         identifier: str,
-        status: str = "Draft",
-        force: bool = False,
-        keep_wordpress: bool = False,
+        status: Optional[str] = None,
         dry_run: bool = False,
     ) -> Dict[str, Any]:
-        """Revert a published article: trash the WP post and reset Notion.
+        """Revert an article: unschedule it, or remove it from the static site.
 
         Args:
-            identifier: Notion page ID, WordPress post ID, URL, or slug.
+            identifier: Notion page ID, post URL, or slug.
             status: Notion status to set (validated against live statuses).
-            force: Permanently delete the WordPress post instead of trashing.
-            keep_wordpress: Skip the WordPress trash/delete step entirely.
+                When omitted, a Scheduled page returns to Ready to Publish
+                and any other page to Draft.
             dry_run: Resolve and report planned changes without mutating.
 
         Returns the JSON summary described in the command docstring.
         """
+        # Resolution only reads; the target status depends on the page it finds.
+        resolved = self.resolve_unpublish_target(identifier)
+        notion_page = resolved["notion_page"]
+        static_post = resolved["static_post"]
+        if status is None:
+            status = (
+                "Ready to Publish" if notion_page.get("Status") == "Scheduled" else "Draft"
+            )
         # Validate the target Notion status against the live schema before any
         # side effects (fail-fast, reusing the existing status path).
         valid_statuses = self.get_valid_statuses()
@@ -3595,76 +4612,46 @@ class AtaBlogClient:
                 f"Invalid status '{status}'. Valid statuses: "
                 f"{', '.join(valid_statuses)}"
             )
-
-        resolved = self.resolve_unpublish_target(identifier)
-        notion_page = resolved["notion_page"]
-        wordpress_post = resolved["wordpress_post"]
-        page_id = notion_page.get("id")
-        if not page_id:
+        if not notion_page.get("id"):
             raise ClientError("Resolved Notion page is missing an id")
+        page_id = self._compact_page_id(str(notion_page["id"]))
 
-        cleared_fields = list(self.UNPUBLISH_ARTIFACT_FIELDS.keys())
-
-        # Determine the WordPress action.
-        if keep_wordpress:
-            wp_action = "skipped"
-            wp_post_id = wordpress_post.get("id") if wordpress_post else None
-        elif not wordpress_post:
-            wp_action = "already_absent"
-            wp_post_id = None
-        else:
-            wp_post_id = wordpress_post.get("id")
-            wp_status = wordpress_post.get("status")
-            if wp_status == "trash":
-                wp_action = "already_absent"
-            else:
-                wp_action = "deleted" if force else "trashed"
-
-        if dry_run:
-            return {
-                "dry_run": True,
-                "id_kind": resolved["id_kind"],
-                "wordpress": {"post_id": wp_post_id, "action": wp_action},
-                "notion": {
-                    "page_id": page_id,
-                    "status": status,
-                    "cleared_fields": cleared_fields,
-                },
-            }
-
-        # Execute WordPress trash/delete.
-        if wp_action in ("trashed", "deleted"):
-            delete_args = ["posts", "delete", str(wp_post_id)]
-            if force:
-                delete_args.append("--force")
-            try:
-                self._run_wordpress(delete_args)
-            except ClientError as exc:
-                # If the post is already gone, continue to the Notion reset.
-                if "404" in str(exc) or "not found" in str(exc).lower():
-                    wp_action = "already_absent"
-                else:
-                    raise
-
-        # Reset Notion: status + data-driven artifact field clearing. The
-        # property builder resolves each field's type from the live schema and
-        # emits the correct typed null/empty or checkbox bool.
-        self.update_article(
-            page_id,
-            status=status,
-            properties=dict(self.UNPUBLISH_ARTIFACT_FIELDS),
-        )
-
-        return {
-            "dry_run": False,
+        summary = {
+            "dry_run": dry_run,
             "id_kind": resolved["id_kind"],
-            "wordpress": {"post_id": wp_post_id, "action": wp_action},
+            "static": {
+                "slug": resolved["slug"],
+                "article_path": str(static_post) if static_post else None,
+                "action": "removed" if static_post else "already_absent",
+            },
             "notion": {
                 "page_id": page_id,
                 "status": status,
-                "cleared_fields": cleared_fields,
+                "cleared_fields": list(self.UNPUBLISH_ARTIFACT_FIELDS.keys()),
             },
         }
+        if dry_run:
+            return summary
+
+        if static_post is None:
+            # Nothing on the site to remove: reset Notion through the
+            # data-driven artifact fields. The property builder resolves each
+            # field's type from the live schema.
+            self.update_article(
+                page_id,
+                status=status,
+                properties=dict(self.UNPUBLISH_ARTIFACT_FIELDS),
+            )
+            return summary
+
+        summary["static"].update(
+            self._unpublish_static_transaction(
+                page_id=page_id,
+                static_post=static_post,
+                status=status,
+            )
+        )
+        return summary
 
 
 _client: Optional[AtaBlogClient] = None

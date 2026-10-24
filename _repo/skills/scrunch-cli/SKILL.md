@@ -15,6 +15,19 @@ description: >-
 Provide expert guidance for using the `scrunch` CLI tool to interact with the Scrunch AI API. Covers brand management, competitor tracking, persona configuration, prompt management, aggregated query metrics, AI response inspection, page audits, and agent traffic analysis.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh scrunch-cli
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <quick_start>
 ```bash
 scrunch auth login          # Configure API key
@@ -33,7 +46,7 @@ scrunch query metrics 123 --fields date_week,brand_presence_percentage --start-d
 **Brands:**
 - `scrunch brands list [--table] [--limit N] [--filter F] [--properties P]`
 - `scrunch brands get BRAND_ID [--table]`
-- `scrunch brands create --name NAME --website URL [--description DESC]`
+- `scrunch brands create --name NAME --website URL --description DESC`
 - `scrunch brands update BRAND_ID [--name NAME] [--website URL]`
 - `scrunch brands delete BRAND_ID`
 
@@ -72,7 +85,7 @@ Metrics: responses, brand_presence_percentage, brand_position_score, brand_senti
 **Page Audits:**
 - `scrunch page-audits list BRAND_ID [--status S] [--url U] [--table]`
 - `scrunch page-audits get BRAND_ID AUDIT_ID [--table]`
-- `scrunch page-audits create BRAND_ID --urls URL1,URL2`
+- `scrunch page-audits create BRAND_ID --url URL`
 
 **Agent Traffic:**
 - `scrunch agent-traffic get BRAND_ID SITE_ID --start-date DATE --end-date DATE [--fields F] [--time-bucket B] [--table]`
@@ -80,7 +93,7 @@ Metrics: responses, brand_presence_percentage, brand_position_score, brand_senti
 
 <api_details>
 Base URL: `https://api.scrunchai.com/v1`
-Auth: Bearer token via `SCRUNCH_API_KEY` env var
+Auth: Bearer API key saved by `scrunch auth login` to the active auth profile (stored in the CLI-tools secret manager as `scrunch-api-key`)
 Scopes: query, configure, create-brand
 Pagination: `limit` + `offset` on list endpoints
 Rate limiting: Honors `Retry-After` header with exponential backoff

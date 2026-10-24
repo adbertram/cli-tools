@@ -1,0 +1,9 @@
+{
+  "path": "/api/me/profile",
+  "status": 200,
+  "body": {
+    "role": "candidate",
+    "displayName": null,
+    "createdAt": "2026-08-30T23:29:39.000Z"
+  }
+}

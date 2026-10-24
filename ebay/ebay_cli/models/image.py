@@ -5,13 +5,22 @@ from pydantic import Field, HttpUrl
 
 from .base import EbayBaseModel
 
+# eBay allows up to 24 images for an ordinary listing. The 12-image limit applies
+# only to individual variations, which this CLI does not create.
+MAX_IMAGES_PER_LISTING = 24
+
 
 class Image(EbayBaseModel):
     """Image associated with a listing."""
 
     url: str = Field(..., description="eBay-hosted image URL")
     thumbnail_url: Optional[str] = Field(None, description="Thumbnail version URL")
-    position: int = Field(0, ge=0, le=11, description="Order position (0-indexed, max 11)")
+    position: int = Field(
+        0,
+        ge=0,
+        le=MAX_IMAGES_PER_LISTING - 1,
+        description="Order position (0-indexed, max 23)",
+    )
     source: Optional[str] = Field(
         None,
         description="Image source type",

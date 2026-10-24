@@ -21,6 +21,44 @@ sudo apt install lastpass-cli
 sudo dnf install lastpass-cli
 ```
 
+## TLS certificate pin repair
+
+The official LastPass CLI 1.6.1 pin list does not include GlobalSign Root E46.
+LastPass now serves an E46 certificate chain, so affected installations fail
+with `SSL peer certificate or SSH remote key was not OK` despite a valid
+certificate chain and hostname. Wrapper errors identify TLS verification failures
+without printing arbitrary upstream output or vault values.
+
+On macOS, rebuild the official package with the verified E46 root pin:
+
+```bash
+brew install lastpass-cli cmake pkgconf
+python3 scripts/repair-lpass-tls.py
+python3 scripts/verify-lpass-tls.py
+lastpass auth status
+lastpass items list --filter 'name:like:%github%' --limit 0
+```
+
+Run these commands from this tool directory with Python 3.12 or later. The repair
+verifies SHA256 digests of official 1.6.1 source, both official patches shipped by
+Homebrew, and the GlobalSign root certificate. It independently derives and
+checks the root SPKI pin. It adds that pin while retaining every existing pin,
+CA-chain validation, hostname validation, and the OpenSSL pin callback. It builds
+against Homebrew OpenSSL and curl, then atomically replaces only the executable
+inside the official Homebrew `lastpass-cli` package. It refuses unmanaged binaries
+and missing build prerequisites. It never reads or changes vault credentials.
+
+A later Homebrew upgrade or reinstall replaces this rebuilt executable. Rerun the
+repair if the upstream package still lacks E46. The verification script presents
+an untrusted certificate for the correct LastPass hostname to the actual installed
+binary, using an isolated temporary vault and a reserved synthetic email. It
+requires TLS rejection before any application bytes are sent; it never disables
+verification or uses real account credentials.
+
+Root certificate source: [GlobalSign Root Certificates](https://support.globalsign.com/ca-certificates/root-certificates/globalsign-root-certificates).
+E46 certificate SHA256: `cbb9c44d84b8043e1050ea31a69f514955d7bfd2e2c6b49301019ad61d9f5058`.
+E46 SPKI SHA256 (Base64): `4EoCLOMvTM8sf2BGKHuCijKpCfXnUUR/g/0scfb9gXM=`.
+
 ## Quick Start
 
 ```bash

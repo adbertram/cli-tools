@@ -1,8 +1,8 @@
 {
   "tool": "doordash",
   "description": "CLI interface for Doordash (browser automation)",
-  "discovered_at": "2026-06-14T17:32:57Z",
-  "total_commands": 16,
+  "discovered_at": "2026-09-26T23:34:34Z",
+  "total_commands": 18,
   "global_options": [
     {
       "name": "--version",
@@ -41,14 +41,14 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
         "logout": {
           "help": "Clear stored credentials and browser sessions.",
-          "usage_instructions": "Remove saved browser session and credentials. Use --force/-F to skip confirmation.",
           "arguments": [],
           "options": [
             {
@@ -96,7 +96,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,12 +118,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Run `doordash auth profiles list --help` for exact arguments and options.",
               "arguments": [],
               "options": [
@@ -131,7 +133,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -172,7 +175,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -189,6 +227,19 @@
               "options": []
             }
           }
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
+            }
+          ]
         },
         "status": {
           "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test`` (API/OAuth) or via the live browser check (browser_session).",
@@ -207,7 +258,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -221,14 +273,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -251,7 +305,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `doordash cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -285,7 +346,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -312,7 +374,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -346,7 +409,6 @@
         },
         "reorder": {
           "help": "Reorder a previous DoorDash order. Default is dry-run (no charge).",
-          "usage_instructions": "Re-place a previous DoorDash order. Default behavior is a safe dry run that calls the `reorderOrder` GraphQL mutation server-side to build a cart, then prints the cart UUID, store, items, and item subtotal -- no browser is launched. Pass --confirm to additionally open a browser, navigate to /checkout?orderCartId=<cart>, and click Place Order (this charges the saved payment method). --confirm and --dry-run cannot be combined. The order argument accepts either a merchant order id (e.g. 3000010020128114) or the canonical order UUID; numeric ids are resolved against history (up to 1000 past orders). The mutation is idempotent: calling it twice for the same order returns the same cart UUID rather than creating duplicates.",
           "arguments": [
             {
               "name": "order_id",
@@ -360,7 +422,8 @@
               "name": "--confirm",
               "type": "bool",
               "required": false,
-              "help": "Actually place the order (charges saved payment)"
+              "help": "Actually place the order (charges saved payment)",
+              "takes_value": false
             },
             {
               "name": "--debug-dir",
@@ -373,7 +436,8 @@
               "type": "bool",
               "required": false,
               "help": "Display result as a table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -415,7 +479,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -442,7 +507,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",

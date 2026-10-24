@@ -72,7 +72,7 @@ Read-only discovery on top of the CJ Advertiser Lookup REST API.
 # Generic list — defaults to relationship=joined.
 cj advertisers list
 cj advertisers list --relationship notjoined --limit 50 --table
-cj advertisers list --keywords "wordpress" --category "Computer & Electronics"
+cj advertisers list --keywords "hosting" --category "Computer & Electronics"
 cj advertisers list --name "Bluehost"
 cj advertisers list --filter "primary_category:eq:Software"
 cj advertisers list --page 2 --limit 100

@@ -1,0 +1,949 @@
+{
+  "tool": "invoicedesk",
+  "description": "CLI interface for invoicedesk",
+  "discovered_at": "2026-10-11T16:19:01Z",
+  "total_commands": 26,
+  "global_options": [],
+  "commands": {
+    "auth": {
+      "help": "Manage authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage CLI cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "customer": {
+      "help": "Manage customers/clients",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a new customer.",
+          "examples": [
+            "invoicedesk customer create -e john@acme.com -f John -l Doe -o \"Acme Corp\""
+          ],
+          "arguments": [],
+          "options": [
+            {
+              "name": "--email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Customer email address",
+              "short": "-e"
+            },
+            {
+              "name": "--first-name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Contact first name",
+              "short": "-f"
+            },
+            {
+              "name": "--last-name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Contact last name",
+              "short": "-l"
+            },
+            {
+              "name": "--organization",
+              "type": "TEXT",
+              "required": true,
+              "help": "Organization/company name",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "find": {
+          "help": "Find a customer by email address.",
+          "examples": [
+            "invoicedesk customer find client@example.com"
+          ],
+          "arguments": [
+            {
+              "name": "email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email address to search for"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific customer.",
+          "examples": [
+            "invoicedesk customer get 12345",
+            "invoicedesk customer get 12345 --table"
+          ],
+          "arguments": [
+            {
+              "name": "customer_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The customer ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display output as a formatted table instead of JSON",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all customers/clients. Shows all customers in your InvoiceDesk account. Filterable fields: id, organization, name, email. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
+          "examples": [
+            "invoicedesk customer list",
+            "invoicedesk customer list --table",
+            "invoicedesk customer list --filter organization:contains:acme --table",
+            "invoicedesk customer list --filter organization:like:%acme% --table",
+            "invoicedesk customer list --filter email:eq:john@acme.com",
+            "invoicedesk customer list --limit 10",
+            "invoicedesk customer list --properties id,organization,email"
+          ],
+          "arguments": [],
+          "options": [
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value, e.g., organization:contains:acme). Fields: id, organization, name, email. Note that 'like' is SQL LIKE, so a substring search needs wildcards: organization:like:%acme%",
+              "short": "-f"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum number of customers to return (default: 100)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display (e.g., 'id,organization,email')",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display output as a formatted table instead of JSON",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update an existing customer.",
+          "examples": [
+            "invoicedesk customer update 12345 --email newemail@acme.com",
+            "invoicedesk customer update 12345 -o \"New Company Name\""
+          ],
+          "arguments": [
+            {
+              "name": "customer_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The customer ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--email",
+              "type": "TEXT",
+              "required": false,
+              "help": "New email address",
+              "short": "-e"
+            },
+            {
+              "name": "--first-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "New first name",
+              "short": "-f"
+            },
+            {
+              "name": "--last-name",
+              "type": "TEXT",
+              "required": false,
+              "help": "New last name",
+              "short": "-l"
+            },
+            {
+              "name": "--organization",
+              "type": "TEXT",
+              "required": false,
+              "help": "New organization name",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "export": {
+      "help": "Archive InvoiceDesk data",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "run": {
+          "help": "Archive raw pages, details, PDFs and a coverage manifest for every business. Unsupported resources and failed reads are recorded in manifest.json. Partial exports exit 2 after writing their summary. No invoices are sent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Private export directory; must be new unless --resume is set",
+              "short": "-o"
+            },
+            {
+              "name": "--resume",
+              "type": "bool",
+              "required": false,
+              "help": "Verify source identity and original checksums, refresh PDFs, retry missing reads",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "invoice": {
+      "help": "Manage invoices",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a new invoice. Supports multiple line items by repeating -d and -a flags. Each -d is paired with the corresponding -a by position. Use -q to set quantity per line item (defaults to 1). Payment terms are automatically added from InvoiceDesk Settings unless --no-terms is specified or --terms provides custom terms.",
+          "examples": [
+            "invoicedesk invoice create -c 12345 -d \"Consulting Services\" -a 500.00",
+            "invoicedesk invoice create -c 12345 -d \"Article Writing\" -a 750.00 -n \"Thank you!\" -p \"REF-001\"",
+            "invoicedesk invoice create -c 12345 -d \"Contract Work\" -a 1000.00 -f ./contract.pdf",
+            "invoicedesk invoice create -c 12345 -d \"Consulting\" -a 500.00 --due-days 60",
+            "invoicedesk invoice create -c 12345 -d \"Consulting\" -a 500.00 --no-terms",
+            "invoicedesk invoice create -c 12345 -d \"Line 1\" -a 500 -d \"Line 2\" -a 1000",
+            "invoicedesk invoice create -c 12345 -d \"Item A\" -a 500 -q 2 -d \"Item B\" -a 300 -q 1"
+          ],
+          "arguments": [],
+          "options": [
+            {
+              "name": "--customer-id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Customer ID to invoice",
+              "short": "-c"
+            },
+            {
+              "name": "--description",
+              "type": "TEXT",
+              "required": true,
+              "help": "Line item description (repeat for multiple line items)",
+              "short": "-d"
+            },
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": true,
+              "help": "Line item amount, e.g. '500.00' (repeat for multiple line items)",
+              "short": "-a"
+            },
+            {
+              "name": "--quantity",
+              "type": "TEXT",
+              "required": false,
+              "help": "Line item quantity (default: 1; repeat for multiple line items)",
+              "short": "-q"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "Invoice notes",
+              "short": "-n"
+            },
+            {
+              "name": "--terms",
+              "type": "TEXT",
+              "required": false,
+              "help": "Payment terms (overrides default from config)",
+              "short": "-t"
+            },
+            {
+              "name": "--po-number",
+              "type": "TEXT",
+              "required": false,
+              "help": "Purchase order number/reference",
+              "short": "-p"
+            },
+            {
+              "name": "--attachment",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to file to attach (PDF or image)",
+              "short": "-f"
+            },
+            {
+              "name": "--due-days",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Number of days until invoice is due (default: 30)",
+              "default": "30"
+            },
+            {
+              "name": "--no-terms",
+              "type": "bool",
+              "required": false,
+              "help": "Skip adding default payment terms",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete/void an invoice.",
+          "examples": [
+            "invoicedesk invoice delete 1234567",
+            "invoicedesk invoice delete 1234567 -F"
+          ],
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The invoice ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "download": {
+          "help": "Download an invoice as a PDF.",
+          "examples": [
+            "invoicedesk invoice download 1234567",
+            "invoicedesk invoice download 1234567 -o ~/Downloads/invoice.pdf",
+            "invoicedesk invoice download 1234567 --output ./my-invoice.pdf"
+          ],
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The invoice ID to download"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "TEXT",
+              "required": false,
+              "help": "Output file path (default: invoice_{number}.pdf in current directory)",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific invoice.",
+          "examples": [
+            "invoicedesk invoice get 1234567",
+            "invoicedesk invoice get 1234567 --table"
+          ],
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The invoice ID to retrieve"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display output as a formatted table instead of JSON",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List all invoices. Shows all invoices in your InvoiceDesk account with optional status filtering. Filterable fields: id, number, client, status, amount, outstanding, created, due_date. Substring searches use 'contains', or 'like' with explicit SQL wildcards ('%acme%'). A bare 'like:acme' is an anchored, case-insensitive exact match.",
+          "examples": [
+            "invoicedesk invoice list",
+            "invoicedesk invoice list --table",
+            "invoicedesk invoice list --status sent --table",
+            "invoicedesk invoice list --unpaid --table",
+            "invoicedesk invoice list --filter client:contains:acme",
+            "invoicedesk invoice list --filter client:like:%acme%",
+            "invoicedesk invoice list --limit 10",
+            "invoicedesk invoice list --from 2024-01-01 --to 2024-12-31"
+          ],
+          "arguments": [],
+          "options": [
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value, e.g., client:contains:acme). Fields: id, number, client, status, amount, outstanding, created, due_date. Note that 'like' is SQL LIKE, so a substring search needs wildcards: client:like:%acme%",
+              "short": "-f"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter by status (draft, sent, viewed, partial, paid, overdue)",
+              "short": "-s"
+            },
+            {
+              "name": "--unpaid",
+              "type": "bool",
+              "required": false,
+              "help": "Filter to show only active unpaid issued invoices, including partial payments",
+              "short": "-u",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum number of invoices to return (default: 100)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--from",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter invoices created on or after this date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter invoices created on or before this date (YYYY-MM-DD)"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of properties to display (e.g., 'id,number,client')",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display output as a formatted table instead of JSON",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-paid": {
+          "help": "Mark an invoice as paid.",
+          "examples": [
+            "invoicedesk invoice mark-paid 1234567 -a 500.00",
+            "invoicedesk invoice mark-paid 1234567 -a 500.00 -d 2024-01-15"
+          ],
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The invoice ID to mark as paid"
+            }
+          ],
+          "options": [
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": true,
+              "help": "Payment amount (e.g., '500.00')",
+              "short": "-a"
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Payment date (YYYY-MM-DD, default: today)",
+              "short": "-d"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "mark-sent": {
+          "help": "Record external invoice delivery. Download PDF first; caller sends it.",
+          "examples": [
+            "invoicedesk invoice mark-sent 1234567 -F"
+          ],
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Invoice ID already delivered externally"
+            }
+          ],
+          "options": [
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-F",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update an existing invoice. --line-amount LINEID=AMOUNT sets that line's unit_cost (quantity unchanged). Find line IDs with `invoicedesk invoice get <id>`. InvoiceDesk replaces the whole lines array on update, so the invoice is fetched and every line is resent; lines not named are preserved. An unknown line ID or a non-numeric/non-positive amount fails with a non-zero exit and nothing is sent. With --line-amount the output JSON also includes the invoice lines.",
+          "examples": [
+            "invoicedesk invoice update 1234567 -f ./contract.pdf",
+            "invoicedesk invoice update 1234567 -n \"Updated notes\"",
+            "invoicedesk invoice update 1234567 -f ./receipt.pdf -n \"Added receipt\"",
+            "invoicedesk invoice update 1234567 --terms-from-config",
+            "invoicedesk invoice update 1234567 -t \"Net 30\"",
+            "invoicedesk invoice update 1234567 --line-amount 1=750.00",
+            "invoicedesk invoice update 1234567 -l 1=750 -l 2=800.50"
+          ],
+          "arguments": [
+            {
+              "name": "invoice_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "The invoice ID to update"
+            }
+          ],
+          "options": [
+            {
+              "name": "--attachment",
+              "type": "TEXT",
+              "required": false,
+              "help": "Path to file to attach (PDF or image)",
+              "short": "-f"
+            },
+            {
+              "name": "--notes",
+              "type": "TEXT",
+              "required": false,
+              "help": "Update invoice notes",
+              "short": "-n"
+            },
+            {
+              "name": "--terms",
+              "type": "TEXT",
+              "required": false,
+              "help": "Update payment terms",
+              "short": "-t"
+            },
+            {
+              "name": "--terms-from-config",
+              "type": "bool",
+              "required": false,
+              "help": "Set payment terms from InvoiceDesk Settings",
+              "takes_value": false
+            },
+            {
+              "name": "--po-number",
+              "type": "TEXT",
+              "required": false,
+              "help": "Update purchase order number/reference",
+              "short": "-p"
+            },
+            {
+              "name": "--line-amount",
+              "type": "TEXT",
+              "required": false,
+              "help": "Set an existing line's unit price as LINEID=AMOUNT, e.g. 2=750.00 (repeatable; quantity and all other lines are unchanged)",
+              "short": "-l"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `invoicedesk` CLI. Run `invoicedesk --help` to discover command groups and `--help` on any subcommand for its options."
+}

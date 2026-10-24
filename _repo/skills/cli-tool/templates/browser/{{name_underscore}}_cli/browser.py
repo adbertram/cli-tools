@@ -7,7 +7,8 @@ class {{Name}}Browser(BrowserAutomation):
     """Browser automation for {{Name}} via cli_tools_shared.auth.BrowserAutomation.
 
     Declarative hooks only — no methods. The base class handles auth lifecycle
-    using these class-level constants. See cli-tool-browser-expert skill for
+    using these class-level constants. See
+    <cli-tools-root>/_repo/skills/cli-tool-browser-expert/SKILL.md for
     selector validation guidance.
     """
 

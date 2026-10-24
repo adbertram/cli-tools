@@ -1,5 +1,5 @@
 """Configuration management for Crypto.com Exchange CLI."""
-from cli_tools_shared.config import BaseConfig, resolve_tool_dir
+from cli_tools_shared.config import BaseConfig, resolve_tool_dir, config_for
 from cli_tools_shared.credentials import CredentialType
 
 
@@ -12,7 +12,11 @@ class Config(BaseConfig):
         ("API_SECRET", "Crypto.com Exchange API secret", True),
     ]
     CUSTOM_REQUIRED_FIELDS = ["API_KEY", "API_SECRET"]
-    CUSTOM_ALL_FIELDS = ["API_KEY", "API_SECRET", "BASE_URL"]
+    # BASE_URL is root config (``cli_tools_shared.config._DEFAULT_ROOT_CONFIG_FIELDS``),
+    # not profile state: declaring it here makes the loader treat it as an
+    # authentication field, so the root config .env is rejected and the profile
+    # bootstrap writes it into a profile the loader then refuses to load.
+    CUSTOM_ALL_FIELDS = ["API_KEY", "API_SECRET"]
     CUSTOM_LOGIN_PROMPTS = CREDENTIAL_PROMPTS
     AUTH_EXTRA_PROMPTS = CREDENTIAL_PROMPTS
     CUSTOM_SENSITIVE_FIELDS = ["API_KEY", "API_SECRET"]
@@ -44,7 +48,4 @@ _configs = {}
 
 
 def get_config(profile=None):
-    key = profile or "_default"
-    if key not in _configs:
-        _configs[key] = Config(profile=profile)
-    return _configs[key]
+    return config_for(Config, profile, _configs)

@@ -22,10 +22,13 @@ from .config import get_config
 #   (covers list/get/update/delete videos, playlists, etc.)
 # - youtube.upload: upload new videos
 # - youtube.force-ssl: required for thumbnail upload
+# - yt-analytics.readonly: read YouTube Analytics reports for the
+#   authenticated user's channel
 SCOPES = [
     "https://www.googleapis.com/auth/youtube",
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.force-ssl",
+    "https://www.googleapis.com/auth/yt-analytics.readonly",
 ]
 
 
@@ -102,6 +105,13 @@ class YouTubeApiClient:
             return build("youtube", "v3", credentials=self.creds)
         except HttpError as e:
             raise ApiClientError(f"Failed to build youtube service: {e}")
+
+    def get_analytics_service(self):
+        """Return a built YouTube Analytics API v2 service object."""
+        try:
+            return build("youtubeAnalytics", "v2", credentials=self.creds)
+        except HttpError as e:
+            raise ApiClientError(f"Failed to build youtubeAnalytics service: {e}")
 
 
 _clients: dict = {}

@@ -1,5 +1,12 @@
 """Regression tests for eBay's interstitial handling.
 
+These cover ``ebay_cli.browser`` — the interstitial taxonomy and
+``EbayBrowser.get_page``'s retry loop — which still guards every browser-backed
+command (``listings get`` / ``listings status`` and the seller Time Away flow).
+The captures below came from a search URL because that is where the walls were
+first diagnosed; marketplace search has since moved to the SoldComps API, but
+eBay fronts ``/itm/<id>`` with the same three walls.
+
 Root cause covered here (diagnosed live 2026-08-28 against
 ``/sch/i.html?_nkw=LEGO+7097&LH_Complete=1&LH_Sold=1`` with an *authenticated*
 session, so this was never a stale-session problem):

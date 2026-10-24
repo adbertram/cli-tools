@@ -7,6 +7,7 @@ Creates a new CLI tool from templates with all scaffolding in place.
 Usage:
     new-cli-tool --name myservice --type api --base-url https://api.myservice.com
     new-cli-tool --name shopsite --type browser --base-url https://shopsite.com
+    new-cli-tool --name internal --type api --base-url https://api.internal.example --personal
 """
 
 import argparse
@@ -23,11 +24,29 @@ CLI_TOOLS_DIR = Path(__file__).resolve().parents[4]
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 LOCAL_BIN_DIR = Path.home() / ".local" / "bin"  # Symlinks go here (works in all shells)
 CLI_TOOLS_DOC = CLI_TOOLS_DIR / "_repo" / "docs" / "cli_tools.md"
-SHARED_ROOT = CLI_TOOLS_DIR / "_repo" / "cli-tools-shared"
-if str(SHARED_ROOT) not in sys.path:
-    sys.path.insert(0, str(SHARED_ROOT))
 
-from cli_tools_shared.config import config_env_path_for_tool, env_path_for_profile
+
+# The scaffold is a documented direct entrypoint, so it must be able to create
+# its initial runtime files before generated-tool dependencies are installed.
+# Keep these path-only helpers aligned with cli_tools_shared.config's public
+# config_env_path_for_tool() and env_path_for_profile() functions.
+def cli_tools_data_root() -> Path:
+    """Return the platform-specific root for cli-tools runtime data."""
+    if os.name == "nt":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return base / "cli-tools"
+
+
+def config_env_path_for_tool(tool_name: str) -> Path:
+    """Return the root config path for one scaffolded tool."""
+    return cli_tools_data_root() / tool_name / ".env"
+
+
+def env_path_for_profile(tool_name: str, profile_name: str) -> Path:
+    """Return the profile env path for one scaffolded tool."""
+    return cli_tools_data_root() / tool_name / "authentication_profiles" / profile_name / ".env"
 
 # Common CLI command to brew package name mappings
 # Add entries here when the brew package name differs from the CLI command
@@ -233,9 +252,62 @@ def validate_template_dir(template_dir: Path) -> None:
         raise FileNotFoundError(f"Template {template_dir.name} is missing required file(s): {names}")
 
 
+def refuses_worktree_install() -> bool:
+    """Return True if CLI_TOOLS_DIR is a linked git worktree and the
+    refusal has not been bypassed.
+
+    `uv tool install` writes into a single global registry shared by every
+    checkout (~/.local/share/uv/tools/<pkg>), so installing from a linked
+    worktree overlays cli-tools-shared from that worktree's copy into the
+    global registry -- once the worktree is removed, every CLI installed
+    from here keeps resolving to the now-missing path. This is the same
+    defect that broke the production bricklink and garrul CLIs, guarded the
+    same way in install-cli-tool.sh.
+
+    CLI_TOOLS_ALLOW_WORKTREE_INSTALL=1 bypasses this, for tests/CI that
+    redirect HOME to a throwaway fixture so there is no real global registry
+    to corrupt.
+    """
+    if os.environ.get("CLI_TOOLS_ALLOW_WORKTREE_INSTALL") == "1":
+        return False
+    try:
+        git_dir_raw = subprocess.run(
+            ["git", "-C", str(CLI_TOOLS_DIR), "rev-parse", "--git-dir"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+        git_common_dir_raw = subprocess.run(
+            ["git", "-C", str(CLI_TOOLS_DIR), "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True,
+        ).stdout.strip()
+    except OSError:
+        return False
+    if not git_dir_raw or not git_common_dir_raw:
+        return False
+    git_dir = Path(git_dir_raw)
+    if not git_dir.is_absolute():
+        git_dir = CLI_TOOLS_DIR / git_dir
+    git_common_dir = Path(git_common_dir_raw)
+    if not git_common_dir.is_absolute():
+        git_common_dir = CLI_TOOLS_DIR / git_common_dir
+    if not git_dir.is_dir() or not git_common_dir.is_dir():
+        return False
+    return git_dir.resolve() != git_common_dir.resolve()
+
+
 def install_with_uv(tool_dir: Path, tool_name: str, tool_type: str):
     """Install the package using uv tool install."""
     print_step("Installing via uv tool install...")
+
+    if refuses_worktree_install():
+        print_error(
+            f"new-cli-tool refuses to run 'uv tool install' from a linked git worktree "
+            f"({CLI_TOOLS_DIR}). uv tool install writes into a single global registry "
+            "shared by every checkout, so this run would overlay cli-tools-shared from "
+            "this worktree's copy -- once the worktree is removed, that dependency "
+            "silently breaks for every CLI installed from here. Run this from the "
+            "canonical cli-tools checkout instead, or pass --no-install to scaffold only."
+        )
+        return False
 
     # Always pin the interpreter. Without --python, uv's default
     # python-preference = "managed" installs the CLI against a uv-managed
@@ -421,6 +493,7 @@ Examples:
   %(prog)s --name lastpass --type wrapper --cli-command lpass --docs-url https://github.com/lastpass/lastpass-cli
   %(prog)s --name myapi --type api --base-url https://api.example.com --description "My API client"
   %(prog)s --name mytool --type wrapper --cli-command mytool --auth-type none --description "Wrapper with no auth"
+  %(prog)s --name internal --type api --base-url https://api.internal.example --personal
         """,
     )
     
@@ -466,6 +539,11 @@ Examples:
         "--no-install",
         action="store_true",
         help="Skip uv tool install",
+    )
+    parser.add_argument(
+        "--personal",
+        action="store_true",
+        help="Create the CLI under _personal/<name> instead of the repo root",
     )
     args = parser.parse_args()
 
@@ -526,7 +604,8 @@ Examples:
     
     # Set paths
     template_dir = TEMPLATES_DIR / args.type
-    output_dir = CLI_TOOLS_DIR / name
+    output_root = CLI_TOOLS_DIR / "_personal" if args.personal else CLI_TOOLS_DIR
+    output_dir = output_root / name
     
     # Check template exists
     if not template_dir.exists():
@@ -686,6 +765,9 @@ PASSWORD=secret://{name}-password
         "{{AUTH_PROFILES_SECTION}}": auth_profiles_section,
         "{{AUTH_CONFIG_SECTION}}": auth_config_section,
         "{{CACHE_SECTION}}": cache_section,
+        "{{cli_tools_shared_path}}": (
+            "../../_repo/cli-tools-shared" if args.personal else "../_repo/cli-tools-shared"
+        ),
     }
     
     print(f"\n\033[1m Creating CLI tool: {name}\033[0m")
@@ -750,7 +832,8 @@ PASSWORD=secret://{name}-password
     print(f"  5. Test: {name} --help")
     if args.no_install:
         print(f"\nuv install skipped (--no-install).")
-        print(f"  Run 'uv tool install -e {output_dir} --force --refresh' when you want the launcher installed.")
+        install_script = Path(__file__).resolve().parent / "install-cli-tool.sh"
+        print(f"  Run '{install_script} --force-refresh {name}' when you want the launcher installed.")
     else:
         print(f"\nInstalled via uv: ~/.local/bin/{name}")
         print("  (Works immediately - no need to source anything)")

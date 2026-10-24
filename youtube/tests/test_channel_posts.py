@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from typer.testing import CliRunner
 
@@ -7,6 +9,11 @@ from youtube_cli.main import app
 
 
 runner = CliRunner()
+_ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+
+
+def _plain(text: str) -> str:
+    return _ANSI_RE.sub("", text)
 
 
 class FakeLocator:
@@ -86,8 +93,9 @@ def test_channel_posts_create_help_lists_message_option():
     result = runner.invoke(app, ["channel", "posts", "create", "--help"])
 
     assert result.exit_code == 0
-    assert "--message" in result.stdout
-    assert "--dry-run" in result.stdout
+    help_text = _plain(result.stdout)
+    assert "--message" in help_text
+    assert "--dry-run" in help_text
 
 
 def test_validate_channel_url_accepts_full_youtube_channel_url():

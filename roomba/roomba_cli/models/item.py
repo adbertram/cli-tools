@@ -73,10 +73,10 @@ class RobotStatus(CLIModel):
     ip: str
 
     # Status fields
-    battery_percent: int = 0
+    battery_percent: Optional[int] = None
     phase: CleaningPhase = CleaningPhase.UNKNOWN
-    bin_present: bool = True
-    bin_full: bool = False
+    bin_present: Optional[bool] = None
+    bin_full: Optional[bool] = None
 
     # Optional detail fields
     error_code: Optional[int] = None
@@ -154,3 +154,21 @@ def create_robot_status(data: dict) -> RobotStatus:
         RobotStatus model instance
     """
     return RobotStatus(**data)
+
+class RoomInfo(CLIModel):
+    """Room/favorite zone information from robot maps."""
+
+    # Required fields
+    id: str
+    name: str
+
+    # Optional fields
+    is_favorite: bool = False
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary representation."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "is_favorite": self.is_favorite
+        }

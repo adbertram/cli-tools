@@ -8,6 +8,7 @@ client-side date filter must use startedAt because running executions have no
 stoppedAt.
 """
 import json
+import pytest
 
 from typer.testing import CliRunner
 
@@ -116,3 +117,83 @@ def test_default_list_dedupes_overlapping_running_executions(monkeypatch):
 
     assert [ex["id"] for ex in output] == [3049]
     assert [req["workflowId"] for req in api.requests] == ["wf123", "wf123"]
+
+
+@pytest.mark.parametrize("page", [
+    {}, {"data": []}, {"data": None, "nextCursor": None},
+    {"data": {}, "nextCursor": None}, {"data": [], "nextCursor": 42},
+    {"data": [None], "nextCursor": None},
+] + [
+    {"data": [_execution("42", "running", value, None)], "nextCursor": None}
+    for value in ["", 42, "invalid", "2026-06-12T12:00:00"]
+])
+def test_inventory_rejects_unknown_upstream_data(monkeypatch, page):
+    api = FakeExecutionsApi({"running": [page]})
+    monkeypatch.setattr(executions_module, "get_n8n_api_client", lambda: api)
+    result = runner.invoke(executions_app, ["list", "--status", "running", "--from", "1970-01-01", "--limit", "100000", "--properties", "id,workflowId,status"])
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Invalid execution inventory" in result.stderr
+
+
+def test_invalid_started_at_error_names_execution():
+    api = FakeExecutionsApi({"running": [
+        {"data": [_execution("42", "running", "invalid", None)], "nextCursor": None},
+    ]})
+    with pytest.raises(ValueError, match="execution 42 startedAt 'invalid'"):
+        executions_module._fetch_executions_in_range(
+            api, "running", None, False, "1970-01-01T00:00:00", "2100-01-01T00:00:00"
+        )
+
+
+def test_default_list_excludes_executions_that_never_started(monkeypatch):
+    # Live n8n 2.10 shapes: a queued execution is status "new" and a queued
+    # execution stopped before running is "canceled" (stopBeforeRun); both keep
+    # startedAt null. n8n's own startedAt range filter never matches NULL.
+    started = _execution(3048, "success", "2026-06-12T11:00:00.000Z", "2026-06-12T11:00:05.000Z")
+    queued = _execution("50299", "new", None, None)
+    canceled_queued = _execution("50300", "canceled", None, "2026-06-12T11:30:00.000Z")
+    api = FakeExecutionsApi({
+        None: [{"data": [queued, canceled_queued, started], "nextCursor": None}],
+        "running": [{"data": [], "nextCursor": None}],
+    })
+
+    output = _invoke(monkeypatch, api, IN_RANGE_ARGS)
+
+    assert [ex["id"] for ex in output] == [3048]
+
+
+def test_inventory_paginates_valid_rows_and_empty_final_page(monkeypatch):
+    api = FakeExecutionsApi({"running": [
+        {"data": [_execution("42", "running", "2026-06-12T12:00:00+00:00", None)], "nextCursor": "page2"},
+        {"data": [], "nextCursor": None},
+    ]})
+    output = _invoke(monkeypatch, api, IN_RANGE_ARGS + ["--status", "running"])
+    assert [row["id"] for row in output] == ["42"]
+    assert api.requests[1]["cursor"] == "page2"
+
+
+def test_inventory_rejects_repeated_pagination_cursor(monkeypatch):
+    api = FakeExecutionsApi({"running": [
+        {"data": [], "nextCursor": "page2"},
+        {"data": [], "nextCursor": "page2"},
+    ]})
+    monkeypatch.setattr(executions_module, "get_n8n_api_client", lambda: api)
+    result = runner.invoke(executions_app, IN_RANGE_ARGS + ["--status", "running"])
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "Invalid execution inventory" in result.stderr
+
+
+def test_inventory_does_not_infer_completeness_from_old_row(monkeypatch):
+    api = FakeExecutionsApi({"running": [
+        {"data": [_execution("old", "running", "2026-05-01T12:00:00Z", None)], "nextCursor": "page2"},
+        {"data": [_execution("current", "running", "2026-06-12T12:00:00Z", None)], "nextCursor": None},
+    ]})
+    output = _invoke(monkeypatch, api, IN_RANGE_ARGS + ["--status", "running"])
+    assert [row["id"] for row in output] == ["current"]
+
+
+def test_inventory_preserves_valid_empty_inventory(monkeypatch):
+    api = FakeExecutionsApi({"running": [{"data": [], "nextCursor": None}]})
+    assert _invoke(monkeypatch, api, IN_RANGE_ARGS + ["--status", "running"]) == []

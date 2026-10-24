@@ -4,6 +4,28 @@
 
 Use this CLI to search Upwork marketplace job postings through the official GraphQL API and to read or update common freelancer profile attributes. Job search runs on an OAuth2 authorization-code credential; profile commands use a browser session. Live profile reads and writes are currently disabled because Upwork's Cloudflare challenge blocks non-headed automation, but field metadata, update dry-runs, and the GraphQL `jobs` commands still work.
 
+## Disabled
+
+This tool is disabled (since 2026-10-13). Upwork will not issue Adam an API key (the account does not meet the $25K lifetime earnings / 90% Job Success Score API eligibility), and live profile commands are blocked by Cloudflare. Source, tests, skill files, and `~/.local/share/cli-tools/upwork` credentials/profile data are kept.
+
+What disabling did:
+
+- Added the `upwork/DISABLED` marker file. `_repo/scripts/find-cli-tools.sh` and `_repo/_scripts/refresh_readme.py` skip any tool folder that contains it.
+- Moved the service skill to `_repo/skills/_disabled/upwork-cli/` so it is not listed or routed.
+- Uninstalled the launcher with `uv tool uninstall upwork-cli`.
+- Removed the `upwork` row from `_repo/docs/cli_tools.md` (listed under "Disabled Tools" there).
+
+Re-enable:
+
+```bash
+cd <cli-tools-root>
+rm upwork/DISABLED
+git mv _repo/skills/_disabled/upwork-cli _repo/skills/upwork-cli
+_repo/skills/cli-tool/scripts/install-cli-tool.sh upwork
+```
+
+Then restore the `upwork` row in `_repo/docs/cli_tools.md` (and remove it from "Disabled Tools"), and run `_repo/_scripts/refresh_readme.sh` if the root README catalog should list it.
+
 ## Docs
 
 - Upwork profile essentials: https://support.upwork.com/hc/en-us/articles/360016252373-How-to-build-your-freelancer-profile-the-essentials

@@ -25,7 +25,7 @@ ebay auth login
 # List your recent orders
 ebay seller orders list
 
-# Search sold/completed marketplace listings with a browser session
+# Search sold/completed marketplace listings (SoldComps API)
 ebay listings search "LEGO 75357" --sold --limit 5
 
 # Discover ACTIVE (live, purchasable) listings + item detail
@@ -34,6 +34,9 @@ ebay listings get 127992747834
 
 # Get details for a specific order
 ebay seller orders get 12-12345-12345
+
+# Check SoldComps plan usage behind marketplace search
+ebay quota --table
 ```
 
 ## Commands
@@ -92,6 +95,21 @@ ebay whoami
 ebay whoami
 ```
 
+### quota - SoldComps Plan Usage
+
+```bash
+# Plan usage recorded from the last marketplace search response
+ebay quota
+ebay quota --table
+```
+
+`ebay quota` reports the SoldComps plan behind `ebay listings search`:
+`quota_limit` / `quota_remaining` / `quota_reset` for the monthly quota, and
+`rate_limit` / `rate_limit_remaining` / `rate_limit_reset` for the per-minute
+window. Reset values are Unix epoch seconds. Values come from the headers of the
+last real search response, so the command costs no request of its own and errors
+until at least one search has run.
+
 ### Categories
 
 Search and browse eBay marketplace categories using the Taxonomy API.
@@ -119,26 +137,37 @@ ebay categories tree 183448 --flat
 
 ### Marketplace Search
 
-Marketplace search uses the shared stealth browser. Completed search requires
-an authenticated browser session because eBay sends cold `LH_Complete=1`
-requests to sign-in. Run `ebay auth login --credential-type browser_session`
-before a completed search. Active search and `listings get` remain public.
-`listings search` uses completed comps by default. Pass `--active` for live,
-purchasable listings.
+`ebay listings search` runs on the [SoldComps](https://sold-comps.com) API
+(`api.sold-comps.com/v1/scrape`), which sells the sold-comp and active-listing
+data eBay itself exposes to no public API. It needs no browser, no eBay sign-in,
+and no browser session — only the SoldComps API key, stored in the CLI-tools
+secret manager under `ebay-soldcomps-api-key`:
 
 ```bash
-# Completed/sold comps (default)
+~/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh \
+    set --tool ebay --type soldcomps-api-key
+```
+
+`listings get` and `listings status` are unchanged: they still scrape one public
+`/itm/<id>` page each through the shared stealth browser, because SoldComps is a
+search product with no single-item lookup.
+
+Pass `--sold` for completed sold comps or `--active` for live, purchasable
+listings. One of the two is required.
+
+```bash
+# Completed sold comps
 ebay listings search "LEGO 75357" --sold --limit 5
 ebay listings search "LEGO 75357" --sold --us-only --limit 5
-ebay listings search "LEGO bulk" --table
+ebay listings search "LEGO bulk" --sold --table
 
 # ACTIVE (live, purchasable) listings — newest first
 ebay listings search "LEGO bulk lot" --active --format bin --sort newest --limit 5
 
-# ACTIVE auctions ending soonest (shows time_left + bids)
-ebay listings search "LEGO minifigure" --active --format auction --sort ending
+# ACTIVE auctions (shows time_left + bids)
+ebay listings search "LEGO minifigure" --active --format auction --limit 5
 
-# Detail for one active listing by item ID
+# Detail for one active listing by item ID (still browser-scraped)
 ebay listings get 127992747834
 ebay listings get 127992747834 --table
 ```
@@ -147,14 +176,57 @@ ebay listings get 127992747834 --table
 `time_left` (and `bids` for auctions with bids). `--format` filters active
 results to `bin` (Buy It Now), `auction`, or `all` (default). `--sold` and
 `--format` apply to their respective modes only and are rejected if combined
-with the wrong mode. `--us-only` limits active or completed results to items
-located in the United States. `listings get` returns price, currency, condition,
-availability, shipping, and (for auctions) current bid / time-left, parsed from
-the item page's schema.org `Product` JSON-LD with DOM fallbacks.
+with the wrong mode. `--us-only` limits results to items located in the United
+States. `listings get` returns price, currency, condition, availability,
+shipping, and (for auctions) current bid / time-left, parsed from the item
+page's schema.org `Product` JSON-LD with DOM fallbacks.
 
-eBay provides at most four search result pages. The command returns up to 960
-results. It prints a warning when `--limit` requests more results than those
-four pages provide.
+`--limit` still accepts up to 960 results. SoldComps returns at most 200 items
+per request and each request spends one unit of the monthly plan quota, so a
+`--limit` above 200 prints the number of requests it will cost on stderr before
+spending them. Paging stops as soon as the API reports no next page.
+
+#### Removed with the browser scraper
+
+Two capabilities the scraper had have no SoldComps equivalent, and both now fail
+with a message naming what is missing rather than silently returning something
+else:
+
+- **Unsold completed listings** (`--completed --no-sold`, and a bare
+  `ebay listings search "<q>"` with neither flag). SoldComps returns sold
+  listings or active listings, nothing in between. Use `--sold` or `--active`.
+- **`--sort ending`** (eBay's "ending soonest"), on active listings as well as
+  completed. Use `--sort newest` or `--sort price`.
+
+#### Quota and caching
+
+The SoldComps plan is metered. Three things keep a repeat price check from
+burning it:
+
+```bash
+# Plan usage recorded from the last search response (costs no request)
+ebay quota
+ebay quota --table
+
+# Force a fresh fetch for one run
+ebay --no-cache listings search "LEGO 75357" --sold
+
+# Drop every stored answer
+ebay cache clear
+```
+
+Completed/sold search **is cached**, for `CACHE_TTL` seconds (the profile
+`.env.example` ships one week — sold comps are historical, so a listing that
+ended last Tuesday will still have ended last Tuesday tomorrow). A repeat of an
+identical sold search costs no quota. The cache key covers every argument, so a
+narrowed search never serves a broader search's results.
+
+Active-listing search is **never cached**: its whole value is "what is live
+right now", and a stale answer is a wrong answer.
+
+`ebay quota` reads the `X-Usage-*` (monthly) and `X-RateLimit-*` (per-minute)
+headers the client records after every response, so it reports the plan without
+spending a request. It errors until at least one search has run.
 
 #### Sorting
 
@@ -162,12 +234,11 @@ four pages provide.
 (default `newest`) plus `--desc/-d` to reverse a field's natural direction. The
 meaning of `newest` depends on the mode:
 
-| `--sort` | `--desc` | Active `_sop` | Completed `_sop` | Meaning |
-|----------|----------|---------------|------------------|---------|
-| `newest` (default) | — | `10` (Time: newly listed) | `13` (Time: ended recently) | Newly listed (active) / most recently ended (completed) |
-| `price` | no | `15` (Price + Shipping: lowest first) | `15` | Cheapest first |
-| `price` | yes | `16` (Price + Shipping: highest first) | `16` | Priciest first |
-| `ending` | — | `1` (Time: ending soonest) | `1` | Sorted by listing end time |
+| `--sort` | `--desc` | Active `sortOrder` | Sold `sortOrder` | Meaning |
+|----------|----------|--------------------|------------------|---------|
+| `newest` (default) | — | `timeNewlyListed` | `endedRecently` | Newly listed (active) / most recently ended (sold) |
+| `price` | no | `pricePlusPostageLowest` | `pricePlusPostageLowest` | Cheapest first |
+| `price` | yes | `pricePlusPostageHighest` | `pricePlusPostageHighest` | Priciest first |
 
 ```bash
 # Newest sold/ended comps first (default)
@@ -177,18 +248,17 @@ ebay listings search "LEGO 75357" --sold
 ebay listings search "LEGO 75357" --active
 
 # Cheapest first (either mode)
-ebay listings search "LEGO 75357" --sort price
+ebay listings search "LEGO 75357" --sold --sort price
 ```
 
-**Recency-sort exception (completed comps):** for COMPLETED search
-(`LH_Complete=1`), eBay has no "newly listed" order for ended listings, so the
-canonical `newest` sort maps to "Time: ended recently" (`_sop=13`) — the most
-recently ended/sold items first. For ACTIVE search, `newest` maps to eBay's true
-"newly listed" order (`_sop=10`). Because eBay exposes only one time-based
-direction per order, `--desc` is supported **only** with `--sort price`;
-`newest --desc` and `ending --desc` are rejected with a clear error. An unknown
-`--sort` value also fails fast (non-zero exit) listing the valid values — there
-is no silent fallback.
+**Recency-sort exception (sold comps):** there is no "newly listed" order for
+ended listings, so for a `--sold` search the canonical `newest` sort means
+`endedRecently` — the most recently ended/sold items first. For ACTIVE search,
+`newest` means `timeNewlyListed`. Because only one time-based direction exists
+per order, `--desc` is supported **only** with `--sort price`; `newest --desc`
+is rejected with a clear error. `--sort ending` is rejected naming the removed
+capability, and an unknown `--sort` value fails fast listing the valid values —
+there is no silent fallback.
 
 ### Seller Commands
 
@@ -324,10 +394,19 @@ ebay seller inventory create SKU123 --from-json payload.json
 ebay seller inventory update SKU123 --quantity 20
 ebay seller inventory update SKU123 --title "New Title"
 
+# Attach an already-uploaded video to an existing SKU (no re-upload)
+ebay seller inventory update SKU123 --video-id VIDEO_ID
+ebay seller inventory create SKU456 --title "Widget" --video-id VIDEO_ID
+
 # Delete an inventory item
 ebay seller inventory delete SKU123
 ebay seller inventory delete SKU123 --force
 ```
+
+A listing's video lives on the inventory item (`product.videoIds`), never on the
+offer. `--video-id` attaches a video created with `ebay seller videos create`;
+`ebay seller inventory update` re-reads the item afterwards and fails if the
+video is not actually present.
 
 #### Listings
 
@@ -373,7 +452,7 @@ The CLI validates that all required eBay fields are provided (via CLI options or
 | Location | `--location` | Merchant location key |
 | Title | `--title` | Listing title |
 | Description | `--description` or `--description-file` | Item description (HTML supported) |
-| Weight | `--weight` | Package weight in pounds |
+| Weight | `--weight` | Package weight in pounds; also sets the `Unit Quantity` aspect only when the aspects (template or `--aspects`) include `Unit Type` |
 | Dimensions | `--dimensions` | Package dimensions as LxWxH in inches |
 | Price | `--price` | Listing price |
 
@@ -418,6 +497,12 @@ ebay seller listings create --sku SKU123 --template lego-bulk-auction \
 ebay seller listings create --sku SKU123 --template lego-bulk-auction \
   --weight 5 --dimensions 12x10x8 --photos-album "eBay Listing" --publish
 
+# Create with a video (attached to the inventory item's videoIds)
+ebay seller listings create --sku SKU123 --template lego-bulk-auction \
+  --weight 5 --dimensions 12x10x8 --video "/path/to/clip.mov" --publish
+ebay seller listings create --sku SKU123 --template lego-bulk-auction \
+  --weight 5 --dimensions 12x10x8 --video-folder "/tmp/ebay-videos" --publish
+
 # Update a listing
 ebay seller listings update SKU123 --price 39.99
 ebay seller listings update SKU123 --quantity 5
@@ -454,11 +539,41 @@ The command returns an error when multiple current offers use the same SKU.
 - Use `--image` for specific local files or `--image-url` for remote URLs
 - Use `--photos-album` to export and upload images from a macOS Photos app album
 - All image options can be combined together
-- Maximum 12 images per listing (eBay limit)
+- Maximum 24 images per ordinary listing (eBay limit; variations allow 12 per variation)
 - Images are uploaded to eBay and associated with the listing
 - Upload failures produce warnings but don't stop listing creation
+- Each failed image upload is retried once; if any image still fails (or a
+  `--image` file is missing), `listings create` exits 1 naming each failed file
+  before any offer is created or published
 - Uploaded images are stored locally in `~/.ebay/images.json`
 - Photos album feature requires the `photos-app` CLI to be installed
+
+**Video Attach Notes:**
+- Use `--video` for one local video file; eBay listings carry a single video
+- Use `--video-folder` to scan a directory and attach the first video file
+  (`.mov`, `.mp4`, `.m4v`); photo files in the same folder are ignored
+- Files that are not already H.264 in an MP4/MOV container (including `.m4v`
+  files, which are accepted only when their stream reports `mov`/`mp4`) are
+  transcoded to a temporary H.264 MP4 with `ffmpeg` before upload; the original
+  file is never modified
+- The transcode keeps the first video stream and the first audio track `ffmpeg`
+  can decode (iPhone `apple_apac` spatial audio is skipped in favour of the AAC
+  track); with no decodable audio track it warns and uploads the video silent
+- `ffprobe` and `ffmpeg` are required for any `--video`/`--video-folder` listing,
+  and for `ebay seller videos create`
+- The upload's title defaults to the file name, cleaned of separators and
+  truncated to 80 characters
+- The byte size sent to eBay is the size of the file that is actually uploaded,
+  which must match exactly or eBay rejects the upload
+- Videos must be 150 MB (157,286,400 bytes) or smaller
+- The video ID is written to the inventory item's `product.videoIds`
+- **eBay videos expire 30 days after upload, whether or not they are attached to
+  a live listing.** A video attached to an unpublished draft is no longer
+  available if the listing is published after that window
+- **eBay videos are only viewable in eBay's iOS and Android apps**, not on
+  desktop web
+- Attaching an already-uploaded video to an existing SKU needs no re-upload:
+  `ebay seller inventory update SKU123 --video-id VIDEO_ID`
 
 **Description Options:**
 - Use `--description` for short inline descriptions (overrides template)
@@ -492,6 +607,10 @@ ebay seller images upload --file "/path/one.jpg,/path/two.jpg"
 ebay seller images upload --url "https://example.com/image.jpg"
 ebay seller images upload --url "https://a.com/1.jpg,https://b.com/2.jpg"
 
+# Capture the uploaded eBay URLs for an inventory update
+ebay seller images upload --file "/path/one.jpg,/path/two.jpg" \
+  | jq -r '.uploaded[].imageUrl'
+
 # List locally-stored uploaded images
 ebay seller images list
 ebay seller images list
@@ -505,6 +624,53 @@ ebay seller images get IMAGE_ID
 **Available fields:** image_id, imageUrl, expirationDate, source, original, uploaded_at
 
 **Note:** Uploaded image metadata is stored locally in `~/.ebay/images.json` for easy retrieval.
+`images upload` writes a JSON object to stdout with `uploaded`, `errors`,
+`persistence_errors`, `total_uploaded`, `total_errors`, and
+`total_persistence_errors`. Each `uploaded` record includes the eBay `imageUrl`
+immediately after eBay accepts it, even if saving local metadata later fails.
+Progress and warnings go to stderr. Any requested upload or local-persistence
+failure writes the complete JSON result and exits with status 1, so a listing
+workflow cannot silently continue with incomplete state.
+
+#### Videos
+
+Create and inspect eBay listing videos using the Media API.
+A video reaches a listing through the inventory item's `product.videoIds`.
+
+```bash
+# Create a video resource and upload its bytes (title defaults to the file name)
+ebay seller videos create /path/to/clip.mov
+ebay seller videos create /path/to/clip.mov --title "Bulk lot walkthrough"
+ebay seller videos create /path/to/clip.mov --description "Close-up of minifigures" --table
+
+# Check processing status: PENDING_UPLOAD -> PROCESSING -> LIVE
+ebay seller videos get VIDEO_ID
+ebay seller videos get VIDEO_ID --table
+
+# Attach that video to a listing at creation time
+ebay seller listings create --sku SKU123 --template lego-bulk-auction \
+  --weight 5 --dimensions 12x10x8 --video /path/to/clip.mov --publish
+
+# Attach it to a SKU that already exists, without re-uploading
+ebay seller inventory update SKU123 --video-id VIDEO_ID
+```
+
+`videos create` prints the new `videoId` as JSON on stdout (`size` is the exact
+byte count sent to eBay, and `transcoded`/`sourceCodec`/`outputCodec` report
+whether an H.264 transcode ran). Files that are not already H.264 in an MP4/MOV
+container are transcoded to a temporary H.264 MP4, and the user's original file
+is never modified. A title derived from the file name is truncated to 80
+characters. `ffprobe` and `ffmpeg` must be installed; the command fails with a
+clear message rather than uploading a file eBay may reject.
+
+Failure statuses are `PROCESSING_FAILED` and `BLOCKED`, and `statusMessage`
+explains why. There is no `videos list`: the Media API only exposes create,
+upload, and get.
+
+**Videos expire 30 days after upload regardless of when the listing is
+published, and shoppers can only view them in eBay's iOS and Android apps — not
+on desktop web.** A video attached to an unpublished draft is no longer
+available if the listing is published after the 30-day window.
 
 #### Templates
 
@@ -650,9 +816,12 @@ ebay seller store time-away disable --dry-run
 ### Cache
 
 ```bash
-ebay cache status
-ebay cache clear
+ebay cache clear                 # drop every stored response
+ebay --no-cache <command>        # bypass the cache for one run
 ```
+
+Only completed/sold marketplace search is cached. See
+[Quota and caching](#quota-and-caching).
 
 ## Output Formats
 
@@ -711,8 +880,11 @@ Order ID         Status        Buyer        Total   Created
 | `--properties` | `-p` | Comma-separated list of fields to include in output |
 | `--status` | `-s` | Filter by fulfillment status |
 | `--order-ids` | | Comma-separated list of order IDs |
-| `--weight` | `-w` | Package weight in pounds (required for listings) |
+| `--weight` | `-w` | Package weight in pounds (required for listings); also sets `Unit Quantity` when the aspects include `Unit Type` |
 | `--dimensions` | | Package dimensions as LxWxH in inches, e.g., 12x10x8 (required for listings) |
+| `--video` | | Local video file to attach to a listing (`.mov`, `.mp4`, `.m4v`) |
+| `--video-folder` | | Folder to scan for the first video file to attach |
+| `--video-id` | | Media API video ID to attach to an inventory item's SKU |
 | `--version` | `-v` | Show version and exit |
 
 ## Configuration

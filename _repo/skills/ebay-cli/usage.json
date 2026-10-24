@@ -1,8 +1,8 @@
 {
   "tool": "ebay",
   "description": "eBay CLI — seller tools, marketplace categories, and account management",
-  "discovered_at": "2026-08-28T16:34:09Z",
-  "total_commands": 75,
+  "discovered_at": "2026-10-11T18:11:17Z",
+  "total_commands": 79,
   "global_options": [
     {
       "name": "--version",
@@ -192,6 +192,19 @@
               "help": "Display as table",
               "short": "-t",
               "takes_value": false
+            }
+          ]
+        },
+        "seed-shared-chromium-profile": {
+          "help": "Seed an empty shared Chromium profile from this CLI's default profile.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Default profile with the known-good legacy browser session",
+              "short": "-p"
             }
           ]
         },
@@ -542,13 +555,12 @@
           ]
         },
         "search": {
-          "help": "Search eBay ACTIVE or completed/sold listings. By default searches COMPLETED listings (sold + unsold comps). Pass --active to search live, purchasable listings (BIN + auction) with current price, current bid, time-left, shipping, and item URL. Completed search requires an authenticated browser session. Run `ebay auth login --credential-type browser_session` first. Active search remains public. Results are sorted newest-first by default. With --active, 'newest' orders by newly listed; for completed comps it orders by most recently ended/sold.",
+          "help": "Search eBay SOLD comps or ACTIVE listings via the SoldComps API. Pass --sold for completed, sold comps (the pricing signal) or --active for live, purchasable listings (BIN + auction) with current price, current bid, time-left, shipping, and item URL. Needs the SoldComps API key in the CLI-tools secret manager under 'ebay-soldcomps-api-key'. No browser session and no eBay sign-in. Sold-comp searches are cached for the profile's CACHE_TTL, so repeating one costs no quota; pass the global --no-cache to force a fresh fetch. Active searches are never cached. `ebay quota` reports the plan usage recorded from the last response. Results are sorted newest-first by default. With --active, 'newest' orders by newly listed; for sold comps it orders by most recently ended/sold.",
           "examples": [
             "ebay listings search \"LEGO bulk lot\" --active --format bin --limit 5",
-            "ebay listings search \"LEGO 75192\" --active --format auction --sort ending",
-            "ebay listings search \"LEGO 75192\" --sold --limit 5        # completed comps",
-            "ebay listings search \"LEGO 75192\" --sold --us-only        # US items only",
-            "ebay listings search \"iPhone 15\" --sort price             # cheapest first"
+            "ebay listings search \"LEGO 75192\" --sold --limit 5         # sold comps",
+            "ebay listings search \"LEGO 75192\" --sold --us-only         # US items only",
+            "ebay listings search \"iPhone 15\" --sold --sort price       # cheapest first"
           ],
           "arguments": [
             {
@@ -563,7 +575,7 @@
               "name": "--active",
               "type": "bool",
               "required": false,
-              "help": "Search ACTIVE (live, purchasable) listings instead of completed/sold comps",
+              "help": "Search ACTIVE (live, purchasable) listings instead of sold comps",
               "takes_value": false,
               "secondary": "--completed",
               "default": "completed"
@@ -578,7 +590,7 @@
               "name": "--sold",
               "type": "bool",
               "required": false,
-              "help": "Completed search only: only show sold items",
+              "help": "Search completed SOLD listings (required unless --active is used)",
               "takes_value": false,
               "secondary": "--no-sold",
               "default": "no-sold"
@@ -619,7 +631,7 @@
               "name": "--sort",
               "type": "TEXT",
               "required": false,
-              "help": "Sort field: newest, price, ending. Default 'newest'. With --active, 'newest' = newly listed; for completed comps 'newest' = most recently ended/sold (eBay has no 'newly listed' order for ended listings)",
+              "help": "Sort field: newest, price. Default 'newest'. With --active, 'newest' = newly listed; for sold comps 'newest' = most recently ended/sold (there is no 'newly listed' order for ended listings)",
               "short": "-s",
               "default": "newest"
             },
@@ -635,7 +647,7 @@
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of results (eBay provides up to 960)",
+              "help": "Maximum number of results (up to 960); every 200 results cost one SoldComps request",
               "short": "-l",
               "default": "50"
             },
@@ -708,6 +720,30 @@
           ]
         }
       }
+    },
+    "quota": {
+      "help": "Show SoldComps plan usage recorded from the last marketplace search. `ebay listings search` runs on a metered SoldComps plan, and every response carries its own usage headers, which the client records. This reads those recorded values, so it costs no request of its own. `quota_*` is the monthly quota (the binding constraint); `rate_limit_*` is the per-minute window. Reset values are the Unix epoch seconds SoldComps returned.",
+      "examples": [
+        "ebay quota",
+        "ebay quota --table"
+      ],
+      "arguments": [],
+      "options": [
+        {
+          "name": "--table",
+          "type": "bool",
+          "required": false,
+          "help": "Display as table",
+          "short": "-t",
+          "takes_value": false
+        },
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Profile name"
+        }
+      ]
     },
     "seller": {
       "help": "Seller tools — listings, orders, inventory, policies, and more",
@@ -924,6 +960,12 @@
                   "help": "Comma-separated list of image URLs (HTTPS)"
                 },
                 {
+                  "name": "--video-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Media API video ID to attach to the item"
+                },
+                {
                   "name": "--aspects",
                   "type": "TEXT",
                   "required": false,
@@ -1063,7 +1105,7 @@
               ]
             },
             "update": {
-              "help": "Update an existing inventory item. Fetches the current item and merges with provided updates.",
+              "help": "Update an existing inventory item. Fetches the current item and merges with provided updates. --video-id attaches an already-uploaded Media API video to this SKU without re-uploading it; create videos with `ebay seller videos create`.",
               "arguments": [
                 {
                   "name": "sku",
@@ -1105,6 +1147,12 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "New comma-separated list of image URLs"
+                },
+                {
+                  "name": "--video-id",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Media API video ID to attach to this SKU (replaces any existing video)"
                 },
                 {
                   "name": "--aspects",
@@ -1216,10 +1264,11 @@
           ],
           "commands": {
             "create": {
-              "help": "Create and publish an active Inventory API listing. Draft creation uses `ebay seller listings drafts create`.",
+              "help": "Create and publish an active Inventory API listing. Draft creation uses `ebay seller listings drafts create`. A video attached with --video or --video-folder is uploaded to the Media API and referenced from the inventory item's videoIds, which is how a video reaches a listing. eBay videos expire 30 days after upload and are only viewable in eBay's iOS and Android apps.",
               "examples": [
                 "ebay seller listings create --sku SKU123 --template vintage-camera --publish --price 149.99",
-                "ebay seller listings create --sku SKU123 --title \"Item\" --price 99 --category 175673 --publish"
+                "ebay seller listings create --sku SKU123 --title \"Item\" --price 99 --category 175673 --publish",
+                "ebay seller listings create --sku SKU123 --template lego-bulk-auction --video ./clip.mov --publish --price 149.99"
               ],
               "arguments": [],
               "options": [
@@ -1317,7 +1366,7 @@
                   "name": "--weight",
                   "type": "FLOAT",
                   "required": false,
-                  "help": "Package weight in pounds",
+                  "help": "Package weight in pounds; also sets the Unit Quantity aspect when the aspects include Unit Type",
                   "short": "-w"
                 },
                 {
@@ -1350,6 +1399,18 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "macOS Photos app album name"
+                },
+                {
+                  "name": "--video",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Local video file to attach (.mov, .mp4, .m4v)"
+                },
+                {
+                  "name": "--video-folder",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Folder to scan for the first video file"
                 },
                 {
                   "name": "--aspects",
@@ -1526,7 +1587,7 @@
                     },
                     {
                       "name": "--format",
-                      "type": "AUCTION|FIXEDPRICE",
+                      "type": "Auction|FixedPrice",
                       "required": false,
                       "help": "Draft format",
                       "short": "-f"
@@ -1713,7 +1774,7 @@
               ]
             },
             "update": {
-              "help": "Update an existing listing. Updates both the inventory item and offer as needed.",
+              "help": "Update an existing listing. Inventory API listings are updated through their inventory item and offer. A legacy Trading API listing (no offer ID) is revised through the Trading API instead, which covers --title, --description, --price, --quantity and --best-offer.",
               "arguments": [
                 {
                   "name": "sku",
@@ -1798,6 +1859,14 @@
                   "type": "TEXT",
                   "required": false,
                   "help": "Updates from JSON file"
+                },
+                {
+                  "name": "--best-offer",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Enable or disable Best Offer (legacy Trading API listings only)",
+                  "takes_value": false,
+                  "secondary": "--no-best-offer"
                 },
                 {
                   "name": "--table",
@@ -3821,6 +3890,96 @@
                 }
               ],
               "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "videos": {
+          "help": "Manage eBay listing videos",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ],
+          "commands": {
+            "create": {
+              "help": "Create a video resource and upload its bytes to eBay. Files that are not already H.264 in an MP4/MOV container are transcoded to a temporary H.264 MP4 first; the original file is never modified. The byte size sent to eBay is the size of the file that is actually uploaded. Videos expire 30 days after upload, and shoppers can only view them in eBay's iOS and Android apps.",
+              "examples": [
+                "ebay seller videos create ./clip.mov",
+                "ebay seller videos create ./clip.mov --title \"Bulk LEGO lot walkthrough\"",
+                "ebay seller videos create ./clip.mov --description \"Close-up of the minifigures\" --table"
+              ],
+              "arguments": [
+                {
+                  "name": "path",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Local video file to upload (.m4v, .mov, .mp4)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--title",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Video title (default: derived from the file name)"
+                },
+                {
+                  "name": "--description",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Optional video description",
+                  "short": "-d"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get video metadata and processing status from eBay. Status moves PENDING_UPLOAD -> PROCESSING -> LIVE; failures appear as PROCESSING_FAILED or BLOCKED with a statusMessage explaining why.",
+              "examples": [
+                "ebay seller videos get 1a2b3c4d",
+                "ebay seller videos get 1a2b3c4d --table"
+              ],
+              "arguments": [
+                {
+                  "name": "video_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "The eBay video ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
                 {
                   "name": "--profile",
                   "type": "TEXT",

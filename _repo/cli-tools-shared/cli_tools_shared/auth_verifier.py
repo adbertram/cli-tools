@@ -4,6 +4,7 @@ import logging
 from typing import Optional
 
 from .credentials import CredentialType
+from .shared_chromium_profile import get_shared_chromium_profile_seed_guidance
 
 logger = logging.getLogger("cli_tools.auth_verifier")
 
@@ -283,7 +284,11 @@ class AuthVerifier:
             }
 
         if not has_session:
-            return {"authenticated": False, "available": False, "has_session": False}
+            result = {"authenticated": False, "available": False, "has_session": False}
+            guidance = get_shared_chromium_profile_seed_guidance(self.config)
+            if guidance:
+                result["browser_error"] = guidance
+            return result
 
         try:
             try:

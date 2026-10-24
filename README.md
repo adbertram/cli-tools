@@ -57,7 +57,6 @@ Examples:
 ```bash
 _repo/_scripts/install-cli-tool.sh airtable
 _repo/_scripts/install-cli-tool.sh amazon
-_repo/_scripts/install-cli-tool.sh wordpress
 ```
 
 Then run the installed command:
@@ -65,7 +64,6 @@ Then run the installed command:
 ```bash
 airtable --help
 amazon orders list --table
-wordpress posts list --limit 5
 ```
 
 Some tools require service credentials or browser-authenticated profile state
@@ -402,7 +400,6 @@ repo itself, currently `cli-tool` and `cli-tool-secrets`.
 | [`twelvelabs`](twelvelabs/) | `twelvelabs` | A command-line interface for the [TwelveLabs API](https://docs.twelvelabs.io) - video AI for video understanding, indexing, and text generation. |
 | [`udemy`](udemy/) | `udemy` | Command-line access to Udemy instructor courses. Course list/get commands use the Udemy Instructor API. Course management read/update commands use an authenticated browser session because Udemy does not provide an API for those manage pages. |
 | [`whisper`](whisper/) | `whisper` | A standardized command-line wrapper for [OpenAI Whisper](https://github.com/openai/whisper) speech-to-text transcription. |
-| [`wordpress`](wordpress/) | `wordpress` | A command-line interface for managing WordPress posts and media via the [WordPress REST API](https://developer.wordpress.org/rest-api/). Supports creating posts from manual content, DOCX files, or Markdown files with automatic image upload and link processing. |
 | [`x`](x/) | `x` | A command-line interface for the [X API](https://api.twitter.com). Post tweets to X.com. |
 | [`youtube`](youtube/) | `youtube` | Downloads public YouTube videos/transcripts with yt-dlp and manages authenticated channel videos through the YouTube Data API v3. |
 
@@ -424,7 +421,6 @@ repo itself, currently `cli-tool` and `cli-tool-secrets`.
 | [`grammarly`](grammarly/) | `grammarly` | Command-line interface for the Grammarly Plagiarism Detection API. |
 | [`imessage`](imessage/) | `imessage` | CLI tool for interacting with iMessage on macOS. Uses SQLite for fast reads from the Messages database and AppleScript for sending messages. |
 | [`lastpass`](lastpass/) | `lastpass` | A standardized command-line wrapper for [lpass](https://github.com/lastpass/lastpass-cli) (LastPass CLI). |
-| [`manus`](manus/) | `manus` | Complete reference for the `manus` command-line interface for interacting with Manus AI services. |
 | [`mindmeister`](mindmeister/) | `mindmeister` | A command-line interface for the [MindMeister API](https://developers.mindmeister.com/docs) - manage mind maps from the terminal. |
 | [`msword`](msword/) | `msword` | Read Word documents, convert to Markdown, and extract comments with context. |
 | [`notifier`](notifier/) | `notifier` | A command-line wrapper for [terminal-notifier](https://github.com/julienXX/terminal-notifier) to send macOS desktop notifications. |
@@ -440,7 +436,7 @@ repo itself, currently `cli-tool` and `cli-tool-secrets`.
 | --- | --- | --- |
 | [`cloudflare`](cloudflare/) | `cloudflare` | A command-line interface for the [Cloudflare API](https://developers.cloudflare.com/api/). Manage Cloudflare zones and cache. |
 | [`cryptocom`](cryptocom/) | `cryptocom` | Command-line access to the Crypto.com Exchange REST API for public market data and authenticated account data. |
-| [`freshbooks`](freshbooks/) | `freshbooks` | Complete reference for the `freshbooks` command-line interface for managing FreshBooks accounting data. |
+| [`invoicedesk`](invoicedesk/) | `invoicedesk` | Manage InvoiceDesk customers, invoices, payments, PDF exports and resumable archives. |
 | [`n8n`](n8n/) | `n8n` | Manage n8n server - nodes, executions, credentials, data tables, and logs. |
 
 ### Consumer Services & Devices

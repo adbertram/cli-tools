@@ -1,10 +1,11 @@
 """CDP WS holder + IPC relay (Unix socket on POSIX, TCP loopback on Windows). One daemon per BU_NAME."""
-import asyncio, json, os, socket, sys, time, urllib.error, urllib.request
+import asyncio, json, math, os, socket, sys, time, urllib.error, urllib.request
 from urllib.parse import urlparse
 from collections import deque
 from pathlib import Path
 
 from . import _ipc as ipc
+from .network_capture import NetworkCapture, route_scope
 from cdp_use.client import CDPClient
 
 
@@ -245,6 +246,7 @@ class Daemon:
         self.session = None
         self.target_id = None
         self.events = deque(maxlen=BUF)
+        self.network_capture = None
         self.dialog = None
         self.stop = None  # asyncio.Event, set inside start()
 
@@ -299,6 +301,8 @@ class Daemon:
         mark_js = "if(!document.title.startsWith('\U0001F434'))document.title='\U0001F434 '+document.title"
         async def tap(method, params, session_id=None):
             self.events.append({"method": method, "params": params, "session_id": session_id})
+            if self.network_capture is not None:
+                self.network_capture.record(method, params, session_id)
             if method == "Page.javascriptDialogOpening":
                 self.dialog = params
             elif method == "Page.javascriptDialogClosed":
@@ -324,6 +328,36 @@ class Daemon:
         if meta == "drain_events":
             out = list(self.events); self.events.clear()
             return {"events": out}
+        if meta == "begin_network_capture":
+            try:
+                scope = route_scope(**req.get("scope", {}))
+            except (TypeError, ValueError):
+                return {"error": "network_capture_scope_invalid"}
+            if scope["session_id"] != self.session or self.network_capture is not None:
+                return {"error": "network_capture_session_or_owner_changed"}
+            self.network_capture = NetworkCapture(scope)
+            return {"capture_id": self.network_capture.id, "scope": self.network_capture.scope}
+        if meta in ("drain_network_capture", "end_network_capture"):
+            capture = self.network_capture
+            if (capture is None or req.get("capture_id") != capture.id or req.get("scope") != capture.scope
+                    or capture.scope["session_id"] != self.session):
+                return {"error": "network_capture_binding_changed"}
+            if meta == "end_network_capture":
+                self.network_capture = None
+                return {"ended": True}
+            # An IPC listener can outlive its CDP connection. Require an actual
+            # bounded session round-trip before an empty drain can be trusted.
+            if capture.loss is None:
+                try:
+                    probe = await self.handle({"method": "Runtime.evaluate", "params": {"expression": "void 0"},
+                        "session_id": capture.scope["session_id"], "request_timeout": 2, "token": req.get("token")})
+                    value = probe.get("result") if isinstance(probe, dict) else None
+                    if (not isinstance(probe, dict) or set(probe) != {'result'} or not isinstance(value, dict)
+                            or set(value) != {'result'} or value['result'] != {'type': 'undefined'}):
+                        capture.loss = "connection_unavailable"
+                except Exception:
+                    capture.loss = "connection_unavailable"
+            return capture.drain()
         if meta == "session":     return {"session_id": self.session}
         if meta == "current_tab":
             # Resolve the attached page's target info server-side. Helpers can't
@@ -388,6 +422,26 @@ class Daemon:
             )))
             return {"session_id": self.session}
         if meta == "pending_dialog": return {"dialog": self.dialog}
+        if meta == "close_navigation":
+            timeout = req.get("timeout", 5)
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= 5:
+                return {"error": "invalid close-navigation timeout"}
+            task = asyncio.create_task(self.cdp.send_raw("Page.navigate", {"url": "about:blank"}, session_id=self.session))
+            try:
+                async with asyncio.timeout(timeout):
+                    while not task.done():
+                        if self.dialog:
+                            if self.dialog.get("type") != "beforeunload":
+                                raise RuntimeError("Close navigation blocked by a non-beforeunload native dialog")
+                            await self.cdp.send_raw("Page.handleJavaScriptDialog", {"accept": True}, session_id=self.session)
+                        await asyncio.wait({task}, timeout=0.05)
+                    return {"result": await task}
+            except TimeoutError:
+                raise RuntimeError(f"Close navigation timed out after {timeout}s") from None
+            finally:
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
         if meta == "shutdown":    self.stop.set(); return {"ok": True}
 
         method = req["method"]
@@ -395,6 +449,29 @@ class Daemon:
         # Browser-level Target.* calls must not use a session (stale or otherwise).
         # For everything else, explicit session in req wins; else default.
         sid = None if method.startswith("Target.") else (req.get("session_id") or self.session)
+        budget = req.get("request_timeout")
+        if budget is not None:
+            if type(budget) not in (int, float) or not math.isfinite(budget) or not 0 < budget <= 300:
+                return {"error": "invalid_cdp_request_timeout"}
+            # cdp-use retains cancelled response futures until a reply arrives.
+            # Remove only this call's cancelled additions; never another session's.
+            pending = self.cdp.pending_requests
+            owned_ids = []
+            async def bounded_request():
+                # send_raw registers msg_id + 1 before its first await.
+                owned_ids.append(self.cdp.msg_id + 1)
+                return await self.cdp.send_raw(method, params, session_id=sid)
+            try:
+                return {"result": await asyncio.wait_for(bounded_request(), timeout=budget)}
+            except asyncio.TimeoutError:
+                return {"error": "cdp_request_deadline_exceeded"}
+            except Exception:
+                return {"error": "cdp_request_failed"}
+            finally:
+                for key in owned_ids:
+                    future = pending.pop(key, None)
+                    if future is not None and not future.done():
+                        future.cancel()
         try:
             return {"result": await self.cdp.send_raw(method, params, session_id=sid)}
         except Exception as e:

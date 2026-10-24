@@ -128,9 +128,9 @@ def list_files(
 @app.command("upload")
 @command
 def upload_file(
-    file_path: str = typer.Argument(..., help="Path to file to upload"),
+    file_paths: List[str] = typer.Argument(..., help="One or more file paths to upload (max 10, shared as ONE message)"),
     channels: Optional[str] = typer.Option(None, "--channels", "-c", help="Comma-separated channel IDs"),
-    title: Optional[str] = typer.Option(None, "--title", "-t", help="File title"),
+    title: Optional[str] = typer.Option(None, "--title", "-t", help="File title (single file only; multiple files use their filenames)"),
     comment: Optional[str] = typer.Option(None, "--comment", help="Initial comment"),
     thread_ts: Optional[str] = typer.Option(
         None,
@@ -139,34 +139,39 @@ def upload_file(
     ),
 ):
     """
-    Upload a file to Slack.
+    Upload one or more files to Slack.
+
+    Several files are shared in ONE Slack message with a single comment
+    (Slack allows at most 10 files per message). Every path is validated
+    before anything is uploaded.
 
     Example:
         slack files upload document.pdf --channels C1234567890
         slack files upload image.png --channels C1234567890,C9876543210 --title "Screenshot"
+        slack files upload a.pptx b.pptx c.pptx --channels C1234567890 --comment "Decks for review"
     """
     try:
-        # Validate file exists
-        path = Path(file_path)
-        if not path.exists():
-            raise typer.BadParameter(f"File not found: {file_path}")
+        # Validate every file exists before uploading anything
+        missing = [p for p in file_paths if not Path(p).is_file()]
+        if missing:
+            raise typer.BadParameter(f"File not found: {', '.join(missing)}")
 
         client = get_client()
         response = client.upload_file(
-            file_path=file_path,
+            file_paths=file_paths,
             channels=channels,
-            title=title or path.name,
+            title=title,
             initial_comment=comment,
             thread_ts=thread_ts,
         )
 
-        file_info = response.get("file", {})
+        uploaded = [{"id": f.get("id"), "title": f.get("title")} for f in response["files"]]
 
-        print_success(f"File uploaded successfully: {file_info.get('title', file_info.get('id'))}")
-        print_json({
-            "id": file_info.get("id"),
-            "title": file_info.get("title"),
-        })
+        print_success(
+            "File uploaded successfully: " + ", ".join(str(f["title"] or f["id"]) for f in uploaded)
+        )
+        # Single file keeps the original shape for existing callers
+        print_json(uploaded[0] if len(file_paths) == 1 else {"files": uploaded})
 
     except Exception as e:
         raise typer.Exit(handle_error(e))

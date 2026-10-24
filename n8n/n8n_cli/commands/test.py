@@ -5,6 +5,7 @@ workflow's nodes and reports broken loadOptions, missing required parameters,
 deleted credentials, version mismatches, dead webhook paths, and more.
 """
 import json as json_mod
+import re
 import subprocess
 import time
 import uuid
@@ -21,38 +22,116 @@ from .deploy import N8N_NODES_DIR
 from .. import health as health_mod
 
 
-def _check_ui_visibility(package_name: str, node_js_name: str) -> list[str]:
-    """Check for known issues that prevent a node from appearing in the n8n UI node picker.
+# A compiled credential-test method shows up as
+#
+#     async haloPSAApiCredentialTest(credential) {          // methods.credentialTest inline
+#     async function oracleDBConnectionTest(credential) {   // sibling methods/ module,
+#     exports.oracleDBConnectionTest = oracleDBConnectionTest;  //   pulled in by the node
+#     postgresConnectionTest: credentialTest_1.postgres,    //     map key of an import
+#
+# while the binding that names it reads `testedBy: 'haloPSAApiCredentialTest'`.
+# A definition is searched for by NAME, so the pattern stays small even on a
+# package the size of `n8n-nodes-base` (429 nodes, 38 bindings).
+def _definition_patterns(name: str) -> tuple[re.Pattern, ...]:
+    escaped = re.escape(name)
+    return (
+        re.compile(rf"^\s*(?:async\s+)?function\s+{escaped}\s*\("),
+        re.compile(rf"^\s*(?:async\s+)?{escaped}\s*[:(]"),
+        re.compile(rf"^exports\.{escaped}\b"),
+        re.compile(rf"^\s*(?:const|let|var)\s+{escaped}\s*="),
+        re.compile(rf"^\s*{escaped}\s*=[^=]"),
+    )
 
-    Inspects the installed node package on the server for patterns that are known
-    to cause the node to load via the API but be invisible in the UI search.
+
+def _definition_scan_pattern(names) -> str:
+    """POSIX ERE matching any line that defines one of `names`."""
+    group = "|".join(re.escape(name) for name in sorted(names))
+    return (
+        "^(async[[:space:]]+)?function[[:space:]]+({n})[[:space:]]*\\("
+        "|^[[:space:]]*(async[[:space:]]+)?({n})[[:space:]]*[:(]"
+        "|^exports\\.({n})\\b"
+        "|^[[:space:]]*(const|let|var)[[:space:]]+({n})[[:space:]]*="
+        "|^[[:space:]]*({n})[[:space:]]*=[^=]"
+    ).format(n=group)
+
+
+# Both scans read the package's compiled NODE modules only, delivery-side `.js`
+# only: a `.node.json` codex file is supported metadata that n8n itself ships
+# hundreds of, a source map embeds whole files on one line, and a `.d.ts`
+# declares what the `.js` beside it already defines. The patterns go to the
+# server inside single quotes because they carry a `$` the shell would expand.
+_BINDING_SCAN_COMMAND = (
+    "sudo grep -rhE --include='*.js' 'testedBy' {nodes_dir} 2>/dev/null"
+)
+_DEFINITION_SCAN_COMMAND = (
+    "sudo grep -rhE --include='*.js' '{pattern}' {nodes_dir} 2>/dev/null"
+)
+_TESTED_BY_RE = re.compile(r"""testedBy\s*:\s*['"]([^'"]+)['"]""")
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z_$][\w$]*$")
+
+
+def _scan_installed_package(package_name: str) -> tuple[set[str], set[str]]:
+    """Read the installed package's compiled JS for credential-test bindings.
+
+    Returns `(bindings, defined)`: every method name a `testedBy` string binds
+    to, and the ones the package defines a method for.
+    """
+    nodes_dir = f"{N8N_NODES_DIR}/node_modules/{package_name}/dist/nodes"
+    binding_scan = run_on_server_raw(_BINDING_SCAN_COMMAND.format(nodes_dir=nodes_dir), timeout=30)
+
+    bindings: set[str] = set()
+    for line in binding_scan.stdout.splitlines():
+        bindings.update(_TESTED_BY_RE.findall(line))
+    if not bindings:
+        return set(), set()
+
+    # Only an identifier can name a method, and only an identifier goes into the
+    # pattern built below. A binding that is neither is left out of the search, so
+    # it comes back as one that cannot resolve.
+    searchable = sorted(name for name in bindings if _IDENTIFIER_RE.match(name))
+    if not searchable:
+        return bindings, set()
+
+    definition_scan = run_on_server_raw(
+        _DEFINITION_SCAN_COMMAND.format(
+            pattern=_definition_scan_pattern(searchable), nodes_dir=nodes_dir,
+        ),
+        timeout=30,
+    )
+    defined = {
+        name
+        for line in definition_scan.stdout.splitlines()
+        for name in searchable
+        if any(pattern.match(line) for pattern in _definition_patterns(name))
+    }
+    return bindings, defined
+
+
+def _check_credential_test_bindings(package_name: str) -> list[str]:
+    """Report the credential-test bindings that cannot resolve.
+
+    n8n resolves a string `testedBy` against the node's own `methods.credentialTest`
+    map (`CredentialsTester.getCredentialTestFunction`), so a binding whose method
+    the package never defines can never resolve and credential testing answers
+    "No testing function found for this credential." That dangling case is the
+    only thing reported here: `testedBy` itself is a supported field of the
+    credentials entry (it is what makes n8n show a credential test), so neither it
+    nor the `.node.json` codex metadata beside a node blocks testing.
 
     Returns:
-        List of warning/error messages. Empty list means no issues found.
+        List of messages, one per dangling binding. Empty list means the package's
+        bindings all resolve.
     """
-    issues = []
-    node_module_dir = f"{N8N_NODES_DIR}/node_modules/{package_name}"
+    bindings, defined = _scan_installed_package(package_name)
 
-    # Check 1: .node.json codex files can interfere with UI node indexing
-    find_result = run_on_server_raw(f'sudo find {node_module_dir}/dist -name "*.node.json" 2>/dev/null', timeout=30)
-    if find_result.returncode == 0 and find_result.stdout.strip():
-        codex_files = find_result.stdout.strip().split('\n')
-        issues.append(
-            f"Found .node.json codex file(s) that may prevent UI visibility: "
-            f"{', '.join(codex_files)}. "
-            f"Remove these files — community nodes work without them."
-        )
-
-    # Check 2: testedBy in credentials causes silent UI indexing failure
-    node_js_path = f"{node_module_dir}/dist/nodes"
-    grep_result = run_on_server_raw(f'sudo grep -r "testedBy" {node_js_path}/ 2>/dev/null', timeout=30)
-    if grep_result.returncode == 0 and grep_result.stdout.strip():
-        issues.append(
-            "Node credentials contain 'testedBy' field which can prevent UI visibility. "
-            "Remove the testedBy property from the credentials array in the node description."
-        )
-
-    return issues
+    return [
+        f"Credential test binding 'testedBy: {name}' names a method that "
+        f"{package_name} defines nowhere, so n8n cannot resolve it on this node — a "
+        f"string testedBy is looked up in the node's own methods.credentialTest map, "
+        f"and its credential test then falls through to whichever other node declares "
+        f"one. Define the method, or drop testedBy from the credentials entry."
+        for name in sorted(bindings - defined)
+    ]
 
 
 def _cleanup(api, workflow_id, no_cleanup, created_cred_ids=None):
@@ -248,25 +327,31 @@ def test_node(
             else:
                 print_info(f"Resolved node type: {resolved_node_type}")
 
-        # Check for known UI visibility issues
+        # Report a credential-test binding the package cannot resolve. The
+        # `testedBy` field and the `.node.json` codex metadata beside a node are
+        # both supported parts of an n8n package, so only a dangling binding is
+        # worth a word — and because that affects one node's credential test and
+        # not the node's execution, it never blocks the test run.
         package_name = resolved_node_type.rsplit(".", 1)[0]
-        node_js_name = resolved_node_type.rsplit(".", 1)[1] if "." in resolved_node_type else node_name
         try:
-            ui_issues = _check_ui_visibility(package_name, node_js_name)
-            if ui_issues:
-                print_error("Node has issues that prevent it from appearing in the n8n UI:")
-                for issue in ui_issues:
-                    print_error(f"  - {issue}")
-                raise typer.Exit(1)
+            binding_issues = _check_credential_test_bindings(package_name)
+            if binding_issues:
+                print_warning("Node has credential-test bindings that cannot resolve:")
+                for issue in binding_issues:
+                    print_warning(f"  - {issue}")
         except subprocess.TimeoutExpired:
-            print_info("Skipping UI visibility check (SSH timeout)")
+            print_info("Skipping credential-test binding check (SSH timeout)")
 
-        # Build node parameters — use lowercase values to match n8n option values
+        # Build node parameters. n8n matches `resource` and `operation` against the
+        # node schema's option values by exact string equality, so the requested
+        # values are transmitted verbatim — never lowercased. A value the schema
+        # does not declare is caught by the pre-activation health check below
+        # (`option_values_exact`) instead of being silently rewritten.
         node_params = {}
         if resource:
-            node_params["resource"] = resource.lower()
+            node_params["resource"] = resource
         if operation:
-            node_params["operation"] = operation.lower()
+            node_params["operation"] = operation
         if params:
             node_params.update(json_mod.loads(params))
 

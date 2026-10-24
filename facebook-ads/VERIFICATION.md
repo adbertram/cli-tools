@@ -1,0 +1,13 @@
+# Official Meta Ads CLI wrapper verification
+
+Verified locally on October 8, 2026 with official `meta-ads==1.2.0` published by Meta's `facebook` PyPI maintainer. Wrapper package version is 0.2.0. Canonical installation provisions the private upstream executable in the same isolated environment. Root help/version use the shared wrapper shell; `facebook-ads run -- <native arguments>` delegates the full official CLI.
+
+The offline suite passes 68 tests. Every one of the 55 native leaf commands has identical complete help/options through the wrapper and the private executable. Native root, version, invalid-command and unauthenticated-status output/exit match. Synthetic executable tests prove unchanged arguments (including unknown future flags, literal shell syntax, empty strings, `--help` and `--no-cache`), binary input/output, large stdin, stderr, exit 19 and SIGTERM. No shell, advertising mutation, ad spend, browser login or user credential was used.
+
+Upstream auth uses an `ACCESS_TOKEN` process environment value; ad account is selected through `AD_ACCOUNT_ID` or the native flag. `auth status` is the only native auth command. Without a configured token it exits 3 and prints `Not authenticated. Set the ACCESS_TOKEN environment variable.`. The wrapper preserves existing Facebook profiles and secret-store entries and creates no competing authentication state.
+
+No reusable facebook-ads or meta-ads token name was present in the scoped secret-name inventory. Live read-only account validation requires a Meta system-user access token and asset access. Store the token with the CLI-tools secret manager, then inject the retrieved value into the command environment as documented in README.md. Configured-token status is not a live permission check.
+
+Standard compliance is run with the wrapper's private executable directory prepended to PATH only for the harness, so its upstream-install check can find the provisioned dependency. Runtime still resolves the absolute private executable and cannot be intercepted by an unrelated PATH binary. Native command help is authoritative; wrapper usage.json describes the single passthrough command.
+
+Final gates: 68 local tests passed; canonical pytest compliance passed 331 tests with 85 skips and 8 deselections (zero failures/errors); the structured script reports 86 skips including its auth preflight skip. Install validator reports all_passed=true. Skill structural validation passed with two optional-structure warnings. Wrapper usage-map check is unchanged. No shared harness/source changes were needed. Native plain-Click supplemental-map parser defect was filed separately as agent-issues #1339; no empty supplemental map remains.

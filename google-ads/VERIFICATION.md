@@ -1,0 +1,13 @@
+# Verification
+
+Verified locally on October 8, 2026 with the pinned official Google Ads Python SDK 33.0.0 and default wire API v25. The catalog exposes 111 services and 174 RPCs, including four official long-running Operations methods. The generated coverage manifest is checked against SDK discovery.
+
+The offline suite passes 208 tests. It covers every RPC request descriptor, strict protobuf JSON, complete response envelopes, actual generated SDK transport paging, cycle detection, streaming, partial failures, mutation controls, finite timeouts, and credential import. Installation and generated command metadata checks pass. Independent reuse/consolidation reviews and adversarial transport probes were performed; their reported code defects were corrected and rechecked.
+
+The real-auth shared compliance run passes 391 checks with zero failures and zero errors (26 checks are skipped by the harness for inapplicable features). Google Ads OAuth status reports authenticated true with a passed live API test. Accessible-customer discovery returns two accounts. The generic CustomerService RPC returns both accessible resource names. A live paginated GoogleAdsFieldService search returns the complete campaign.id field record, including resource name, category and data type.
+
+Account-specific customer details, GAQL Search and SearchStream reached Google and preserved structured provider errors. The first accessible account returns CUSTOMER_NOT_ENABLED. The second returns CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION: this Cloud project currently has test-account API access only. Production account queries require Explorer, Basic or Standard access for the OAuth client's Cloud project, plus an enabled Ads account. Apply through the Google Ads API overview in Google Cloud Console. These provider restrictions are not CLI code failures or waived successful data queries.
+
+Live verification covers OAuth, account discovery, generic RPC dispatch, paginated field metadata, and structured account-access errors. It does not claim successful production account reporting or exhaustive live execution of all 174 RPCs. Search paging and streaming data contracts remain covered by the offline actual-generated-SDK transport tests. No campaign mutation or spending was performed.
+
+Reusable app credentials remain in the CLI-tools secret manager; OAuth token state belongs to the independent Google Ads profile. Google Ads API was enabled on the owning Cloud project through the supported Google CLI before live acceptance. Account permission and production API access remain provider-controlled. See README for API scope and authentication details.

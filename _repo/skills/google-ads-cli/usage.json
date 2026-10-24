@@ -1,0 +1,693 @@
+{
+  "tool": "google-ads",
+  "description": "CLI interface for google-ads",
+  "discovered_at": "2026-10-08T12:17:19Z",
+  "total_commands": 23,
+  "global_options": [],
+  "commands": {
+    "api": {
+      "help": "Offline discovery and full RPC access.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "call": {
+          "help": "Call any official SDK RPC. Streams print full batches as JSONL; other calls print JSON.",
+          "arguments": [
+            {
+              "name": "service",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact SDK service name"
+            },
+            {
+              "name": "method",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact SDK snake_case RPC method"
+            }
+          ],
+          "options": [
+            {
+              "name": "--body",
+              "type": "TEXT",
+              "required": false,
+              "help": "Request protobuf JSON object"
+            },
+            {
+              "name": "--body-file",
+              "type": "PATH",
+              "required": false,
+              "help": "JSON file, or - for stdin"
+            },
+            {
+              "name": "--api-version",
+              "type": "TEXT",
+              "required": false,
+              "help": "SDK API version",
+              "default": "v25"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Explicitly permit mutation or unclassified RPC",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Validate and print request locally without credentials",
+              "takes_value": false
+            },
+            {
+              "name": "--validate-only",
+              "type": "bool",
+              "required": false,
+              "help": "Ask server to validate without mutation; RPC must support it",
+              "takes_value": false
+            },
+            {
+              "name": "--all-pages",
+              "type": "bool",
+              "required": false,
+              "help": "Fetch every page, preserving full response envelopes",
+              "takes_value": false
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[x>=0.001]  Per-RPC timeout in seconds",
+              "default": "60.0"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "coverage": {
+          "help": "Export measured manifest of every reachable service/RPC.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--api-version",
+              "type": "TEXT",
+              "required": false,
+              "help": "SDK API version",
+              "default": "v25"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "methods": {
+          "help": "Show every method and request/response type for a service.",
+          "arguments": [
+            {
+              "name": "service",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact SDK service name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--api-version",
+              "type": "TEXT",
+              "required": false,
+              "help": "SDK API version",
+              "default": "v25"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "schema": {
+          "help": "Export complete request/response protobuf fields, nested types, enums and oneofs.",
+          "arguments": [
+            {
+              "name": "service",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact SDK service name"
+            },
+            {
+              "name": "method",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact SDK snake_case RPC method"
+            }
+          ],
+          "options": [
+            {
+              "name": "--api-version",
+              "type": "TEXT",
+              "required": false,
+              "help": "SDK API version",
+              "default": "v25"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "services": {
+          "help": "Show every generated service without authentication.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--api-version",
+              "type": "TEXT",
+              "required": false,
+              "help": "SDK API version",
+              "default": "v25"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "versions": {
+          "help": "Show versions available in the pinned SDK without authentication.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Manage google-ads authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "client": {
+          "help": "Select existing OAuth app credentials from the CLI-tools secret manager.",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "import": {
+              "help": "Copy explicitly named OAuth app secrets; clear prior Ads tokens; never import another tool's tokens.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--client-id-secret",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing secret-manager name for OAuth client ID"
+                },
+                {
+                  "name": "--client-secret-secret",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing secret-manager name for OAuth client secret"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Target Google Ads profile",
+                  "default": "default"
+                }
+              ]
+            }
+          }
+        },
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "refresh": {
+          "help": "Refresh OAuth access token using stored refresh token.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "customers": {
+      "help": "Accessible customer accounts.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get customer identity, status, currency and timezone through GAQL.",
+          "arguments": [
+            {
+              "name": "customer_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Customer ID digits or customer resource name"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display full response as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List directly accessible customer resource names; manager descendants require GAQL customer_client.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum accessible customer names; API has no limit parameter",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Local field:op:value filter (resource_name); API has no filter parameter",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "query": {
+      "help": "GAQL reporting.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "search": {
+          "help": "Search all GAQL-supported resources, metrics, segments and fields.",
+          "arguments": [
+            {
+              "name": "query",
+              "type": "TEXT",
+              "required": true,
+              "help": "Complete GAQL query; use GAQL WHERE and LIMIT for server filtering"
+            }
+          ],
+          "options": [
+            {
+              "name": "--customer-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Ads account digits; or configured CUSTOMER_ID"
+            },
+            {
+              "name": "--stream",
+              "type": "bool",
+              "required": false,
+              "help": "Stream complete response batches as JSONL",
+              "takes_value": false
+            },
+            {
+              "name": "--all-pages",
+              "type": "bool",
+              "required": false,
+              "help": "Fetch all pages, preserving every page envelope",
+              "takes_value": false
+            },
+            {
+              "name": "--page-token",
+              "type": "TEXT",
+              "required": false,
+              "help": "Page token returned by a prior search"
+            },
+            {
+              "name": "--api-version",
+              "type": "TEXT",
+              "required": false,
+              "help": "SDK API version",
+              "default": "v25"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[x>=0.001]  Per-RPC timeout in seconds",
+              "default": "60.0"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `google-ads` CLI. Run `google-ads --help` to discover command groups and `--help` on any subcommand for its options."
+}

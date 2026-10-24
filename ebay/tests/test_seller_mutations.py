@@ -8,6 +8,69 @@ import pytest
 from ebay_cli.client import EbayClient
 from ebay_cli.commands import listings, policies, store
 from ebay_cli.main import app
+from ebay_cli.models import Listing
+
+
+def _active_listing_for_unpublish() -> Listing:
+    return Listing(
+        sku="EBAY-20260912153647",
+        offer_id="264476167011",
+        title="Test listing",
+        status="active",
+    )
+
+
+def test_unpublish_returns_only_verified_offer_state(monkeypatch, runner):
+    client = MagicMock()
+    client.get_offer.return_value = {
+        "offerId": "264476167011",
+        "status": "UNPUBLISHED",
+    }
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(
+        listings,
+        "_get_listing_by_sku",
+        lambda _client, _sku: _active_listing_for_unpublish(),
+    )
+
+    result = runner.invoke(
+        app,
+        ["seller", "listings", "unpublish", "EBAY-20260912153647", "--force"],
+    )
+
+    assert result.exit_code == 0, result.stderr
+    assert json.loads(result.stdout) == {
+        "sku": "EBAY-20260912153647",
+        "offer_id": "264476167011",
+        "status": "UNPUBLISHED",
+    }
+    client.withdraw_offer.assert_called_once_with("264476167011")
+    client.get_offer.assert_called_once_with("264476167011")
+
+
+def test_unpublish_fails_when_offer_readback_is_still_published(monkeypatch, runner):
+    client = MagicMock()
+    client.get_offer.return_value = {
+        "offerId": "264476167011",
+        "status": "PUBLISHED",
+    }
+    monkeypatch.setattr(listings, "get_client", lambda: client)
+    monkeypatch.setattr(
+        listings,
+        "_get_listing_by_sku",
+        lambda _client, _sku: _active_listing_for_unpublish(),
+    )
+
+    result = runner.invoke(
+        app,
+        ["seller", "listings", "unpublish", "EBAY-20260912153647", "--force"],
+    )
+
+    assert result.exit_code == 1
+    assert result.stdout == ""
+    assert "expected UNPUBLISHED, got 'PUBLISHED'" in result.stderr
+    client.withdraw_offer.assert_called_once_with("264476167011")
+    client.get_offer.assert_called_once_with("264476167011")
 
 
 def test_store_category_create_refuses_without_confirmation(monkeypatch, runner):

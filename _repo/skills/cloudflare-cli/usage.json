@@ -1,8 +1,8 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-08-26T16:18:16Z",
-  "total_commands": 65,
+  "discovered_at": "2026-09-25T14:15:59Z",
+  "total_commands": 87,
   "global_options": [
     {
       "name": "--version",
@@ -52,7 +52,7 @@
           "options": [
             {
               "name": "--target",
-              "type": "IP|IP_RANGE|ASN|COUNTRY|IPV6",
+              "type": "ip|ip_range|asn|country|ipv6",
               "required": true,
               "help": "Target type (ip, ip_range, asn, country, ipv6)",
               "short": "-t"
@@ -66,7 +66,7 @@
             },
             {
               "name": "--mode",
-              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
+              "type": "whitelist|block|challenge|js_challenge|managed_challenge",
               "required": true,
               "help": "Action mode (whitelist, block, challenge, js_challenge, managed_challenge)",
               "short": "-m"
@@ -220,14 +220,14 @@
             },
             {
               "name": "--mode",
-              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
+              "type": "whitelist|block|challenge|js_challenge|managed_challenge",
               "required": false,
               "help": "Filter by mode",
               "short": "-m"
             },
             {
               "name": "--target",
-              "type": "IP|IP_RANGE|ASN|COUNTRY|IPV6",
+              "type": "ip|ip_range|asn|country|ipv6",
               "required": false,
               "help": "Filter by target type"
             },
@@ -270,7 +270,7 @@
           "options": [
             {
               "name": "--mode",
-              "type": "WHITELIST|BLOCK|CHALLENGE|JS_CHALLENGE|MANAGED_CHALLENGE",
+              "type": "whitelist|block|challenge|js_challenge|managed_challenge",
               "required": false,
               "help": "New action mode",
               "short": "-m"
@@ -289,6 +289,217 @@
               "help": "Auth profile name"
             }
           ]
+        }
+      }
+    },
+    "account-tokens": {
+      "help": "Read account API token metadata and permission catalog",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get token metadata and policies without retrieving its bearer value.",
+          "examples": [
+            "cloudflare account-tokens get TOKEN_ID ACCOUNT_ID"
+          ],
+          "arguments": [
+            {
+              "name": "token_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Token ID from account-tokens list"
+            },
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": "Account name or ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List token metadata across pages; filters precede limit.",
+          "examples": [
+            "cloudflare account-tokens list ACCOUNT_ID --limit 0"
+          ],
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": "Account name or ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=0]  Maximum matching tokens; 0 returns all",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "permissions": {
+          "help": "Available permission catalog, not caller grants",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Select one permission by ID from the permission catalog.",
+              "examples": [
+                "cloudflare account-tokens permissions get PERMISSION_ID ACCOUNT_ID"
+              ],
+              "arguments": [
+                {
+                  "name": "permission_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Permission ID from permissions list"
+                },
+                {
+                  "name": "account",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List available permission groups; these are not caller grants.",
+              "examples": [
+                "cloudflare account-tokens permissions list ACCOUNT_ID --filter 'name:contains:Queues' --limit 0"
+              ],
+              "arguments": [
+                {
+                  "name": "account",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Account name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=0]  Maximum matching groups; 0 returns all",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Client-side filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -1146,6 +1357,644 @@
         }
       }
     },
+    "email-routing": {
+      "help": "Manage Cloudflare Email Routing (settings, rules, destination addresses)",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "addresses": {
+          "help": "Account-scoped Email Routing destination addresses",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Add a destination address with one POST attempt, never replayed. Cloudflare emails the address a verification link; it cannot be used as a forward target until that link is clicked. There is no documented API endpoint to resend the verification email or mark an address verified, so this command does not offer that action -- resend from the Cloudflare dashboard if the link is lost.",
+              "examples": [
+                "cloudflare email-routing addresses create me@gmail.com",
+                "cloudflare email-routing addresses create me@gmail.com ACCOUNT_ID"
+              ],
+              "arguments": [
+                {
+                  "name": "email",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Destination email address to add"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete an Email Routing destination address.",
+              "examples": [
+                "cloudflare email-routing addresses delete ADDRESS_ID ACCOUNT_ID --force"
+              ],
+              "arguments": [
+                {
+                  "name": "address_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Destination address ID from addresses list"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-f",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a single Email Routing destination address.",
+              "examples": [
+                "cloudflare email-routing addresses get ADDRESS_ID ACCOUNT_ID"
+              ],
+              "arguments": [
+                {
+                  "name": "address_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Destination address ID from addresses list"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List Email Routing destination addresses for an account; filters precede the result limit.",
+              "examples": [
+                "cloudflare email-routing addresses list --limit 0",
+                "cloudflare email-routing addresses list ACCOUNT_ID --verified false --table"
+              ],
+              "arguments": [
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=0]  Maximum matching addresses; 0 returns all",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Client-side filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--verified",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Server-side filter by verification status",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "rules": {
+          "help": "Zone-scoped Email Routing rules (custom address -> action)",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create an Email Routing rule mapping a custom address to a forward/drop action. Forward actions require a destination address that is already verified (see 'cloudflare email-routing addresses create/list').",
+              "examples": [
+                "cloudflare email-routing rules create example.com --address sales@example.com --forward-to me@gmail.com",
+                "cloudflare email-routing rules create example.com --catch-all --drop --name \"Catch-all drop\""
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--address",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Custom address to match, e.g. sales@example.com",
+                  "short": "-a"
+                },
+                {
+                  "name": "--catch-all",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Match every address not matched by a more specific rule",
+                  "takes_value": false
+                },
+                {
+                  "name": "--forward-to",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Verified destination address to forward matched mail to",
+                  "short": "-d"
+                },
+                {
+                  "name": "--drop",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Drop matched mail instead of forwarding",
+                  "takes_value": false
+                },
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Rule name/description",
+                  "short": "-n"
+                },
+                {
+                  "name": "--priority",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Rule priority (lower runs first)"
+                },
+                {
+                  "name": "--enabled",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Create the rule enabled or disabled (default: Cloudflare's default, enabled)",
+                  "takes_value": false,
+                  "secondary": "--disabled"
+                },
+                {
+                  "name": "--matchers-json",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Raw matchers array JSON; overrides --address/--catch-all"
+                },
+                {
+                  "name": "--actions-json",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Raw actions array JSON; overrides --forward-to/--drop"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "delete": {
+              "help": "Delete an Email Routing rule.",
+              "examples": [
+                "cloudflare email-routing rules delete example.com RULE_ID --force"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                },
+                {
+                  "name": "rule_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Rule ID from rules list"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation prompt",
+                  "short": "-f",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get a single Email Routing rule.",
+              "examples": [
+                "cloudflare email-routing rules get example.com RULE_ID"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                },
+                {
+                  "name": "rule_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Rule ID from rules list"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List Email Routing rules for a zone; filters precede the result limit.",
+              "examples": [
+                "cloudflare email-routing rules list example.com --limit 0",
+                "cloudflare email-routing rules list ZONE_ID --filter \"name:contains:Support\" --table"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=0]  Maximum matching rules; 0 returns all",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Client-side filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--enabled",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Server-side filter by rule enabled status",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "update": {
+              "help": "Update an Email Routing rule. Only the fields provided are changed.",
+              "examples": [
+                "cloudflare email-routing rules update example.com RULE_ID --disabled",
+                "cloudflare email-routing rules update example.com RULE_ID --forward-to new-dest@example.net"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                },
+                {
+                  "name": "rule_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Rule ID from rules list"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--address",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New custom address to match",
+                  "short": "-a"
+                },
+                {
+                  "name": "--catch-all",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Match every address not matched by a more specific rule",
+                  "takes_value": false
+                },
+                {
+                  "name": "--forward-to",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New verified destination address to forward matched mail to",
+                  "short": "-d"
+                },
+                {
+                  "name": "--drop",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Drop matched mail instead of forwarding",
+                  "takes_value": false
+                },
+                {
+                  "name": "--name",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "New rule name/description",
+                  "short": "-n"
+                },
+                {
+                  "name": "--priority",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "New priority (lower runs first)"
+                },
+                {
+                  "name": "--enabled",
+                  "type": "bool",
+                  "required": false,
+                  "help": "New enabled status",
+                  "takes_value": false,
+                  "secondary": "--disabled"
+                },
+                {
+                  "name": "--matchers-json",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Raw matchers array JSON; overrides --address/--catch-all"
+                },
+                {
+                  "name": "--actions-json",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Raw actions array JSON; overrides --forward-to/--drop"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display result as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "settings": {
+          "help": "Zone-level Email Routing enable/disable/status",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "disable": {
+              "help": "Disable Email Routing for a zone. Cloudflare removes the extra MX records it added.",
+              "examples": [
+                "cloudflare email-routing settings disable example.com"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "enable": {
+              "help": "Enable Email Routing for a zone. Cloudflare adds and locks the MX/SPF records it needs.",
+              "examples": [
+                "cloudflare email-routing settings enable example.com"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get Email Routing settings (enabled/disabled status) for a zone.",
+              "examples": [
+                "cloudflare email-routing settings get example.com",
+                "cloudflare email-routing settings get ZONE_ID --table"
+              ],
+              "arguments": [
+                {
+                  "name": "zone",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Zone name or ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
     "pages": {
       "help": "Manage Cloudflare Pages (projects, deployments, domains)",
       "arguments": [],
@@ -1241,7 +2090,7 @@
               ]
             },
             "delete": {
-              "help": "[account] Delete a deployment. The Cloudflare API does not support bulk deployment deletion; delete deployments one at a time.",
+              "help": "Delete a deployment. The Cloudflare API does not support bulk deployment deletion; delete deployments one at a time.",
               "examples": [
                 "cloudflare pages deployments delete my-site DEPLOYMENT_ID --force",
                 "cloudflare pages deployments delete my-site DEPLOYMENT_ID --allow-aliased --force"
@@ -1291,7 +2140,7 @@
               ]
             },
             "get": {
-              "help": "[account] Get a single deployment.",
+              "help": "Get a single deployment.",
               "examples": [
                 "cloudflare pages deployments get my-site DEPLOYMENT_ID",
                 "cloudflare pages deployments get my-site DEPLOYMENT_ID --table"
@@ -1364,7 +2213,7 @@
               "options": [
                 {
                   "name": "--env",
-                  "type": "PRODUCTION|PREVIEW",
+                  "type": "production|preview",
                   "required": false,
                   "help": "Filter by environment (production or preview)",
                   "short": "-e"
@@ -1408,7 +2257,7 @@
               ]
             },
             "retry": {
-              "help": "[account] Retry a failed deployment build.",
+              "help": "Retry a failed deployment build.",
               "examples": [
                 "cloudflare pages deployments retry my-site DEPLOYMENT_ID"
               ],
@@ -1442,7 +2291,7 @@
               ]
             },
             "rollback": {
-              "help": "{deployment_id} [account] Roll production back to a previous successful production deployment.",
+              "help": "Roll production back to a previous successful production deployment.",
               "examples": [
                 "cloudflare pages deployments rollback my-site DEPLOYMENT_ID --force"
               ],
@@ -1841,7 +2690,7 @@
               ]
             },
             "get-upload-token": {
-              "help": "[account] Get the direct-upload token for a Pages project.",
+              "help": "Get the direct-upload token for a Pages project.",
               "examples": [
                 "cloudflare pages projects get-upload-token my-site"
               ],
@@ -1923,7 +2772,7 @@
               ]
             },
             "purge-build-cache": {
-              "help": "[account] Purge all cached build artifacts for a Pages project.",
+              "help": "Purge all cached build artifacts for a Pages project.",
               "examples": [
                 "cloudflare pages projects purge-build-cache my-site --force"
               ],
@@ -2027,6 +2876,339 @@
               ]
             }
           }
+        }
+      }
+    },
+    "queues": {
+      "help": "Manage Cloudflare Queues",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "consumers": {
+          "help": "Inspect consumers and enable HTTP pull",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create an HTTP-pull consumer once; omitted settings use Cloudflare defaults.",
+              "examples": [
+                "cloudflare queues consumers create QUEUE_ID ACCOUNT_ID --batch-size 1 --visibility-timeout-ms 30000"
+              ],
+              "arguments": [
+                {
+                  "name": "queue_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Queue ID"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--batch-size",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum messages per batch; service validates allowed range"
+                },
+                {
+                  "name": "--max-retries",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum delivery retries; service validates allowed range"
+                },
+                {
+                  "name": "--retry-delay",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Seconds before a retry becomes available"
+                },
+                {
+                  "name": "--visibility-timeout-ms",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Milliseconds a pulled message is exclusively leased"
+                },
+                {
+                  "name": "--dead-letter-queue",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Optional dead-letter queue name"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get one configured consumer by ID.",
+              "examples": [
+                "cloudflare queues consumers get QUEUE_ID CONSUMER_ID ACCOUNT_ID"
+              ],
+              "arguments": [
+                {
+                  "name": "queue_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Queue ID"
+                },
+                {
+                  "name": "consumer_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Consumer ID from consumers list"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List the consumers configured for a queue.",
+              "examples": [
+                "cloudflare queues consumers list QUEUE_ID ACCOUNT_ID --limit 0"
+              ],
+              "arguments": [
+                {
+                  "name": "queue_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Queue ID"
+                },
+                {
+                  "name": "account",
+                  "type": "ACCOUNT",
+                  "required": false,
+                  "help": "Account name or ID; defaults to the single visible account"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=0]  Maximum matching consumers; 0 returns all",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Client-side filter: field:op:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated output fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
+        },
+        "create": {
+          "help": "Create a queue with one POST attempt. Inspect queues list before retrying failures.",
+          "examples": [
+            "cloudflare queues create issue-manager ACCOUNT_ID",
+            "cloudflare queues create regional-work ACCOUNT_ID --jurisdiction eu"
+          ],
+          "arguments": [
+            {
+              "name": "queue_name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name for the new queue"
+            },
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID; defaults to the single visible account"
+            }
+          ],
+          "options": [
+            {
+              "name": "--jurisdiction",
+              "type": "eu|us|fedramp",
+              "required": false,
+              "help": "Optional queue jurisdiction"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a queue by ID.",
+          "examples": [
+            "cloudflare queues get QUEUE_ID ACCOUNT_ID"
+          ],
+          "arguments": [
+            {
+              "name": "queue_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Queue ID from queues list or create"
+            },
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID; defaults to the single visible account"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List queues across pages; filters precede the result limit.",
+          "examples": [
+            "cloudflare queues list --limit 0",
+            "cloudflare queues list --filter \"queue_name:eq:issue-manager\" --table"
+          ],
+          "arguments": [
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID; defaults to the single visible account"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=0]  Maximum matching queues; 0 returns all",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side filter: field:op:value",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },
@@ -2209,11 +3391,10 @@
                 },
                 {
                   "name": "--limit",
-                  "type": "bool",
+                  "type": "INTEGER",
                   "required": false,
-                  "help": "<int range> [1<=x<=1000]",
+                  "help": "[1<=x<=1000]",
                   "short": "-l",
-                  "takes_value": false,
                   "default": "100"
                 },
                 {
@@ -2434,11 +3615,10 @@
                 },
                 {
                   "name": "--limit",
-                  "type": "bool",
+                  "type": "INTEGER",
                   "required": false,
-                  "help": "<int range> [x>=1]",
+                  "help": "[x>=1]",
                   "short": "-l",
-                  "takes_value": false,
                   "default": "100"
                 },
                 {
@@ -2497,7 +3677,7 @@
               "options": [
                 {
                   "name": "--file",
-                  "type": "FILE",
+                  "type": "file",
                   "required": true,
                   "help": ""
                 },
@@ -2548,7 +3728,7 @@
               "options": [
                 {
                   "name": "--file",
-                  "type": "FILE",
+                  "type": "file",
                   "required": true,
                   "help": ""
                 },
@@ -2578,7 +3758,7 @@
                 },
                 {
                   "name": "directory",
-                  "type": "DIRECTORY",
+                  "type": "directory",
                   "required": true,
                   "help": ""
                 },
@@ -2958,13 +4138,13 @@
           "options": [
             {
               "name": "--file",
-              "type": "FILENAME",
+              "type": "filename",
               "required": true,
               "help": "Path to the script source ('-' for stdin)"
             },
             {
               "name": "--format",
-              "type": "MODULES|SERVICE-WORKER",
+              "type": "modules|service-worker",
               "required": false,
               "help": "Script format",
               "default": "modules"
@@ -3120,7 +4300,7 @@
           "options": [
             {
               "name": "--security-level",
-              "type": "OFF|ESSENTIALLY_OFF|LOW|MEDIUM|HIGH|UNDER_ATTACK",
+              "type": "off|essentially_off|low|medium|high|under_attack",
               "required": false,
               "help": "Set security level (off, essentially_off, low, medium, high, under_attack)",
               "short": "-s"
