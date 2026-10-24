@@ -820,6 +820,48 @@ Input #0, avfoundation, from '3':
                     settle_seconds or {slide: 0.7 for slide in slides},
                 )
 
+    def test_media_start_uses_item_narration_start_without_a_transcript_cue(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir))
+            item = config["items"][0]
+            item.update(segments=["narration"], cue_count=0, media_start="on_click")
+            plan = self.prepare_plan(config, [6.0])
+        self.assertEqual(plan["actions"], [{
+            "at_seconds": 1.0, "key": "space", "item": "Slide 1",
+            "slide": 1, "reason": "media start",
+        }])
+        self.assertEqual(plan["items"][0]["media_start"], "on_click")
+
+    def test_media_tail_reserves_final_capture_and_separates_next_item(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config = slide_config(Path(temp_dir))
+            first = config["items"][0]
+            first.update(segments=["first"], cue_count=0, media_start="on_click")
+            second = dict(first, index=2, label="Slide 2", identity={"field": "slide", "value": 2})
+            config["items"].append(second)
+            generated = []
+            plan = self.prepare_plan(config, [6.0, 8.0], generated_silence=generated)
+            concat = (Path(config["work_dir"]) / "concat.txt").read_text()
+        self.assertEqual([a["at_seconds"] for a in plan["actions"]], [1.0, 7.7, 8.45])
+        self.assertEqual([a["reason"] for a in plan["actions"]], ["media start", "next slide", "media start"])
+        self.assertEqual([i["audio_start_seconds"] for i in plan["items"]], [1.0, 8.45])
+        self.assertEqual([i["duration_seconds"] for i in plan["items"]], [6.0, 8.0])
+        self.assertEqual([i["media_tail_seconds"] for i in plan["items"]], [0.7, 0.7])
+        self.assertIn(("silence-media-tail-001.wav", 0.7), generated)
+        self.assertIn(("silence-media-tail-002.wav", 0.7), generated)
+        self.assertLess(concat.index("item-001.wav"), concat.index("silence-media-tail-001.wav"))
+        self.assertLess(concat.index("silence-media-tail-001.wav"), concat.index("item-002.wav"))
+        self.assertLess(concat.index("item-002.wav"), concat.index("silence-media-tail-002.wav"))
+
+    def test_normalize_item_rejects_unknown_media_start(self):
+        with mock.patch.object(record, "read_transcript", return_value="narration"), \
+                mock.patch.object(record, "audio_path", return_value=Path("audio.wav")):
+            with self.assertRaisesRegex(ValueError, 'media_start must be "on_click"'):
+                record.normalize_item({"slide": 1, "media_start": "autoplay"}, 1, "||")
+            item = record.normalize_item({"slide": 1, "media_start": "on_click"}, 1, "||")
+        self.assertEqual(item["media_start"], "on_click")
+        self.assertEqual(item["cue_count"], 0)
+
     def test_prepare_uses_explicit_cue_offsets_verbatim(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             config = slide_config(Path(temp_dir))
@@ -2633,6 +2675,13 @@ class LiveClickStepProbeTests(unittest.TestCase):
         self.assertEqual(counts, {8: 2})
         self.assertEqual(settle, {8: 2.8})
         self.assertIn(mock.call(2.8), sleep.call_args_list)
+
+    def test_media_start_is_a_separate_measured_click(self):
+        item = {"label": "Slide 1", "identity": {"value": 1}, "cue_count": 0,
+                "media_start": "on_click"}
+        record.assert_cue_counts_match_click_steps([item], {1: 1})
+        with self.assertRaisesRegex(ValueError, "1 media-start click"):
+            record.assert_cue_counts_match_click_steps([item], {1: 0})
 
     def test_assert_cue_counts_match_click_steps_accepts_matching_counts(self):
         items = [{"label": "Slide 1", "identity": {"field": "slide", "value": 1}, "cue_count": 2}]
