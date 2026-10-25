@@ -41,6 +41,11 @@ import json
 import shlex
 import subprocess
 import sys
+from pathlib import Path
+
+# The repo-owned CLI module is the single source of exact-cent allocation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "monarch"))
+from monarch_cli.splits import validate_split_decision
 
 
 def parse_range(spec: str | None) -> set[int]:
@@ -205,6 +210,35 @@ def main() -> int:
             updates_out.append({"row": row_num, "status": "failed", "stderr": "row not in decisions"})
             overall_ok = False
             continue
+        if "splits" in row:
+            try:
+                items = validate_split_decision(row, cat_id_by_name)
+                if row_num in rule_rows:
+                    raise ValueError("split rows prohibit merchant rules")
+                argv = ["monarch", "transactions", "split", row["transaction_id"], "--items-json", json.dumps(items), "--amount", str(row["amount"]), "--yes"]
+                if args.no_clear_needs_review:
+                    argv.append("--no-clear-review")
+                rc, stdout, stderr = run_capture(argv, args.dry_run)
+                result = {"row": row_num, "transaction_id": row["transaction_id"], "splits": items,
+                          "status": "ok" if rc == 0 else "failed", "stderr": stderr or None}
+                if rc != 0:
+                    overall_ok = False
+                elif not args.dry_run:
+                    verified = json.loads(stdout)
+                    if verified.get("verified") is not True:
+                        raise ValueError("split command did not verify resulting items")
+                    result.update({"verified": True, "verified_splits": verified["splits"], "verified_needs_review": False if verified["clear_needs_review"] else None})
+                if args.dry_run:
+                    result["command"] = shlex.join(argv)
+                updates_out.append(result)
+            except (ValueError, KeyError, TypeError) as exc:
+                updates_out.append({"row": row_num, "status": "failed", "stderr": str(exc)})
+                overall_ok = False
+            continue
+        if row.get("needs_input"):
+            updates_out.append({"row": row_num, "status": "failed", "stderr": "row needs input"})
+            overall_ok = False
+            continue
         cat_id = proposed_category_id(row, cat_id_by_name)
         if not cat_id:
             updates_out.append({
@@ -250,6 +284,10 @@ def main() -> int:
         row = get_row(decisions, row_num)
         if not row:
             rules_out.append({"row": row_num, "status": "failed", "stderr": "row not in decisions"})
+            overall_ok = False
+            continue
+        if "splits" in row:
+            rules_out.append({"row": row_num, "status": "failed", "stderr": "merchant rules forbidden for item splits"})
             overall_ok = False
             continue
         cmd = row.get("rule_command")

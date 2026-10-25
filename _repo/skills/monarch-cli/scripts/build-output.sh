@@ -38,6 +38,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
+
+# The repo-owned CLI module is the single source of exact-cent allocation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "monarch"))
+from monarch_cli.splits import validate_split_decision
 
 REQUIRED_FIELDS = [
     "row", "transaction_id", "vendor", "amount", "description",
@@ -89,6 +94,12 @@ def validate(decisions: dict) -> list[str]:
                 f"'Apply once — suppressed: ', 'Apply + create rule: ', or equal 'No rule — needs input'"
             )
 
+        if "splits" in row:
+            try:
+                validate_split_decision(row, decisions.get("category_id_by_name"))
+            except (ValueError, TypeError) as exc:
+                errors.append(f"{prefix}: invalid splits: {exc}")
+
         # Cross-field invariants
         if row["needs_input"] is True:
             if suggested != NEEDS_INPUT_SUGGESTED:
@@ -125,6 +136,13 @@ def render(decisions: dict) -> str:
         rec = r["recommended_rule"].replace("|", "\\|")
         needs = "true" if r["needs_input"] else "false"
         lines.append(f"| {r['row']} | {vendor} | {amount} | {desc} | {cur_cat} | {sug_cat} | {needs} | {rec} |")
+
+        for index, item in enumerate(r.get("splits", []), 1):
+            item_amount = float(item["amount"])
+            amount = f"-${abs(item_amount):,.2f}" if item_amount < 0 else f"${item_amount:,.2f}"
+            note = item["notes"].replace("|", "\\|").replace("\n", " ")
+            category = item["category"].replace("|", "\\|")
+            lines.append(f"| {r['row']}.{index} | {vendor} | {amount} | {note} | {cur_cat} | {category} | false | Included in approval {r['row']}; no merchant rule |")
 
     return "\n".join(lines) + "\n"
 

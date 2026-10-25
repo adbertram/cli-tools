@@ -19,6 +19,7 @@ from cli_tools_shared.exceptions import ClientError
 
 from .browser import AmazonBrowser
 from .config import get_config
+from .parsers import normalize_item_detail
 
 ORDERS_URL = "https://www.amazon.com/gp/css/order-history"
 ORDER_SEARCH_URL = "https://www.amazon.com/gp/your-account/order-history?opt=ab&search={query}"
@@ -83,6 +84,33 @@ class AmazonClient:
             url = data.get("next")
         return {"url": f"https://www.amazon.com/your-orders/orders?timeFilter=year-{year}",
                 "title": "Your Orders", "texts": texts}
+
+    def get_order_detail(self, order_id: str) -> dict:
+        """Read prices from purchased-item containers, never recommendations."""
+        if not re.fullmatch(r"\d{3}-\d{7}-\d{7}", order_id):
+            raise ClientError("Expected an Amazon order ID (123-1234567-1234567).")
+        browser = self._require_authenticated_browser()
+        page = browser.get_page(f"https://www.amazon.com/your-orders/order-details?orderID={order_id}")
+        page.wait_for_timeout(2000)
+        # Detail pages lack the order-history auth marker; reject login URLs/forms,
+        # then require the requested order ID and purchased-item evidence below.
+        if re.search(browser.AUTH_URL_PATTERN, page.url):
+            raise CredentialError(AUTH_BLOCKED_MESSAGE)
+        raw = page.evaluate("""() => {
+            const text = component => document.querySelector(`[data-component="${component}"]`)?.innerText || '';
+            return {url: location.href, order_id: text('orderId'),
+                order_date: text('orderDate'), summary: text('orderSummary'),
+                items: [...document.querySelectorAll('[data-component="purchasedItemsRightGrid"]')].map(el => ({
+                    name: el.querySelector('[data-component="itemTitle"]')?.innerText || '',
+                    quantity: el.querySelector('[data-component="quantity"]')?.innerText || '',
+                    unit_price: el.querySelector('[data-component="unitPrice"] .a-offscreen')?.textContent || null
+                }))};
+        }""")
+        result = normalize_item_detail(raw)
+        if result['order_id'] != order_id:
+            raise ClientError("Amazon returned a different order than requested.")
+        result['profile'] = self.config.get_active_profile_name()
+        return result
 
     @cached
     def list_orders(self, limit: int = 100) -> list[dict]:

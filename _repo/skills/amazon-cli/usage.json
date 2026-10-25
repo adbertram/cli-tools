@@ -1,8 +1,8 @@
 {
   "tool": "amazon",
   "description": "Amazon order evidence lookup",
-  "discovered_at": "2026-09-26T23:54:31Z",
-  "total_commands": 16,
+  "discovered_at": "2026-10-25T22:27:51Z",
+  "total_commands": 17,
   "global_options": [
     {
       "name": "--version",
@@ -318,6 +318,25 @@
         }
       ],
       "commands": {
+        "detail": {
+          "help": "Read purchased item prices and order-level adjustments for one order.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Amazon order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "get": {
           "help": "Get one Amazon order evidence line.",
           "arguments": [

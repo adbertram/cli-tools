@@ -17,6 +17,7 @@ COMMAND_CREDENTIALS = {
     "list": ["browser_session"],
     "get": ["browser_session"],
     "match": ["browser_session"],
+    "detail": ["browser_session"],
 }
 
 COLUMNS = ["id", "line", "text", "score", "matched_amount", "matched_terms"]
@@ -114,5 +115,16 @@ def orders_match(
         if filter:
             rows = apply_filters(rows, filter)
         _render(rows, table, properties, "No matching Amazon order evidence found.")
+    finally:
+        client.close()
+
+
+@app.command("detail")
+@command
+def orders_detail(order_id: str = typer.Argument(..., help="Amazon order ID")):
+    """Read purchased item prices and order-level adjustments for one order."""
+    client = get_client()
+    try:
+        print_json(client.get_order_detail(order_id))
     finally:
         client.close()

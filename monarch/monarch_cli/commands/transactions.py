@@ -1,16 +1,20 @@
 """Transactions commands for Monarch CLI."""
 import typer
+import json
 from typing import Optional, List
 from datetime import datetime, timedelta
 
 from ..client import get_client, ClientError
-from cli_tools_shared.output import print_json, print_table, handle_error
+from cli_tools_shared.output import print_json, print_table, handle_error, command
 from ..models import Transaction
+from ..splits import allocate_items
 from cli_tools_shared.filters import validate_filters, apply_filters, FilterValidationError
 
 app = typer.Typer(help="Manage Monarch Money transactions")
 
 COMMAND_CREDENTIALS = {
+    "split": ["no_auth"],  # Offline dry-run needs no credentials; apply authenticates through SDK.
+
     "get": [
         "username_password"
     ],
@@ -290,3 +294,27 @@ def transactions_recurring(
 
     except Exception as e:
         raise typer.Exit(handle_error(e))
+
+
+@app.command("split")
+@command
+def transactions_split(
+    transaction_id: str = typer.Argument(..., help="Original transaction ID"),
+    items_json: str = typer.Option(..., "--items-json", help="JSON array: item_price, category_id, category, notes; optional merchant and amount"),
+    amount: str = typer.Option(..., "--amount", help="Expected signed original total, exactly cents"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Allocate and validate offline; never contact Monarch"),
+    yes: bool = typer.Option(False, "--yes", help="Apply the split after checking the original transaction"),
+    clear_review: bool = typer.Option(True, "--clear-review/--no-clear-review", help="Mark resulting item transactions reviewed"),
+):
+    """Split a transaction by item price, allocating adjustments proportionally. Last item gets cent remainder."""
+    try:
+        if not dry_run and not yes:
+            raise ValueError("Refusing to split without --yes or --dry-run")
+        items = allocate_items(json.loads(items_json), amount)
+        if dry_run:
+            print_json({"transaction_id": transaction_id, "amount": amount, "splits": items, "dry_run": True})
+            return
+        result = get_client().split_transaction(transaction_id, items, amount, clear_review=clear_review)
+        print_json(result)
+    except Exception as exc:
+        raise typer.Exit(handle_error(exc))

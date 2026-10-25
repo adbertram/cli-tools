@@ -480,6 +480,41 @@ class MonarchClient:
         mm = self._get_mm()
         return self._query_monarch(mm.get_transaction_details(transaction_id))
 
+    def split_transaction(self, transaction_id, items, amount, *, clear_review=True):
+        """Use the SDK atomic split mutation, then verify every resulting item."""
+        from .splits import allocate_items, money
+        items = allocate_items(items, amount)
+        mm = self._get_mm()
+        # Deliberately bypass the automatic institution sync: only this transaction changes.
+        original = self._query_monarch(mm.get_transaction_details(transaction_id), check_institutions=False)["getTransaction"]
+        if money(original["amount"]) != money(amount):
+            raise ClientError("Original amount changed; rebuild the split decision")
+        if original.get("pending") or original.get("isPending"):
+            raise ClientError("Cannot split a pending transaction")
+        existing = self._query_monarch(mm.get_transaction_splits(transaction_id), check_institutions=False)["getTransaction"]
+        if existing.get("splitTransactions"):
+            raise ClientError("Transaction already has splits; inspect them before replacing")
+        split_data = [{"amount": float(item["amount"]), "categoryId": item["category_id"],
+                       "merchantName": item.get("merchant") or original["merchant"]["name"],
+                       "notes": item["notes"]} for item in items]
+        response = self._query_monarch(mm.update_transaction_splits(transaction_id, split_data), check_institutions=False)
+        payload = response.get("updateTransactionSplit") or {}
+        self._raise_on_payload_errors(payload.get("errors"), "Transaction split")
+        if not payload.get("transaction"):
+            raise ClientError("Transaction split returned no transaction")
+        actual = self._query_monarch(mm.get_transaction_splits(transaction_id), check_institutions=False)["getTransaction"]["splitTransactions"]
+        expected = sorted((money(i["amount"]), i["category_id"], i["notes"]) for i in items)
+        observed = sorted((money(i["amount"]), str(i["category"]["id"]), i.get("notes")) for i in actual)
+        if observed != expected:
+            raise ClientError("Transaction split verification failed: amounts, categories or notes differ")
+        if clear_review:
+            for child in actual:
+                self._query_monarch(mm.update_transaction(transaction_id=child["id"], needs_review=False), check_institutions=False)
+                reread = self._query_monarch(mm.get_transaction_details(child["id"]), check_institutions=False)["getTransaction"]
+                if reread.get("needsReview") is not False:
+                    raise ClientError("Split item review status verification failed")
+        return {"transaction_id": transaction_id, "splits": actual, "verified": True, "clear_needs_review": clear_review}
+
     def get_recurring_transactions(
         self,
         start_date: Optional[str] = None,

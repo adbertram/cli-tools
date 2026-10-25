@@ -14,7 +14,7 @@ This is intentional: Adam wants the reviewer to surface the rule recommendation 
 
 2. **Merchant has multiple legitimate categories at different amounts.** A charge from this merchant means category A at one amount range and category B at another. Examples: Apple — IAPs vs. subscriptions vs. hardware; Amazon — household vs. electronics vs. groceries (depending on which Whole Foods integration); Costco — gas vs. groceries. → Either recommend a rule with an `--amount between:` criterion (see "Amount criterion" below), or skip the recommendation entirely if you can't draw a clean boundary.
 
-3. **Adam previously declined a rule for this merchant.** Check `/Users/adam/Dropbox/GitRepos/Agents/skills/monarch-cli/rules.md` (Rule-Recommendation Rules section) before proposing. If the merchant is listed there as declined, skip — do not re-surface.
+3. **Adam previously declined a rule for this merchant.** Check `/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/monarch-cli/rules.md` (Rule-Recommendation Rules section) before proposing. If the merchant is listed there as declined, skip — do not re-surface.
 
 4. **An existing Monarch rule already covers this merchant.** Run `monarch rules list --filter 'setCategoryAction.id:eq:<category-id>'` or scan rules whose `merchantCriteria` contains the merchant token before proposing. If a rule already fires for this merchant + category combo, the category mismatch on this transaction is a Monarch sync lag or a one-off override — flag it as a one-off, don't propose a duplicate rule.
 
@@ -23,6 +23,8 @@ This is intentional: Adam wants the reviewer to surface the rule recommendation 
 6. **Internal transfer.** Never recommend rules for transfers between Adam's own accounts. These should never reach the rule-recommendation stage; they are out-of-scope per the reviewer's transfer-handling logic.
 
 7. **Single-occurrence with no shape match.** This is NOT a recurrence-threshold check (Adam chose "recommend on first occurrence"). It IS a sanity check: if the merchant has appeared exactly once AND the merchant string is unique-looking (no recognizable brand, looks like a one-off purchase from an obscure vendor), the rule will fire for one transaction and never again. → Recommend `Apply once` instead of `Apply + create rule`.
+
+Updated 2026-10-25: Amazon per-item splits always use `Apply once — suppressed: multi-category merchant`. Never create or apply an Amazon merchant rule to item splits, including amount-qualified rules; each item category comes from its own evidence.
 
 ## Amount criterion — when to add `--amount`
 

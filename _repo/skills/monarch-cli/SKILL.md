@@ -7,6 +7,19 @@ description: "Use this skill for service operations only. DO NOT use this skill 
 Execute monarch operations using the `monarch` CLI. All monarch interactions should use this CLI.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh monarch-cli
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <quick_start>
 The `monarch` CLI follows this pattern:
 ```bash
@@ -75,6 +88,16 @@ Do not invent rules from a single category change. Only persist what Adam has ex
 This file contains complete command syntax, all arguments, all options, and usage instructions for every command. Never guess at command syntax.
 </principle>
 
+<principle name="Per-item Amazon splits">
+For every matched multi-item Amazon order in either household profile, create one split item per order item and choose each category independently from item evidence. Single-item orders remain whole. Missing item prices require needs-input and no split; never invent prices. Never create or apply Amazon merchant-level categorization rules to item splits.
+
+`monarch transactions split TRANSACTION_ID --items-json '<array>' --amount '-82.90' --dry-run` validates and allocates completely offline. The JSON array requires `item_price` (extended line price, including quantity), `category_id`, `category` (name), and `notes` (item evidence); optional `merchant` defaults to the original merchant on apply. Optional signed `amount` must match recomputation. The price subtotal S and original absolute total T imply the aggregate adjustment A=T-S (tax plus shipping minus promotions). Each item gets price + A*price/S, rounded half up to cents; the last gets T minus all preceding rounded amounts. Original transaction sign is preserved. This is implemented once in `monarch/monarch_cli/splits.py` and reused by rendering, approval, and CLI execution.
+
+Include the prepared `category_id_by_name` map in decisions; rendering and apply require every item name/ID to match it. Store the returned items in the parent decision row's `splits` array with their allocated `amount` strings. Set parent `suggested_category` to `Split by item`, `needs_input=false`, `recommended_rule="Apply once — suppressed: multi-category merchant"`, and `rule_command=null`. `build-output.sh` validates the amounts and renders one subrow per item; approval uses the parent row number. `apply-approved-updates.sh` invokes the split command instead of updating the parent's category and forbids merchant rules for these rows. `--dry-run` on that apply script emits the intended command without contacting Monarch.
+
+Normal approved apply uses the same split command with `--yes` in place of `--dry-run`. It rereads the original amount, rejects pending/already-split transactions, submits the SDK atomic split mutation, rereads child amounts/categories/notes, and clears/verifies each child's review status. `--no-clear-review` preserves review status when explicitly requested. Do not emulate splits by creating independent manual transactions or changing the parent amount. The CLI previously exposed only list/get/update/recurring; the SDK supports transaction creation and atomic split replacement, and the CLI now exposes only the needed split operation.
+</principle>
+
 <principle name="Range / Annual Income & Expense Totals">
 To pull income and expense totals for an arbitrary date range (e.g. a full calendar year), use the cashflow aggregates -- they sum the underlying transactions server-side:
 
@@ -89,7 +112,7 @@ To pull income and expense totals for an arbitrary date range (e.g. a full calen
 - **auth** -- Manage authentication (login, logout, status, refresh, test)
 - **auth** -- Authentication commands and nested `auth profiles` management
 - **accounts** -- Manage accounts (list, get, history, holdings, sync)
-- **transactions** -- Manage transactions (list, get, update, recurring)
+- **transactions** -- Manage transactions (list, get, update, split, recurring)
 - **budgets** -- View budgets (list, get)
 - **categories** -- Manage categories (list, get)
 - **category-groups** -- Manage category groups (list, get)

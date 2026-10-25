@@ -216,3 +216,9 @@ MIT
 ```bash
 monarch cache --help
 ```
+
+## Per-item transaction splits
+
+`monarch transactions split TXN_ID --items-json '[{"item_price":"10.00","category_id":"BOOKS_ID","category":"Books","notes":"Workbook"},{"item_price":"20.00","category_id":"HOUSEHOLD_ID","category":"Household","notes":"Cleaner"}]' --amount '-32.48' --dry-run`
+
+The offline preview allocates -10.83 and -21.65. Prices are extended item prices including quantity. Tax/shipping/promotion adjustments are weighted by price, rounded half up to cents, and the last item absorbs the remainder. Every item needs a price and its own category. Missing prices fail explicitly. Replace `--dry-run` with `--yes` to apply an approved split; the original amount and split state are checked before the SDK atomic mutation, and child amounts/categories/notes are verified afterward. Existing splits and pending transactions are refused. Children are marked reviewed unless `--no-clear-review` is supplied.

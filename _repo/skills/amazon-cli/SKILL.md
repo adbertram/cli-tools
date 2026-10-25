@@ -10,6 +10,19 @@ description: >-
 Execute amazon operations using the `amazon` CLI. All amazon interactions should use this CLI.
 </objective>
 
+<project_overrides>
+Before acting on this skill, run:
+
+```bash
+~/.agents/skills/skill-expert/scripts/load-skill-overrides.sh amazon-cli
+```
+
+Apply any printed instructions alongside this skill's own workflow: they extend it and
+never repeal its limits. No output means no project override is in effect. A non-zero
+exit means the project's override file is broken -- report it and stop rather than
+silently running unmodified.
+</project_overrides>
+
 <quick_start>
 The `amazon` CLI follows this pattern:
 ```bash
@@ -24,6 +37,7 @@ amazon <command-group> <action> [arguments] [options]
 | `amazon orders list --limit 25` | List visible order-history evidence lines |
 | `amazon orders match --amount 33.15 --query "Amazon"` | Find evidence by transaction amount and query |
 | `amazon orders get line-1` | Fetch one evidence line by id |
+| `amazon orders detail 113-1234567-1234567 --profile randafaith` | Read purchased item prices and order adjustments |
 | `amazon cache clear` | Clear cached evidence output |
 </quick_start>
 
@@ -39,6 +53,10 @@ Evidence commands require a saved browser session. If authentication is missing,
 
 <principle name="Evidence Auth Precheck">
 Before running any `amazon orders ...` evidence command, run `amazon auth status` in JSON mode and parse the browser-session status. `amazon auth status` exits `0` when at least one profile is authenticated and exits `2` when no profile is authenticated; it still writes the JSON status report to stdout. In automation, capture stdout and the exit status together, parse stdout even when the exit status is `2`, and treat exit status `2` plus `profiles[].credential_types.browser_session.authenticated: false` as `AUTH_BLOCKED: amazon browser session is not authenticated`, not as a tool failure. If no profile has `credential_types.browser_session.authenticated` set to `true`, stop cleanly, report `AUTH_BLOCKED: amazon browser session is not authenticated`, and do not run the `orders` command.
+</principle>
+
+<principle name="Item Prices For Splitting">
+Use `orders detail ORDER_ID --profile PROFILE` after resolving an order. `orders get` reads a history line, not order detail; history text and current product recommendations are not purchase prices. Detail returns `items[].name`, `quantity`, `unit_price`, extended `item_price`, `item_subtotal`, `total`, and every labeled summary charge/adjustment (including tax, shipping, and promotions when shown). Prices are decimal strings. The Amazon detail page omits the quantity label for one unit; the CLI normalizes that observed convention to quantity 1. `item_prices_complete` is true only when all line prices/quantities are known and their sum equals the displayed subtotal. If false, retain the single Monarch transaction and flag needs-input; never fabricate a price. Preserve returned profile/order ID with evidence. Compare `total` with the matched transaction before allocating; split shipments and partial charges need their own evidence.
 </principle>
 
 <principle name="Command Groups">

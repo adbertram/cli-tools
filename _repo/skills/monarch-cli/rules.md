@@ -1,6 +1,6 @@
 # Monarch Transaction Review Rules
 
-Persistent memory of Adam's preferences for transaction reviews. The `monarch-transaction-reviewer` agent (and any other caller doing a Monarch review through this skill) reads this file at the start of every review and updates it whenever Adam gives feedback that establishes a durable rule.
+Persistent memory of Adam's preferences for transaction reviews. The Monarch transaction reviewer workflow (and any other caller doing a Monarch review through this skill) reads this file at the start of every review and updates it whenever Adam gives feedback that establishes a durable rule.
 
 ## How this file works
 
@@ -16,6 +16,8 @@ Persistent memory of Adam's preferences for transaction reviews. The `monarch-tr
 Rules that determine which Monarch category a transaction belongs in. Each rule should specify the matcher (merchant string, amount range, account) and the target category by name (the reviewer resolves the name → ID at runtime).
 
 - **Vacation budget → Travel & Vacation.** Every transaction whose account or budget is the Vacation budget must be categorized as a vacation expense (default category: `Travel & Vacation`). This covers the obvious cases (hotels, lodging, flights, Airbnb, rental cars, attraction tickets purchased during travel) AND any transaction whose merchant location is outside the Evansville, IN metro area — out-of-area gas, restaurants, groceries, retail, ATMs, etc. all count as travel expenses when the funding account is Vacation. Treat a non-Evansville merchant address on a Vacation-account transaction as positive evidence of travel, not as ambiguous. The only Vacation-account transactions that should NOT be Travel & Vacation are internal transfers and account fees — flag any other suspected exception to Adam before recategorizing.
+
+- **Updated 2026-10-25: Always split matched multi-item Amazon orders, for both default (Adam) and randafaith (Miranda).** Produce one child transaction per item, categorize each from its own item evidence, even if every item happens to share a category. Use verified extended item prices as weights. Item amount equals its price plus its proportional share of the order-level tax/shipping/promotion adjustment; round half up to cents, with the LAST item absorbing the remainder so signed children sum exactly to the original Monarch amount. Missing any item price means no split, keep the original whole and mark needs-input; never fabricate prices. Keep single-item orders whole. Do not create or apply merchant-level Amazon categorization rules to these item splits, consistent with the never-rule-multi-category-merchants policy.
 
 ## Rule-Recommendation Rules
 

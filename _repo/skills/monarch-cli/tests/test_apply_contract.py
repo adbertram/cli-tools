@@ -38,3 +38,29 @@ def test_verification_checks_nested_category_and_review_status():
     with pytest.raises(ValueError, match="needsReview mismatch"):
         APPLY["verify_transaction"](json.dumps(obj), "cat", True)
     assert APPLY["verify_transaction"](json.dumps(obj), "cat", False)["verified_needs_review"] is True
+
+
+def test_split_render_and_apply_dry_run(tmp_path):
+    import json
+    renderer = runpy.run_path(str(SCRIPTS / 'build-output.sh'))
+    row = dict(row=1, transaction_id='txn', vendor='Amazon', amount=-32.48,
+               description='matched order', current_category='Shopping', suggested_category='Split by item',
+               needs_input=False, recommended_rule='Apply once — suppressed: multi-category merchant', rule_command=None,
+               splits=[dict(item_price='10', amount='-10.83', category_id='a', category='Books', notes='book'),
+                       dict(item_price='20', amount='-21.65', category_id='b', category='Household', notes='cleaner')])
+    decisions = {'rows':[row], 'category_id_by_name': {'Books':'a','Household':'b'}}
+    assert renderer['validate'](decisions) == []
+    rendered = renderer['render'](decisions)
+    assert '| 1.1 |' in rendered and 'Books' in rendered and '| 1.2 |' in rendered
+    path = tmp_path / 'decisions.json'
+    path.write_text(json.dumps(decisions))
+    output = subprocess.run([sys.executable,str(SCRIPTS/'apply-approved-updates.sh'),'--decisions',str(path),'--approved','1','--dry-run'],capture_output=True,text=True,check=True)
+    result = json.loads(output.stdout)
+    assert result['updates'][0]['status'] == 'ok'
+    assert 'transactions split txn' in result['updates'][0]['command']
+    assert result['rules_created'] == []
+    row['rule_command'] = 'monarch rules create --merchant contains:Amazon --set-category a'
+    assert renderer['validate'](decisions)
+    path.write_text(json.dumps(decisions))
+    output = subprocess.run([sys.executable,str(SCRIPTS/'apply-approved-updates.sh'),'--decisions',str(path),'--approved','1','--dry-run'],capture_output=True,text=True)
+    assert output.returncode == 1

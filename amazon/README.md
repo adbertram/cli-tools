@@ -64,6 +64,21 @@ page during repeated use. The CLI follows that verified continuation control
 only when its form has no image, frame, or visible input. A real CAPTCHA
 remains a human verification gate.
 
+## Purchased item detail
+
+```bash
+amazon orders detail 113-1234567-1234567 --profile randafaith
+```
+
+This read-only command extracts purchased-item containers from the order detail
+page, excluding product recommendations. It returns decimal-string `unit_price`
+and extended `item_price` per line, quantity, name, order date, profile, subtotal,
+grand total, and all labeled summary amounts (tax, shipping, promotions, etc.).
+Amazon's blank quantity component denotes one unit. `item_prices_complete`
+requires every item price and quantity plus an exact subtotal reconciliation.
+Missing or inconsistent evidence returns `split_blocker`; never invent prices
+for allocation. Compare the grand total with the charge before splitting.
+
 ## Cache
 
 ```bash

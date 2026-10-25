@@ -1,8 +1,8 @@
 {
   "tool": "monarch",
   "description": "CLI for Monarch Money personal finance",
-  "discovered_at": "2026-06-17T21:09:36Z",
-  "total_commands": 40,
+  "discovered_at": "2026-10-25T22:27:15Z",
+  "total_commands": 42,
   "global_options": [
     {
       "name": "--version",
@@ -21,7 +21,6 @@
   "commands": {
     "accounts": {
       "help": "Manage accounts",
-      "usage_instructions": "Account management -- list, get details, view balance history, view holdings, and trigger sync. Use --filter/-f with field:op:value (e.g., type:Checking, balance:gte:1000, institution:like:%Chase%).",
       "arguments": [],
       "options": [
         {
@@ -49,7 +48,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -76,7 +76,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -111,7 +112,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -131,13 +133,15 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--hidden",
               "type": "bool",
               "required": false,
-              "help": "Include hidden accounts"
+              "help": "Include hidden accounts",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -175,9 +179,9 @@
           "arguments": [
             {
               "name": "account_ids",
-              "type": "TEXT",
+              "type": "ACCOUNT_IDS",
               "required": false,
-              "help": "[ACCOUNT_IDS]...  Account IDs to sync (all if empty)"
+              "help": "Account IDs to sync (all if empty)"
             }
           ],
           "options": [
@@ -186,7 +190,8 @@
               "type": "bool",
               "required": false,
               "help": "Wait for sync to complete",
-              "short": "-w"
+              "short": "-w",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -200,13 +205,11 @@
     },
     "auth": {
       "help": "Manage authentication",
-      "usage_instructions": "Authentication management -- login, logout, check status, refresh tokens, and test credentials. Supports multiple profiles via --profile/-p.",
       "arguments": [],
       "options": [],
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Use to set up Monarch Money credentials. Use --profile/-p to save to a specific profile. Use --force/-F to re-authenticate. Use --credential-type/-c to authenticate a specific type.",
           "arguments": [],
           "options": [
             {
@@ -220,13 +223,14 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
         "logout": {
-          "help": "Clear stored credentials and browser sessions.",
+          "help": "Clear stored credentials.",
           "usage_instructions": "Use to clear stored credentials. Use --profile/-p for a specific profile.",
           "arguments": [],
           "options": [
@@ -275,7 +279,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -296,12 +301,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use to browse profiles. Use --filter/-f to find specific profiles (e.g., is_default:eq:True). Use --table/-t for formatted output.",
               "arguments": [],
               "options": [
@@ -310,7 +316,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -351,7 +358,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -370,7 +412,7 @@
           }
         },
         "status": {
-          "help": "Check authentication status across profiles.",
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
           "usage_instructions": "Use to verify you are authenticated. Use --profile/-p to check a specific profile. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
@@ -386,7 +428,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -400,14 +443,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -422,7 +467,6 @@
     },
     "budgets": {
       "help": "View budgets",
-      "usage_instructions": "Budget viewing -- list and get budget details. Filter by category, amount, or remaining. Use --month/-m for specific month (YYYY-MM).",
       "arguments": [],
       "options": [
         {
@@ -450,7 +494,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--month",
@@ -477,7 +522,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -542,7 +588,14 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `monarch cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
         }
       }
     },
@@ -576,7 +629,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--start",
@@ -610,7 +664,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -657,7 +712,7 @@
           ]
         },
         "summary": {
-          "help": "Get cashflow summary (income, expenses, savings).",
+          "help": "Get cashflow summary (income, expenses, savings). With no dates, summarizes the current month. Provide both --start and --end to summarize an arbitrary range (e.g. a full calendar year).",
           "usage_instructions": "Use to get a high-level cashflow overview showing income, expenses, and savings. Use --table/-t for formatted output.",
           "arguments": [],
           "options": [
@@ -666,7 +721,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--start",
@@ -722,7 +778,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -742,7 +799,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -810,7 +868,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -836,7 +895,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -900,7 +960,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -920,7 +981,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -987,7 +1049,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1007,7 +1070,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1082,7 +1146,9 @@
               "name": "--expense",
               "type": "bool",
               "required": false,
-              "help": "When --amount is set, apply only to expenses (default) or income"
+              "help": "When --amount is set, apply only to expenses (default) or income",
+              "takes_value": false,
+              "secondary": "--income"
             },
             {
               "name": "--category-id",
@@ -1118,20 +1184,23 @@
               "name": "--use-original-statement",
               "type": "bool",
               "required": false,
-              "help": "Match merchant criteria against the original bank statement text"
+              "help": "Match merchant criteria against the original bank statement text",
+              "takes_value": false
             },
             {
               "name": "--apply-to-existing",
               "type": "bool",
               "required": false,
-              "help": "Apply the new rule retroactively to existing transactions"
+              "help": "Apply the new rule retroactively to existing transactions",
+              "takes_value": false
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display created rule as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1161,7 +1230,8 @@
               "type": "bool",
               "required": false,
               "help": "Skip confirmation",
-              "short": "-F"
+              "short": "-F",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1188,7 +1258,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1208,7 +1279,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1275,7 +1347,9 @@
               "name": "--expense",
               "type": "bool",
               "required": false,
-              "help": "When --amount is set, apply only to expenses or income"
+              "help": "When --amount is set, apply only to expenses or income",
+              "takes_value": false,
+              "secondary": "--income"
             },
             {
               "name": "--category-id",
@@ -1311,20 +1385,25 @@
               "name": "--use-original-statement",
               "type": "bool",
               "required": false,
-              "help": "Toggle 'match against original statement text'"
+              "help": "Toggle 'match against original statement text'",
+              "takes_value": false,
+              "secondary": "--no-use-original-statement"
             },
             {
               "name": "--apply-to-existing",
               "type": "bool",
               "required": false,
-              "help": "Toggle retroactive application"
+              "help": "Toggle retroactive application",
+              "takes_value": false,
+              "secondary": "--no-apply-to-existing"
             },
             {
               "name": "--table",
               "type": "bool",
               "required": false,
               "help": "Display updated rule as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1366,7 +1445,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1386,7 +1466,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1422,7 +1503,6 @@
     },
     "transactions": {
       "help": "Manage transactions",
-      "usage_instructions": "Transaction management -- list, get, update, and view recurring transactions. Rich filtering via --filter/-f (amount:gte:100, merchant:like:%Amazon%, category:Groceries). Date ranges via --start/-s, --end/-e, or --days/-d.",
       "arguments": [],
       "options": [
         {
@@ -1450,7 +1530,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -1470,7 +1551,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
@@ -1526,13 +1608,15 @@
               "name": "--needs-review",
               "type": "bool",
               "required": false,
-              "help": "Only transactions where needsReview == true (Monarch 'Needs Review' filter)"
+              "help": "Only transactions where needsReview == true (Monarch 'Needs Review' filter)",
+              "takes_value": false
             },
             {
               "name": "--reviewed",
               "type": "bool",
               "required": false,
-              "help": "Only transactions where needsReview == false (already reviewed)"
+              "help": "Only transactions where needsReview == false (already reviewed)",
+              "takes_value": false
             },
             {
               "name": "--filter",
@@ -1566,7 +1650,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--start",
@@ -1587,6 +1672,54 @@
               "type": "TEXT",
               "required": false,
               "help": "Auth profile name"
+            }
+          ]
+        },
+        "split": {
+          "help": "Split a transaction by item price, allocating adjustments proportionally. Last item gets cent remainder.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Original transaction ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--items-json",
+              "type": "TEXT",
+              "required": true,
+              "help": "JSON array: item_price, category_id, category, notes; optional merchant and amount"
+            },
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": true,
+              "help": "Expected signed original total, exactly cents"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Allocate and validate offline; never contact Monarch",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Apply the split after checking the original transaction",
+              "takes_value": false
+            },
+            {
+              "name": "--clear-review",
+              "type": "bool",
+              "required": false,
+              "help": "Mark resulting item transactions reviewed",
+              "takes_value": false,
+              "secondary": "--no-clear-review",
+              "default": "clear-review"
             }
           ]
         },
@@ -1657,7 +1790,8 @@
               "name": "--hide-from-reports",
               "type": "bool",
               "required": false,
-              "help": "Hide from reports"
+              "help": "Hide from reports",
+              "takes_value": false
             },
             {
               "name": "--needs-review",
