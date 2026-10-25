@@ -27,7 +27,7 @@ _(none yet)_
 
 Rules about when to fetch external evidence — Amazon order lookup, Apple receipt lookup, Venmo memo lookup. Use this section to capture amount thresholds, merchant exceptions, or "don't bother" cases that save round-trips.
 
-- **Updated 2026-06-14: Amazon vendor evidence is mandatory through the Amazon CLI.** For any Monarch transaction whose merchant/vendor contains `Amazon`, run the repo-owned Amazon CLI evidence path before final categorization or approval. Use `amazon orders match --amount {amount} --date {date} --query {query} --limit 10` and `amazon orders get <line-id>` when needed. Use the returned evidence to categorize the row. If multiple Amazon orders match, no order matches, or Amazon blocks the lookup with OTP/CAPTCHA/passkey/account recovery, mark the row as needing input instead of guessing.
+- **Updated 2026-10-25: Amazon evidence must cover both household accounts.** For every Monarch merchant/vendor containing `Amazon`, check `amazon auth status` and verify browser-session authentication for BOTH `default` (Adam) and `randafaith` (Miranda, randafaith@gmail.com). Run `amazon orders match --profile default --amount {amount} --date {date} --limit 1000` AND the same command with `--profile randafaith` before final categorization or approval, even when the first account has a match. With an ISO date and no `--query`, the CLI traverses the complete order history for that year. Omit `--query` for this sweep; use a separate query lookup only as additional evidence. A result limit is not proof of complete traversal. Use `amazon orders get --profile <matched-profile> <line-id>` when needed. Record the source profile/account alongside each order ID, item list, order date, and total in the row description (audit: evidence). Evaluate ambiguity across both accounts. Only report no match after both lookups complete; a missing/unauthenticated account or incomplete traversal is blocked/incomplete evidence, never a clean negative. For multiple plausible orders, no matching order, or an unresolved auth/security gate, mark the row as needing input instead of guessing.
 - **Updated 2026-06-14: Venmo classification is deterministic.** For any Monarch transaction whose merchant/vendor contains `Venmo`, run `/Users/adam/Dropbox/GitRepos/cli-tools/_repo/skills/monarch-cli/scripts/classify-venmo.sh` before final categorization or approval. If the classifier returns `needs_account_user`, ask Adam which Venmo account/auth profile should be used before running any Venmo transaction lookup. Do not query every Venmo auth profile to find a match. The classifier may suggest a category only when exactly one Venmo payment matches and exactly one explicit rule in `data/venmo-classification-rules.json` matches the payment evidence.
 
 ## Approval Rules
@@ -54,9 +54,9 @@ Format: each entry is `- <vendor-pattern>` (substring match, case-insensitive, a
 The reviewer must ASK before running inspection except for Amazon rows, which are governed by the mandatory Amazon evidence rule above. Adam can decline per-vendor or per-row for optional vendors. Declines for a single session do not persist; durable declines ("never deep-inspect Apple under $20") go under Evidence-Gathering Rules above and override this section.
 
 - Amazon
-  - command: amazon orders match --amount {amount} --date {date} --query {query} --limit 10
-  - evidence: order item names, order total, order date, shipping address if available
-  - notes: mandatory evidence workflow; use this Amazon CLI command before final categorization or approval
+  - command: for profile in default randafaith; do amazon orders match --profile "$profile" --amount {amount} --date {date} --limit 1000; done
+  - evidence: source profile/account, order ID, order item names, order total, order date, shipping address if available
+  - notes: mandatory evidence workflow across default (Adam) and randafaith (Miranda); preserve each command's profile provenance and completion status separately before combining evidence
 - Apple
   - command: apple purchases match --amount {amount} --date {date} --query {query} --limit 10
   - evidence: purchase/subscription name, receipt date, service vs. app vs. subscription
