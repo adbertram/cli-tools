@@ -228,6 +228,9 @@ INTERSTITIAL_RELOAD = "reload"
 #: Stop immediately. For a real human-verification challenge, which is never
 #: solved, clicked through, or reloaded around.
 INTERSTITIAL_ABORT = "abort"
+#: Follow an explicitly declared, challenge-free continuation control. Never
+#: use this strategy for a CAPTCHA or another human-verification challenge.
+INTERSTITIAL_CONTINUE = "continue"
 
 
 @dataclass(frozen=True)
@@ -251,6 +254,7 @@ class Interstitial:
     url_markers: Tuple[str, ...] = field(default_factory=tuple)
     title_markers: Tuple[str, ...] = field(default_factory=tuple)
     body_markers: Tuple[str, ...] = field(default_factory=tuple)
+    continue_selector: str = ""
 
     def matches(self, url: str = "", title: str = "", body: str = "") -> bool:
         url_l = (url or "").lower()
@@ -1724,6 +1728,18 @@ class BrowserAutomation:
             return None
         if rule.strategy == INTERSTITIAL_ABORT:
             self._raise_for_interstitial_abort(rule, page)
+        if rule.strategy == INTERSTITIAL_CONTINUE:
+            control = page.locator(rule.continue_selector) if rule.continue_selector else None
+            if control is None or control.count() != 1 or not control.is_visible():
+                self._raise_for_interstitial_abort(rule, page)
+            print_warning(f"{rule.label} interstitial detected -- following its continuation control")
+            control.click()
+            page.wait_for_timeout(self.INTERSTITIAL_POLL_INTERVAL_MS)
+            rule = self._classify_page_interstitial(page)
+            if rule is None:
+                return None
+            if rule.strategy == INTERSTITIAL_ABORT:
+                self._raise_for_interstitial_abort(rule, page)
         if rule.strategy != INTERSTITIAL_SETTLE:
             return rule
 

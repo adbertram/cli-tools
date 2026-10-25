@@ -56,6 +56,13 @@ An ISO `--date YYYY-MM-DD` without `--query` scans all order-history pages
 for that year and returns complete matching order cards, including order id,
 order date, total, and item text. Amount and date are independent evidence
 signals: inspect `matched_amount` before treating a date match as a charge match.
+Amount evidence requires a currency marker (such as `$25`) or cents (`25.00`);
+bare dates, quantities, and order numbers do not count as monetary matches.
+
+The saved session can encounter Amazon's one-button **Continue shopping**
+page during repeated use. The CLI follows that verified continuation control
+only when its form has no image, frame, or visible input. A real CAPTCHA
+remains a human verification gate.
 
 ## Cache
 

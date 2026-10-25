@@ -1,6 +1,8 @@
 """Browser automation for Amazon."""
 
-from cli_tools_shared.auth import BrowserAutomation
+from cli_tools_shared.auth import (
+    BrowserAutomation, Interstitial, INTERSTITIAL_ABORT, INTERSTITIAL_CONTINUE,
+)
 
 
 class AmazonBrowser(BrowserAutomation):
@@ -17,3 +19,21 @@ class AmazonBrowser(BrowserAutomation):
     AUTH_URL_PATTERN = r"/ap/signin|/login|/register"
     AUTH_SUCCESS_SELECTOR = "#ordersContainer, .js-order-card, [data-order-id]"
     MANUAL_LOGIN = True
+    INTERSTITIALS = (
+        Interstitial(
+            kind="captcha", label="Amazon CAPTCHA", strategy=INTERSTITIAL_ABORT,
+            body_markers=("enter the characters you see below", "type the characters you see"),
+        ),
+        Interstitial(
+            kind="continue", label="Amazon Continue shopping",
+            strategy=INTERSTITIAL_CONTINUE,
+            body_markers=("click the button below to continue shopping",),
+            # The observed gate has only hidden inputs. Refuse a form with
+            # an image, frame, or visible input instead of solving a challenge.
+            continue_selector=(
+                "form[action$='/errors_page/validateCaptcha']"
+                ":not(:has(input:not([type='hidden']), img, iframe)) "
+                "button:has-text('Continue shopping')"
+            ),
+        ),
+    )

@@ -39,7 +39,11 @@ VISIBLE_TEXT_SNAPSHOT_JS = r"""() => {
   };
 }"""
 
-MONEY_RE = re.compile(r"[-+]?\$?\s*\d[\d,]*(?:\.\d{2})?")
+# Dates, quantities and order IDs are evidence text too. Require a currency
+# marker or cents so a calendar day such as "May 25" cannot match $25.00.
+MONEY_RE = re.compile(
+    r"(?<![\w.])[-+]?(?:\$\s*\d[\d,]*(?:\.\d{2})?|\d[\d,]*\.\d{2})(?!\w|\.\d)"
+)
 
 
 def visible_text_snapshot(page) -> dict[str, Any]:

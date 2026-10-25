@@ -297,3 +297,64 @@ def test_body_is_only_probed_when_a_rule_declares_body_markers():
     scripts.clear()
     _browser()._classify_page_interstitial(RecordingPage([OK]))
     assert any("innerText" in s for s in scripts)
+
+# A continuation button is a normal navigation control, unlike a human puzzle.
+from cli_tools_shared.auth import INTERSTITIAL_CONTINUE
+
+CONTINUE_RULE = Interstitial(
+    kind="continue", label="Continue shopping", strategy=INTERSTITIAL_CONTINUE,
+    title_markers=("continue shopping",), continue_selector="form.safe button",
+)
+
+
+class ContinuingBrowser(WalledBrowser):
+    INTERSTITIALS = (ABORT_RULE, CONTINUE_RULE)
+
+
+class ContinuePage(FakePage):
+    def __init__(self, states, *, count=1, visible=True):
+        super().__init__(states)
+        self.control_count = count
+        self.visible = visible
+        self.clicks = 0
+
+    def locator(self, selector):
+        assert selector == "form.safe button"
+        return self
+
+    def count(self):
+        return self.control_count
+
+    def is_visible(self):
+        return self.visible
+
+    def click(self):
+        self.clicks += 1
+        self._advance()
+
+
+def test_continue_control_resolves_wall_without_reloading(stub_navigate):
+    page = ContinuePage([(PAGE_URL, "Continue shopping"), OK])
+    stub_navigate(page)
+    assert _browser(ContinuingBrowser).get_page(PAGE_URL) is page
+    assert page.clicks == 1
+    assert page.goto_calls == []
+
+
+@pytest.mark.parametrize("count,visible", [(0, True), (2, True), (1, False)])
+def test_continue_refuses_missing_ambiguous_or_hidden_control(stub_navigate, count, visible):
+    page = ContinuePage([(PAGE_URL, "Continue shopping")], count=count, visible=visible)
+    stub_navigate(page)
+    with pytest.raises(BrowserAutomationError, match="cannot be resolved automatically"):
+        _browser(ContinuingBrowser).get_page(PAGE_URL)
+    assert page.clicks == 0
+    assert page.goto_calls == []
+
+
+def test_real_captcha_after_continue_is_not_reloaded_or_clicked(stub_navigate):
+    page = ContinuePage([(PAGE_URL, "Continue shopping"), CAP])
+    stub_navigate(page)
+    with pytest.raises(BrowserAutomationError, match="CAPTCHA/human-verification"):
+        _browser(ContinuingBrowser).get_page(PAGE_URL)
+    assert page.clicks == 1
+    assert page.goto_calls == []
