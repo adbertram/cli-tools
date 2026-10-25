@@ -6,6 +6,7 @@ Browser automation lives in browser.py.
 
 from typing import Optional
 
+from cli_tools_shared.browser.user_agent import derive_real_chrome_user_agent
 from cli_tools_shared.config import BaseConfig, resolve_tool_dir, config_for
 from cli_tools_shared.credentials import CredentialType
 
@@ -28,6 +29,12 @@ class Config(BaseConfig):
     def headless(self) -> bool:
         val = self._get("HEADLESS")
         return val is None or val.lower() == "true"
+
+    @property
+    def browser_user_agent(self) -> str:
+        """Keep headed login and headless reads on the same Chrome identity."""
+        override = self._get("BROWSER_USER_AGENT")
+        return override or derive_real_chrome_user_agent()
 
     def get_browser(self):
         """Return the BrowserAutomation subclass for this CLI."""

@@ -22,6 +22,10 @@ amazon auth test
 amazon auth logout
 ```
 
+Login and headless reads use the installed Chrome user agent so Amazon can
+recognize the saved session across browser restarts. `BROWSER_USER_AGENT`
+can explicitly override that identity.
+
 ## Profiles
 
 ```bash
@@ -47,6 +51,11 @@ amazon orders match --date 2026-05-16
 amazon orders match --query "USB cable" --limit 5 --table
 amazon orders match --amount 33.15 --query "Amazon" --properties id,text,score
 ```
+
+An ISO `--date YYYY-MM-DD` without `--query` scans all order-history pages
+for that year and returns complete matching order cards, including order id,
+order date, total, and item text. Amount and date are independent evidence
+signals: inspect `matched_amount` before treating a date match as a charge match.
 
 ## Cache
 

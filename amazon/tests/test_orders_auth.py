@@ -9,6 +9,50 @@ from amazon_cli.browser import AmazonBrowser
 from amazon_cli.client import AUTH_BLOCKED_MESSAGE, AmazonClient
 
 
+def test_iso_transaction_date_scans_entire_year_and_keeps_order_together(monkeypatch):
+    monkeypatch.setenv("CACHE_ENABLED", "false")
+    client = AmazonClient()
+    browser = MagicMock()
+    browser.is_authenticated.return_value = True
+    browser._check_auth.return_value = True
+    pages = [MagicMock(), MagicMock()]
+    pages[0].evaluate.return_value = {
+        "texts": ["ORDER PLACED\nJune 1, 2026\nTOTAL\n$5.00\nORDER # 112-1111111-1111111"],
+        "next": "https://www.amazon.com/your-orders/orders?timeFilter=year-2026&page=1",
+    }
+    pages[1].evaluate.return_value = {
+        "texts": ["ORDER PLACED\nMay 6, 2026\nTOTAL\n$160.49\nORDER # 112-2222222-2222222\nA purchased item"],
+        "next": None,
+    }
+    browser.get_page.side_effect = pages
+    client._get_browser = MagicMock(return_value=browser)
+
+    rows = client.match_order(amount="160.49", date="2026-05-06")
+
+    assert len(rows) == 1
+    assert rows[0]["order_id"] == "112-2222222-2222222"
+    assert rows[0]["order_date"] == "May 6, 2026"
+    assert rows[0]["total"] == "$160.49"
+    assert "A purchased item" in rows[0]["summary"]
+    assert browser.get_page.call_args_list[0].args[0].endswith("timeFilter=year-2026")
+    assert browser.get_page.call_count == 2
+
+
+def test_year_lookup_rejects_repeated_pagination():
+    client = AmazonClient()
+    browser = MagicMock()
+    browser._check_auth.return_value = True
+    browser.get_page.return_value.evaluate.return_value = {
+        "texts": [],
+        "next": "https://www.amazon.com/your-orders/orders?timeFilter=year-2026",
+    }
+    client._get_browser = MagicMock(return_value=browser)
+    from cli_tools_shared.exceptions import ClientError
+    import pytest
+    with pytest.raises(ClientError, match="repeated page"):
+        client._year_snapshot(2026)
+
+
 def test_page_snapshot_raises_actionable_auth_blocker_when_session_is_stale():
     client = AmazonClient()
     page = MagicMock()
