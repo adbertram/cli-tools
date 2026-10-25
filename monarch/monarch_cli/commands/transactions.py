@@ -211,7 +211,7 @@ def transactions_update(
     notes: Optional[str] = typer.Option(None, "--notes", "-n", help="New notes (use '' to clear)"),
     goal: Optional[str] = typer.Option(None, "--goal", "-g", help="Goal ID (use '' to clear)"),
     hide_from_reports: Optional[bool] = typer.Option(None, "--hide-from-reports", help="Hide from reports"),
-    needs_review: Optional[bool] = typer.Option(None, "--needs-review", help="Mark as needs review"),
+    needs_review: Optional[bool] = typer.Option(None, "--needs-review/--no-needs-review", help="Mark as needing review or reviewed"),
 ):
     """
     Update a transaction.

@@ -45,7 +45,7 @@ Choose ONE based on the merchant string:
 
 | Situation | Recommendation |
 |---|---|
-| Cleaned merchant is a clean brand (`Spotify`, `Netflix`, `Whole Foods Market`) | `--merchant equals:"Spotify"` |
+| Cleaned merchant is a clean brand (`Spotify`, `Netflix`, `Whole Foods Market`) | `--merchant eq:"Spotify"` |
 | Cleaned merchant has a stable prefix with trailing noise (`Amazon Web Services US East`) | `--merchant contains:"Amazon Web Services"` |
 | Cleaned merchant is generic (`SQ *`, `PAYPAL *`, `TST*`, `DD *DOORDASH`) and the real identity is in the bank statement | `--merchant contains:"<stable-substring-from-original-statement>" --use-original-statement` |
 | Multiple distinct vendors collapse to the same cleaned name | `--merchant contains:"<distinctive-substring>" --use-original-statement` |
@@ -69,7 +69,7 @@ RULE RECOMMENDATION:
   Scope:    all accounts
   Retroactive: no
   CLI:      monarch rules create \
-              --merchant equals:"<merchant>" \
+              --merchant eq:"<merchant>" \
               --set-category <category-id>
 ```
 

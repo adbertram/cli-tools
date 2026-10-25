@@ -90,9 +90,18 @@ def proposed_category_id(row: dict, category_id_by_name: dict[str, str] | None) 
     return None
 
 
+def rule_argv(cmd: str) -> list[str]:
+    """Translate legacy exact-match commands without changing approved decisions."""
+    argv = shlex.split(cmd)
+    for i, token in enumerate(argv[:-1]):
+        if token in ("--merchant", "-m") and argv[i + 1].startswith("equals:"):
+            argv[i + 1] = "eq:" + argv[i + 1][len("equals:"):]
+    return argv
+
+
 def parse_rule_command(cmd: str) -> dict:
     """Extract the merchant criterion and set-category from a `monarch rules create` command."""
-    argv = shlex.split(cmd)
+    argv = rule_argv(cmd)
     merchant_criteria: list[str] = []
     set_category: str | None = None
     i = 0
@@ -125,7 +134,7 @@ def fetch_existing_rules() -> list[dict]:
 def find_matching_rule(parsed: dict, existing: list[dict]) -> str | None:
     """Return rule ID if an existing rule has the same merchant criteria and set-category."""
     target_set = parsed["set_category"]
-    target_merchants = parsed["merchant_criteria"]
+    target_merchants = sorted(value.casefold() for value in parsed["merchant_criteria"])
     if not target_set or not target_merchants:
         return None
     for rule in existing:
@@ -133,12 +142,24 @@ def find_matching_rule(parsed: dict, existing: list[dict]) -> str | None:
         if action.get("id") != target_set:
             continue
         existing_merchants = sorted(
-            f"{mc.get('operator')}:{mc.get('value')}"
+            f"{mc.get('operator')}:{mc.get('value')}".casefold()
             for mc in (rule.get("merchantCriteria") or [])
         )
         if existing_merchants == target_merchants:
             return rule.get("id")
     return None
+
+
+def verify_transaction(stdout: str, category_id: str, clear_review: bool) -> dict:
+    """Validate the real transaction-get response rather than recording empty fields."""
+    obj = json.loads(stdout)["getTransaction"]
+    actual_category = obj["category"]["id"]
+    needs_review = obj["needsReview"]
+    if actual_category != category_id:
+        raise ValueError(f"category mismatch: expected {category_id}, got {actual_category}")
+    if clear_review and needs_review is not False:
+        raise ValueError(f"needsReview mismatch: expected false, got {needs_review!r}")
+    return {"verified_category": actual_category, "verified_needs_review": needs_review}
 
 
 def main() -> int:
@@ -213,13 +234,14 @@ def main() -> int:
                 ["monarch", "transactions", "get", row["transaction_id"]],
                 capture_output=True, text=True, check=False,
             )
-            if verify.returncode == 0:
-                try:
-                    obj = json.loads(verify.stdout)
-                    result["verified_category"] = obj.get("category")
-                    result["verified_needs_review"] = obj.get("needs_review")
-                except Exception:
-                    pass
+            try:
+                if verify.returncode != 0:
+                    raise ValueError(verify.stderr or f"transaction get exited {verify.returncode}")
+                result.update(verify_transaction(verify.stdout, cat_id, not args.no_clear_needs_review))
+            except (ValueError, KeyError, TypeError) as exc:
+                result["status"] = "failed"
+                result["stderr"] = f"transaction verification failed: {exc}"
+                overall_ok = False
         updates_out.append(result)
 
     # Create rules — skip any rule whose merchant+set-category already exists
@@ -247,7 +269,7 @@ def main() -> int:
                 "rule_id": None,
             })
             continue
-        argv = shlex.split(cmd)
+        argv = rule_argv(cmd)
         rc, stdout, stderr = run_capture(argv, args.dry_run)
         result = {
             "row": row_num,

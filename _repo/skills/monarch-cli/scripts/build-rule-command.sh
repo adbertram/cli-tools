@@ -53,7 +53,7 @@ def main() -> int:
         return 2
 
     parts: list[str] = ["monarch", "rules", "create"]
-    parts.extend(["--merchant", f"{args.match}:{args.merchant}"])
+    parts.extend(["--merchant", f"{'eq' if args.match == 'equals' else args.match}:{args.merchant}"])
 
     if args.amount_eq is not None:
         parts.extend(["--amount", f"eq:{args.amount_eq}"])

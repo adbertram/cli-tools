@@ -85,6 +85,8 @@ Every item requires `slide`, `transcript_path`, and `audio_path`. Slide numbers 
 
 Each transcript is required. Each cue marker sends Space at the estimated cue boundary.
 
+For a slide with a movie authored as its first on-click build, supply `"media_start": "on_click"` in that item. The recorder sends one additional Space at the start of that item's narration, using the same narration clock as cue actions. The movie must wait for this click (no autoplay on slide entry). This media-start click is separate from transcript `||` cues and is included in the live click-count check. Each media item also appends its measured click-settle window as silence after the WAV, reserving capture time before the next slide advance or capture stop. The timing plan exposes each item's `audio_start_seconds` and `media_tail_seconds`; `duration_seconds` remains the WAV duration. Omit the field for existing behavior; other values fail validation.
+
 An item may also carry `cue_offsets_seconds`: a list of numbers, one per cue marker in that item's transcript, each the time in seconds from the start of that item's audio file at which Space is sent. When the key is present those times are used as given and the item's timing-plan entry records `"cue_timing_method": "explicit"`. When it is absent the cue times are estimated from the transcript's word ratio (`"cue_timing_method": "word-ratio"`). Items can mix the two.
 
 The list must have exactly one entry per cue marker (an empty list for a transcript with no cue markers), every entry must be a number that is at least 0 and less than the item's audio duration, and entries must be strictly ascending. Anything else fails with an error naming the slide; there is no fallback to the estimate.

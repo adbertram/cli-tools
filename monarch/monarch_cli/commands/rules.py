@@ -251,7 +251,7 @@ def rules_create(
     Examples:
         monarch rules create --merchant contains:amazon --set-category 12345
         monarch rules create --amount gt:1000 --expense --set-category 67890
-        monarch rules create --merchant equals:"Whole Foods" --add-tag TAG_ID
+        monarch rules create --merchant eq:"Whole Foods" --add-tag TAG_ID
     """
     merchant_criteria = _parse_merchant_criteria(merchant)
     amount_criteria = _parse_amount_criteria(amount, expense)

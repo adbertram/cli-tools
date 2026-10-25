@@ -1,5 +1,5 @@
 """Models returned by powerpoint-slide-recorder commands."""
-from typing import List, Union
+from typing import List, Optional, Union
 
 from .base import CLIModel
 
@@ -30,7 +30,10 @@ class RecordingItemPlan(CLIModel):
     measured_click_steps: int
     audio: str
     duration_seconds: float
+    audio_start_seconds: float
     cue_timing_method: str
+    media_start: Optional[str] = None
+    media_tail_seconds: Optional[float] = None
 
 
 class TimingPlan(CLIModel):

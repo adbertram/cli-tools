@@ -1059,9 +1059,9 @@
           "examples": [
             "monarch rules create --merchant contains:amazon --set-category 12345",
             "monarch rules create --amount gt:1000 --expense --set-category 67890",
-            "monarch rules create --merchant equals:\"Whole Foods\" --add-tag TAG_ID"
+            "monarch rules create --merchant eq:\"Whole Foods\" --add-tag TAG_ID"
           ],
-          "usage_instructions": "Create a new transaction rule. REQUIRES at least one criterion (--merchant 'op:value', --amount 'op:value', --category-id, or --account-id) AND at least one action (--set-category, --set-merchant, or --add-tag). Merchant criterion forms: 'contains:amazon', 'equals:Whole Foods'. Amount forms: 'eq:115.32', 'gt:20', 'between:50:200'. Use --expense/--income to scope amount criteria. Use --apply-to-existing to retroactively apply the rule.",
+          "usage_instructions": "Create a new transaction rule. REQUIRES at least one criterion (--merchant 'op:value', --amount 'op:value', --category-id, or --account-id) AND at least one action (--set-category, --set-merchant, or --add-tag). Merchant criterion forms: 'contains:amazon', 'eq:Whole Foods'. Amount forms: 'eq:115.32', 'gt:20', 'between:50:200'. Use --expense/--income to scope amount criteria. Use --apply-to-existing to retroactively apply the rule.",
           "arguments": [],
           "options": [
             {
@@ -1663,7 +1663,9 @@
               "name": "--needs-review",
               "type": "bool",
               "required": false,
-              "help": "Mark as needs review"
+              "help": "Mark as needing review or reviewed",
+              "takes_value": false,
+              "secondary": "--no-needs-review"
             },
             {
               "name": "--profile",

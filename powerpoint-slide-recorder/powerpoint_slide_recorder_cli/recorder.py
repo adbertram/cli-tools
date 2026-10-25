@@ -892,6 +892,10 @@ def normalize_item(item, index, cue_marker):
         "cue_count": cue_count,
         "audio_path": audio_path(item, label),
     }
+    if "media_start" in item:
+        if item["media_start"] != "on_click":
+            raise ValueError(f'{label} media_start must be "on_click" when supplied')
+        normalized["media_start"] = "on_click"
     if EXPLICIT_CUE_OFFSETS_FIELD in item:
         normalized[EXPLICIT_CUE_OFFSETS_FIELD] = validate_explicit_cue_offsets(
             label, item[EXPLICIT_CUE_OFFSETS_FIELD], cue_count
@@ -953,10 +957,12 @@ def assert_cue_counts_match_click_steps(prepared_items, click_steps):
         if slide_number not in click_steps:
             raise KeyError(f"{item['label']} was not measured by the slide-show probe")
         expected_cue_count = click_steps[slide_number]
-        if item["cue_count"] != expected_cue_count:
+        media_click_count = int(item.get("media_start") == "on_click")
+        if item["cue_count"] + media_click_count != expected_cue_count:
             raise ValueError(
                 f"{item['label'].lower()} has {item['cue_count']} cue marker "
-                f"but the live slide show consumes {expected_cue_count} click steps"
+                + ("and 1 media-start click " if media_click_count else "")
+                + f"but the live slide show consumes {expected_cue_count} click steps"
             )
 
 
@@ -1500,6 +1506,14 @@ def prepare(config, click_steps, terminal_after_effect_steps, click_settle_secon
         cue_offsets, cue_timing_method = cue_offsets_for_item(item, duration_seconds)
 
         audio_files.append(normalized_audio_path)
+        if item.get("media_start") == "on_click":
+            actions.append({
+                "at_seconds": round(item_started_at, 3),
+                "key": "space",
+                "item": item["label"],
+                "slide": item["identity"]["value"],
+                "reason": "media start",
+            })
         for cue_offset in cue_offsets:
             actions.append({
                 "at_seconds": round(item_started_at + cue_offset, 3),
@@ -1512,6 +1526,14 @@ def prepare(config, click_steps, terminal_after_effect_steps, click_settle_secon
         timeline_seconds = timeline_seconds + duration_seconds
         slide_number = item["identity"]["value"]
         settle_seconds = click_settle_seconds[slide_number]
+        media_tail_seconds = settle_seconds if item.get("media_start") == "on_click" else 0
+        if media_tail_seconds:
+            # Reserve the measured settle window after the WAV so the captured movie
+            # can finish before a later slide advances or final capture stops.
+            media_tail = audio_dir / f"silence-media-tail-{item['index']:03d}.wav"
+            generate_silence(media_tail, media_tail_seconds)
+            audio_files.append(media_tail)
+            timeline_seconds += media_tail_seconds
 
         if item_index < len(config["items"]) - 1:
             if cue_offsets:
@@ -1554,7 +1576,10 @@ def prepare(config, click_steps, terminal_after_effect_steps, click_settle_secon
             "click_settle_seconds": settle_seconds,
             "audio": str(item["audio_path"]),
             "duration_seconds": duration_seconds,
+            "audio_start_seconds": round(item_started_at, 3),
             "cue_timing_method": cue_timing_method,
+            **({"media_start": item["media_start"], "media_tail_seconds": media_tail_seconds}
+               if "media_start" in item else {}),
         })
 
     write_concat_file(concat_path, audio_files)
