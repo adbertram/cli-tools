@@ -1,0 +1,10 @@
+{
+  "renderer": "bookwriter-pdf-export",
+  "version": "1.8.0",
+  "sha256": {
+    "render.ts": "fcccfbc61c679829a674438616e0e2cca894977c85edd05e5a0062bef867a8a3",
+    "media.ts": "7b6b65864f310361a666f25d71a091ee2a1a8cfd9130db1b8217ba26ed08ce7b",
+    "fonts.ts": "3ddff224bc912dc5aa92dd449baed9f25d44bfdabd9d2ffc15715f6d13cd252e",
+    "vendor.d.ts": "576b40e4d6f1a901ec3c08eb0da94adbf656370bb80c91ccd4e626e578bbeab8"
+  }
+}

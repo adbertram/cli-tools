@@ -45,3 +45,9 @@ chromium-profile/
 */cache/
 MagicMock/
 _personal/azlogs/data/
+
+# Gumroad local TypeScript renderer/runtime dependencies
+gumroad/gumroad_cli/engine/node_modules/
+gumroad/gumroad_cli/engine/dist/
+gumroad/gumroad_cli/engine/test-*.pdf
+gumroad/gumroad_cli/engine/test-*.epub

@@ -1,0 +1,809 @@
+{
+  "tool": "gumroad",
+  "description": "CLI interface for gumroad",
+  "discovered_at": "2026-10-26T20:39:51Z",
+  "total_commands": 29,
+  "global_options": [],
+  "commands": {
+    "auth": {
+      "help": "Manage gumroad authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "books": {
+      "help": "Read current Notion manuscripts and build derived artifacts",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "build-epub": {
+          "help": "Build current Notion Drafts; attach exact artifact and source manifest to the root.",
+          "arguments": [
+            {
+              "name": "book_page_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact Notion book root URL or ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--mode",
+              "type": "TEXT",
+              "required": true,
+              "help": "publication or proof; explicit"
+            },
+            {
+              "name": "--author",
+              "type": "TEXT",
+              "required": false,
+              "help": "Known author; omitted means null"
+            },
+            {
+              "name": "--image-mode",
+              "type": "TEXT",
+              "required": true,
+              "help": "native or explicitly approved ebook200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "build-pdf": {
+          "help": "Build current Notion Drafts; attach exact artifact and source manifest to the root.",
+          "arguments": [
+            {
+              "name": "book_page_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact Notion book root URL or ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--mode",
+              "type": "TEXT",
+              "required": true,
+              "help": "publication or proof; explicit"
+            },
+            {
+              "name": "--author",
+              "type": "TEXT",
+              "required": false,
+              "help": "Known author; omitted means null"
+            },
+            {
+              "name": "--image-mode",
+              "type": "TEXT",
+              "required": true,
+              "help": "native or explicitly approved ebook200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "inspect": {
+          "help": "Read-only source, schema, order and publication-readiness inspection.",
+          "arguments": [
+            {
+              "name": "book_page_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact Notion book root URL or ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--mode",
+              "type": "TEXT",
+              "required": true,
+              "help": "publication or proof; explicit"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "engine": {
+      "help": "Install the local renderer and API engine",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "install": {
+          "help": "Install locked npm dependencies and compile the standalone engine.",
+          "arguments": [],
+          "options": []
+        }
+      }
+    },
+    "formats": {
+      "help": "Formats operations with exact JSON inputs",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "plan": {
+          "help": "planGumroadFormats: preserve exact source/hash/approval gates. See gumroad schema get planGumroadFormats.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        },
+        "update": {
+          "help": "updateGumroadFormats: preserve exact source/hash/approval gates. See gumroad schema get updateGumroadFormats.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        }
+      }
+    },
+    "products": {
+      "help": "Read safe product metadata and attachment IDs",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Inspect product metadata, attachment IDs and target-state hash.",
+          "arguments": [
+            {
+              "name": "product_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact Gumroad product ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        },
+        "list": {
+          "help": "List account product destinations; never expose paid-file download URLs.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum matching products",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side field:op:value filter",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output properties",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        }
+      }
+    },
+    "releases": {
+      "help": "Releases operations with exact JSON inputs",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create-draft": {
+          "help": "createGumroadDraft: preserve exact source/hash/approval gates. See gumroad schema get createGumroadDraft.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        },
+        "plan": {
+          "help": "planGumroadRelease: preserve exact source/hash/approval gates. See gumroad schema get planGumroadRelease.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        },
+        "publish": {
+          "help": "publishGumroadBook: preserve exact source/hash/approval gates. See gumroad schema get publishGumroadBook.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        },
+        "update": {
+          "help": "updateGumroadBook: preserve exact source/hash/approval gates. See gumroad schema get updateGumroadBook.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        }
+      }
+    },
+    "schema": {
+      "help": "Inspect strict operation JSON schemas",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Return an operation's complete input schema and CLI mapping without authentication.",
+          "arguments": [
+            {
+              "name": "operation",
+              "type": "TEXT",
+              "required": true,
+              "help": "Original Worker capability key"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "Discover all capability keys and command mappings without credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum matching operation schemas",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client-side field:op:value filter",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "smoke-drafts": {
+      "help": "Smoke-Drafts operations with exact JSON inputs",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "createGumroadSmokeDraft: preserve exact source/hash/approval gates. See gumroad schema get createGumroadSmokeDraft.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        },
+        "update": {
+          "help": "updateGumroadSmokeDraft: preserve exact source/hash/approval gates. See gumroad schema get updateGumroadSmokeDraft.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        }
+      }
+    },
+    "uploads": {
+      "help": "Uploads operations with exact JSON inputs",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "smoke-test": {
+          "help": "smokeTestGumroadUpload: preserve exact source/hash/approval gates. See gumroad schema get smokeTestGumroadUpload.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--input-file",
+              "type": "file",
+              "required": true,
+              "help": "JSON object matching the documented operation schema"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad authentication profile"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `gumroad` CLI. Run `gumroad --help` to discover command groups and `--help` on any subcommand for its options."
+}

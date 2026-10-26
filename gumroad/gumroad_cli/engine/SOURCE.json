@@ -1,0 +1,13 @@
+{
+  "worker": "bookwriter-gumroad",
+  "version": "1.4.2",
+  "workerId": "01a17003-3747-77bb-9c36-373ec3fa4088",
+  "sourcePage": "https://app.notion.com/p/966cfdfb17f84c1b91e3370e915c0146",
+  "archiveSha256": "25990e2657957395f2150a18b57c4996555303641542a802eefd13e5f313964f",
+  "adaptations": [
+    "Standalone API authentication",
+    "CLI dispatch",
+    "Progress routed to stderr"
+  ],
+  "renderer": "unchanged BookWriter PDF v1.8.0"
+}

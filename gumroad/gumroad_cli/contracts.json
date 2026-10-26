@@ -1,0 +1,620 @@
+{
+  "listGumroadProducts": {
+    "group": "products",
+    "command": "list",
+    "schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    }
+  },
+  "inspectGumroadProduct": {
+    "group": "products",
+    "command": "get",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "productId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "productId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "inspectGumroadBuild": {
+    "group": "books",
+    "command": "inspect",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "publication",
+            "proof"
+          ]
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "mode"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "buildGumroadBook": {
+    "group": "books",
+    "command": "build-pdf",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "publication",
+            "proof"
+          ]
+        },
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageMode": {
+          "enum": [
+            "native",
+            "ebook200"
+          ]
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "mode",
+        "author",
+        "imageMode"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "buildGumroadEpub": {
+    "group": "books",
+    "command": "build-epub",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "publication",
+            "proof"
+          ]
+        },
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageMode": {
+          "enum": [
+            "native",
+            "ebook200"
+          ]
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "mode",
+        "author",
+        "imageMode"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "smokeTestGumroadUpload": {
+    "group": "uploads",
+    "command": "smoke-test",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "author": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "imageMode": {
+          "enum": [
+            "native",
+            "ebook200"
+          ]
+        },
+        "confirmStagingUpload": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "author",
+        "imageMode",
+        "confirmStagingUpload"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "createGumroadSmokeDraft": {
+    "group": "smoke-drafts",
+    "command": "create",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "pdfFileBlockId": {
+          "type": "string"
+        },
+        "overrideFinalStatusForSmokeTest": {
+          "type": "boolean"
+        },
+        "confirmCreateUnpublishedDraft": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "pdfFileBlockId",
+        "overrideFinalStatusForSmokeTest",
+        "confirmCreateUnpublishedDraft"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateGumroadSmokeDraft": {
+    "group": "smoke-drafts",
+    "command": "update",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "pdfFileBlockId": {
+          "type": "string"
+        },
+        "productId": {
+          "type": "string"
+        },
+        "replaceFileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overrideFinalStatusForSmokeTest": {
+          "type": "boolean"
+        },
+        "confirmUpdateUnpublishedDraft": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "pdfFileBlockId",
+        "productId",
+        "replaceFileId",
+        "overrideFinalStatusForSmokeTest",
+        "confirmUpdateUnpublishedDraft"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "planGumroadRelease": {
+    "group": "releases",
+    "command": "plan",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "pdfFileBlockId": {
+          "type": "string"
+        },
+        "productId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replaceFileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priceCents": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "descriptionHtml": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "pdfFileBlockId",
+        "productId",
+        "replaceFileId",
+        "name",
+        "priceCents",
+        "currency",
+        "descriptionHtml"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "createGumroadDraft": {
+    "group": "releases",
+    "command": "create-draft",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "pdfFileBlockId": {
+          "type": "string"
+        },
+        "productId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replaceFileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priceCents": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "descriptionHtml": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expectedPlanHash": {
+          "type": "string"
+        },
+        "reviewedPdfSha256": {
+          "type": "string"
+        },
+        "confirmSourceMatchesReviewedPdf": {
+          "type": "boolean"
+        },
+        "confirmCreateDraft": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "pdfFileBlockId",
+        "productId",
+        "replaceFileId",
+        "name",
+        "priceCents",
+        "currency",
+        "descriptionHtml",
+        "expectedPlanHash",
+        "reviewedPdfSha256",
+        "confirmSourceMatchesReviewedPdf",
+        "confirmCreateDraft"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateGumroadBook": {
+    "group": "releases",
+    "command": "update",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "pdfFileBlockId": {
+          "type": "string"
+        },
+        "productId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replaceFileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priceCents": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "descriptionHtml": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expectedPlanHash": {
+          "type": "string"
+        },
+        "reviewedPdfSha256": {
+          "type": "string"
+        },
+        "confirmSourceMatchesReviewedPdf": {
+          "type": "boolean"
+        },
+        "confirmLiveUpdate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "pdfFileBlockId",
+        "productId",
+        "replaceFileId",
+        "name",
+        "priceCents",
+        "currency",
+        "descriptionHtml",
+        "expectedPlanHash",
+        "reviewedPdfSha256",
+        "confirmSourceMatchesReviewedPdf",
+        "confirmLiveUpdate"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "publishGumroadBook": {
+    "group": "releases",
+    "command": "publish",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "pdfFileBlockId": {
+          "type": "string"
+        },
+        "productId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "replaceFileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "priceCents": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "descriptionHtml": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expectedPlanHash": {
+          "type": "string"
+        },
+        "reviewedPdfSha256": {
+          "type": "string"
+        },
+        "confirmSourceMatchesReviewedPdf": {
+          "type": "boolean"
+        },
+        "confirmProductId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "pdfFileBlockId",
+        "productId",
+        "replaceFileId",
+        "name",
+        "priceCents",
+        "currency",
+        "descriptionHtml",
+        "expectedPlanHash",
+        "reviewedPdfSha256",
+        "confirmSourceMatchesReviewedPdf",
+        "confirmProductId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "planGumroadFormats": {
+    "group": "formats",
+    "command": "plan",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "pdfFileBlockId": {
+          "type": "string"
+        },
+        "epubFileBlockId": {
+          "type": "string"
+        },
+        "productId": {
+          "type": "string"
+        },
+        "replacePdfFileId": {
+          "type": "string"
+        },
+        "replaceEpubFileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "pdfFileBlockId",
+        "epubFileBlockId",
+        "productId",
+        "replacePdfFileId",
+        "replaceEpubFileId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "updateGumroadFormats": {
+    "group": "formats",
+    "command": "update",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "bookPageUrl": {
+          "type": "string"
+        },
+        "pdfFileBlockId": {
+          "type": "string"
+        },
+        "epubFileBlockId": {
+          "type": "string"
+        },
+        "productId": {
+          "type": "string"
+        },
+        "replacePdfFileId": {
+          "type": "string"
+        },
+        "replaceEpubFileId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "expectedPlanHash": {
+          "type": "string"
+        },
+        "reviewedPdfSha256": {
+          "type": "string"
+        },
+        "reviewedEpubSha256": {
+          "type": "string"
+        },
+        "confirmReviewedFormats": {
+          "type": "boolean"
+        },
+        "confirmLiveUpdate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bookPageUrl",
+        "pdfFileBlockId",
+        "epubFileBlockId",
+        "productId",
+        "replacePdfFileId",
+        "replaceEpubFileId",
+        "expectedPlanHash",
+        "reviewedPdfSha256",
+        "reviewedEpubSha256",
+        "confirmReviewedFormats",
+        "confirmLiveUpdate"
+      ],
+      "additionalProperties": false
+    }
+  }
+}
