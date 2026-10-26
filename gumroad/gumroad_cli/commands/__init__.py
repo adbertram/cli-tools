@@ -1,1 +1,1 @@
-"""Per-group credential declarations; command logic remains centralized."""
+"""Per-group credential metadata for centralized command implementations."""

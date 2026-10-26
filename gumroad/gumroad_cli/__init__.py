@@ -1,3 +1,2 @@
-"""Gumroad CLI - Command-line interface for Gumroad API."""
-
-__version__ = "0.1.0"
+"""Gumroad API CLI."""
+__version__ = "0.2.0"

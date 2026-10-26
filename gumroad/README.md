@@ -2,86 +2,97 @@
 
 ## DESCRIPTION
 
-Use this CLI to build PDF and EPUB books from current Notion chapter Drafts, inspect Gumroad products, and deploy reviewed book releases through Gumroad's API. This is a standalone local conversion of the BookWriter Gumroad Worker. All 14 capabilities retain their source/readiness/hash/approval checks.
+The `gumroad` CLI manages Gumroad products and uploads existing local files through the Gumroad API. Use it to inspect products, stage files, create unpublished digital products, update selected metadata or attachments, and publish an explicitly selected product.
 
-## Installation
+## Installation and authentication
 
-The Python CLI uses the cli-tools installer. Node.js 22+ and npm are required for the bundled local renderer and API engine. After installing the Python CLI, run:
-
-```bash
-gumroad engine install
-gumroad --help
-```
-
-The engine installs its committed npm lockfile, then compiles TypeScript locally. No remote Worker or general LLM is invoked. `engine install` is explicit and never runs during a product write. To validate the source: `npm run check` and `npm test` from `gumroad_cli/engine`; `uv run --with pytest python -m pytest tests` from this tool directory.
-
-## Authentication
-
-Run `gumroad auth login` for an own-account Gumroad access token with `edit_products`, generated at https://gumroad.com/settings/advanced. The shared auth flow stores reusable secrets in the CLI-tools secret manager and only a `secret://` reference in the auth profile. Never paste credentials into a command, JSON input or `.env`. `gumroad auth login --force` revalidates the profile; `gumroad auth status` reports live Gumroad authentication. Select another saved Gumroad profile with the operation's `--profile` option.
-
-Book operations separately reuse the existing CLI-tools secret `notion-api-token`, owned by the Notion CLI. That connection must have read access to the book root and chapters and insert access for builds/receipts. Product inspection needs only Gumroad; book inspection/builds need only Notion; release operations need both. No hosted Worker secrets are read.
-
-## Output contract
-
-stdout is one JSON document by default, or a table with `--table/-t`. Progress/errors go to stderr. Product output intentionally follows the Worker safe metadata contract: no signed/canonical paid-file URLs or buyer data. Product lists return id/name/published/price/currency records. Product get returns safe product/attachment metadata and productHash. Build results return native artifact/manifest block IDs, exact bytes/hashes, source digest, counts and warnings. Release results retain the original operation, delivery verification, no-op and receipt fields. `gumroad schema get CAPABILITY` prints every exact JSON input field and its type; no authentication is required.
-
-Every list supports `--filter/-f`, `--limit/-l`, `--properties/-p` and `--table/-t`. Filtering is client-side and precedes the limit; the API is fully paginated (bounded to 100 pages by the original engine). Shared filters support `field:op:value` syntax.
-
-## Commands
-
-```bash
-gumroad products list --filter 'published:eq:true' --limit 20 --table
-gumroad products get 'PRODUCT_ID'
-gumroad books inspect 'NOTION_BOOK_URL' --mode publication
-gumroad books build-pdf 'NOTION_BOOK_URL' --mode proof --image-mode native --author 'Known Author'
-gumroad books build-epub 'NOTION_BOOK_URL' --mode publication --image-mode native
-gumroad schema list --table
-gumroad schema get updateGumroadFormats
-gumroad engine install
-```
-
-For the complex release/upload operations, `--input-file` is a strict JSON object matching the printed schema. Every field is required, including explicit nulls. Unknown fields/types/enums fail before network calls. Hashes and approval flags must reflect actual review; they are never generated as a substitute for review. Example read-only release plan input:
-
-```json
-{
-  "bookPageUrl": "NOTION_BOOK_URL",
-  "pdfFileBlockId": "EXACT_FRESH_PUBLICATION_PDF_BLOCK_ID",
-  "productId": "PRODUCT_ID",
-  "replaceFileId": "CURRENT_PDF_FILE_ID",
-  "name": null,
-  "priceCents": null,
-  "currency": null,
-  "descriptionHtml": null
-}
-```
-
-Save that as `release-plan.json`, then run `gumroad releases plan --input-file release-plan.json`. For a new draft, productId/replaceFileId are null and name/priceCents/currency are explicit operator choices. A publication build requires all chapters Final and no DETAIL markers. Proof mode must be explicit and cannot pass normal deployment/publication. Author omission is null, never an invented author. Use ebook200 only with approval for that book.
-
-### Complete Worker capability coverage
-
-| Worker capability | CLI command example |
-| --- | --- |
-| `listGumroadProducts` | `gumroad products list --limit 20` |
-| `inspectGumroadProduct` | `gumroad products get PRODUCT_ID` |
-| `inspectGumroadBuild` | `gumroad books inspect NOTION_BOOK_URL --mode publication` |
-| `buildGumroadBook` | `gumroad books build-pdf NOTION_BOOK_URL --mode publication --image-mode native` |
-| `buildGumroadEpub` | `gumroad books build-epub NOTION_BOOK_URL --mode publication --image-mode native` |
-| `smokeTestGumroadUpload` | `gumroad uploads smoke-test --input-file smokeTestGumroadUpload.json` |
-| `createGumroadSmokeDraft` | `gumroad smoke-drafts create --input-file createGumroadSmokeDraft.json` |
-| `updateGumroadSmokeDraft` | `gumroad smoke-drafts update --input-file updateGumroadSmokeDraft.json` |
-| `planGumroadRelease` | `gumroad releases plan --input-file planGumroadRelease.json` |
-| `createGumroadDraft` | `gumroad releases create-draft --input-file createGumroadDraft.json` |
-| `updateGumroadBook` | `gumroad releases update --input-file updateGumroadBook.json` |
-| `publishGumroadBook` | `gumroad releases publish --input-file publishGumroadBook.json` |
-| `planGumroadFormats` | `gumroad formats plan --input-file planGumroadFormats.json` |
-| `updateGumroadFormats` | `gumroad formats update --input-file updateGumroadFormats.json` |
-
-Every complex operation's JSON schema is available as `gumroad schema get CAPABILITY`; its matching example above is the complete invocation. This includes uploads smoke-test, smoke-drafts create/update, releases plan/create-draft/update/publish and formats plan/update. Their input JSON uses the same field names as the Worker. Boolean approvals remain mandatory and false is never treated as approval.
-
-### Shared commands
+Install with the cli-tools installer. This is a Python CLI with no Node.js, renderer, manuscript system, or external workspace dependency.
 
 ```bash
 gumroad auth login
+gumroad auth status
+```
+
+Generate an own-account access token with `edit_products` at https://gumroad.com/settings/advanced. Enter the access token, not an application secret. The shared auth flow stores reusable credentials in the CLI-tools secret manager and saves only a reference in the auth profile; never put credentials in command arguments, source files or `.env`. Service commands accept `--profile` for another saved account/profile.
+
+## Product inspection
+
+```bash
+gumroad products list --table
+gumroad products list --filter 'published:eq:true' --limit 20 --properties 'id,name,price,currency'
+gumroad products get 'PRODUCT_ID'
+```
+
+Lists return complete product records. `--filter/-f`, `--limit/-l`, `--properties/-p` and `--table/-t` are supported. Filtering and limiting are client-side: the API product catalog is paginated first, with a 100-page safety bound, then filters and the matching-result limit are applied. Get returns the complete API response plus `state_hash`, a stable hash of editable product metadata and attachment identities that excludes expiring download URLs and sales counters. Supply it as `--expected-state` when an update or publication must match a prior inspection.
+
+JSON is the default stdout format. Progress and errors go to stderr. Full product responses can contain private signed attachment URLs; handle the output as private account data.
+
+## Upload an existing file
+
+```bash
+gumroad files upload ./existing-file.zip --dry-run
+umask 077
+gumroad files upload ./existing-file.zip --yes > upload.json
+```
+
+Upload accepts any existing nonempty file up to the Gumroad API's 20 GiB limit. It sends 100 MiB parts through presign → signed S3 PUTs with ETags → complete. Memory is bounded to one part. A dry run computes the local file's size and SHA-256 without API calls. A successful real upload returns this JSON receipt shape:
+
+```json
+{
+  "kind": "gumroad-upload",
+  "version": 1,
+  "filename": "existing-file.zip",
+  "size": 1234,
+  "sha256": "EXACT_64_CHARACTER_LOWERCASE_SHA256",
+  "upload": {"success": true, "file_url": "EXACT_CANONICAL_URL_FROM_GUMROAD_FILES_COMPLETE"}
+}
+```
+
+The actual receipt contains the complete upload-completion response. Its canonical `file_url` is a private attachment input, not a customer download URL or an authentication token. Preserve it exactly; don't construct it from signed download URLs or share it publicly. Passing a receipt stages/attaches those exact bytes; the upload alone neither creates nor changes a product. Malformed receipts fail before product API mutations.
+
+## Create an unpublished product
+
+```bash
+gumroad products create-draft --name 'My Product' --price-cents 1500 --currency usd --upload-receipt upload.json --dry-run
+gumroad products create-draft --name 'My Product' --price-cents 1500 --currency usd --description-file description.html --upload-receipt upload.json --yes
+```
+
+Name, integer price in smallest currency units, and lowercase currency are explicit. `--description-file` reads UTF-8 HTML; omitting it leaves description creation to Gumroad. `--upload-receipt` is optional. Creation explicitly sends `native_type:digital`, `draft:true` and `published:false`, then verifies the product remains unpublished. It never guesses a price or publishes automatically. A repeated creation is a new-product request; inspect after an ambiguous result rather than rerunning it.
+
+## Update metadata or a selected attachment
+
+```bash
+gumroad products update 'PRODUCT_ID' --name 'Updated Name' --price-cents 1800 --dry-run
+gumroad products update 'PRODUCT_ID' --description-file revised.html --yes
+gumroad products update 'PRODUCT_ID' --upload-receipt upload.json --replace-file-id 'EXACT_CURRENT_FILE_ID' --expected-state 'STATE_HASH' --dry-run
+gumroad products update 'PRODUCT_ID' --upload-receipt upload.json --replace-file-id 'EXACT_CURRENT_FILE_ID' --confirm-live-update --yes
+gumroad products update 'PRODUCT_ID' --upload-receipt upload.json --append-file --yes
+```
+
+Only supplied metadata fields are sent: `--name`, `--price-cents`, `--currency` and `--description-file`. Omitted fields retain their current values; an empty description file explicitly clears the description. Gumroad may sanitize supplied HTML; read the returned product to review its canonical description.
+
+A file update requires either an exact attached `--replace-file-id` or explicit `--append-file`. Every other current attachment is retained using an ID-only entry, including existing uploaded files. The CLI never resubmits signed download URLs as canonical upload URLs. Gumroad's files array replaces the complete attachment set, so the CLI builds it from the current product and rechecks state immediately before writing. A selected file with identical delivered bytes is retained as a verified no-op (or only requested metadata is changed). Explicit append adds another attachment and may duplicate content if deliberately repeated; it is never automatically retried.
+
+Published-product updates require `--confirm-live-update` because metadata/download changes affect buyers immediately. Metadata-only updates omit the files array. Post-write reads verify publication state, requested name/price/currency, preserved description when omitted, retained attachment IDs and the delivered new file's size/SHA-256. No file format or manuscript status is imposed. Provider restrictions such as files still referenced by rich content are returned as failures; the CLI does not rewrite buyer content to bypass them.
+
+## Publish separately
+
+```bash
+gumroad products publish 'PRODUCT_ID' --dry-run
+gumroad products publish 'PRODUCT_ID' --confirm-product-id 'PRODUCT_ID' --expected-state 'STATE_HASH' --yes
+```
+
+Publication requires exact product-ID confirmation and a separate write authorization. It publishes the existing product without uploading/replacing files, and verifies the resulting publication state and unchanged metadata/file identities. An already-published product is a verified no-op.
+
+## Write confirmation and recovery
+
+Every mutating command requires `--yes` or `--dry-run`. File upload and draft-creation previews are offline; update/publication previews read current product state but perform no writes. Dry-run requests and real requests share the same payload construction.
+
+No API/product/upload-completion write is retried automatically. Failed parts receive one abort attempt; accepted abort means cleanup is not yet confirmed. An ambiguous completion is never followed by abort or repeated completion. Upload errors identify the non-secret `upload_id` for investigation. Product/write/readback failures must be investigated through `products get` before another attempt. A verified API write followed by a delivery-check failure does not mean the write failed. Operations are not transactional across service calls; avoid concurrent edits to the same product.
+
+## Shared commands
+
+```bash
 gumroad auth login --force
 gumroad auth status --table
 gumroad auth test
@@ -96,16 +107,10 @@ gumroad auth profiles remove retired
 gumroad cache clear
 ```
 
-Use `gumroad auth --help`, `gumroad auth profiles --help` and `gumroad cache --help` for the installed shared infrastructure's full options. No API response cache is used for source/target freshness or approval checks.
+No response caching is used for mutation freshness checks. The CLI exposes only `products`, `files`, `auth` and `cache`; no sales, audience email or other unrelated operations are added.
 
-## Release safety and recovery
+## API contract and provenance
 
-Build PDF and EPUB serially from the same stable current Notion source. Builds attach derived artifacts/manifests; they never edit prose or chapter statuses. Review exact artifacts and current plan hashes before writing. New products are always unpublished. Publishing is separate and requires the exact product confirmation. A published-product update changes buyer downloads immediately and requires confirmLiveUpdate. The multi-format path preserves unchanged formats with ID-only entries and verifies delivered bytes and retained IDs; changed formats may receive new IDs. Unknown uploaded attachments, unsafe links, variants/bundles/subscriptions and stale plans fail closed. Single-PDF tools refuse an extra uploaded EPUB; use formats plan/update for later dual-format releases.
+The Gumroad API interactions were translated from the Gumroad-specific portions of `bookwriter-gumroad` v1.4.2, portable archive SHA-256 `25990e2657957395f2150a18b57c4996555303641542a802eefd13e5f313964f`. Current provider source was checked against [product create/update/enable](https://github.com/antiwork/gumroad/blob/main/app/controllers/api/v2/links_controller.rb), [multipart file endpoints](https://github.com/antiwork/gumroad/blob/main/app/controllers/api/v2/files_controller.rb), [ID-only retention tests](https://github.com/antiwork/gumroad/blob/main/spec/requests/api/v2/product_files_params_spec.rb) and [digital type definitions](https://github.com/antiwork/gumroad/blob/main/app/models/link.rb). Generic book building and publishing orchestration are outside this service CLI.
 
-No audience email command exists. No automatic write retry exists. The Notion SDK retry mechanism is explicitly disabled. An ambiguous upload/attachment/product/publication result must be inspected before another attempt; a receipt failure after verified delivery is not permission to repeat the write. Serialise operations per book/product and avoid source edits during a release. Cross-provider snapshots are not atomic and the APIs offer no transactional rollback.
-
-EPUB contains embedded PDF page images with extracted-text alternatives, not reconstructed reflowable guide pages. Run EPUBCheck and inspect the exact output before approving delivery. The original media/output budgets and renderer remain unchanged. The inherited renderer npm dependencies retain known high advisories; conversion does not claim a clean security audit.
-
-## Provenance
-
-Source: [Gumroad Builds and Deployments](https://app.notion.com/p/966cfdfb17f84c1b91e3370e915c0146), Worker bookwriter-gumroad v1.4.2, ID 01a17003-3747-77bb-9c36-373ec3fa4088. Portable archive SHA-256: `25990e2657957395f2150a18b57c4996555303641542a802eefd13e5f313964f`. `gumroad_cli/engine/SOURCE.json` records adaptations. Bundled third-party notices, fonts/license, renderer origin and original synthetic tests are preserved. Standalone PDF/Leanpub Workers are untouched. Current API implementation: https://github.com/antiwork/gumroad/blob/main/app/controllers/api/v2/links_controller.rb and https://github.com/antiwork/gumroad/blob/main/spec/requests/api/v2/product_files_params_spec.rb.
+Run focused synthetic tests with `uv run --with pytest python -m pytest tests` from this tool directory. Live validation uses authenticated product reads only; synthetic fixtures cover mutation bodies, confirmation refusal, private upload receipts, attachment retention, delivery hashes and ambiguous failures without changing real products.

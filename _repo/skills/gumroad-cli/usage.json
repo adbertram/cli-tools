@@ -1,8 +1,8 @@
 {
   "tool": "gumroad",
   "description": "CLI interface for gumroad",
-  "discovered_at": "2026-10-26T20:45:00Z",
-  "total_commands": 29,
+  "discovered_at": "2026-10-26T21:01:44Z",
+  "total_commands": 18,
   "global_options": [],
   "commands": {
     "auth": {
@@ -259,143 +259,6 @@
         }
       }
     },
-    "books": {
-      "help": "Read current Notion manuscripts and build derived artifacts",
-      "arguments": [],
-      "options": [
-        {
-          "name": "--profile",
-          "type": "TEXT",
-          "required": false,
-          "help": "Auth profile name"
-        }
-      ],
-      "commands": {
-        "build-epub": {
-          "help": "Build current Notion Drafts; attach exact artifact and source manifest to the root.",
-          "arguments": [
-            {
-              "name": "book_page_url",
-              "type": "TEXT",
-              "required": true,
-              "help": "Exact Notion book root URL or ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--mode",
-              "type": "TEXT",
-              "required": true,
-              "help": "publication or proof; explicit"
-            },
-            {
-              "name": "--author",
-              "type": "TEXT",
-              "required": false,
-              "help": "Known author; omitted means null"
-            },
-            {
-              "name": "--image-mode",
-              "type": "TEXT",
-              "required": true,
-              "help": "native or explicitly approved ebook200"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        },
-        "build-pdf": {
-          "help": "Build current Notion Drafts; attach exact artifact and source manifest to the root.",
-          "arguments": [
-            {
-              "name": "book_page_url",
-              "type": "TEXT",
-              "required": true,
-              "help": "Exact Notion book root URL or ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--mode",
-              "type": "TEXT",
-              "required": true,
-              "help": "publication or proof; explicit"
-            },
-            {
-              "name": "--author",
-              "type": "TEXT",
-              "required": false,
-              "help": "Known author; omitted means null"
-            },
-            {
-              "name": "--image-mode",
-              "type": "TEXT",
-              "required": true,
-              "help": "native or explicitly approved ebook200"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        },
-        "inspect": {
-          "help": "Read-only source, schema, order and publication-readiness inspection.",
-          "arguments": [
-            {
-              "name": "book_page_url",
-              "type": "TEXT",
-              "required": true,
-              "help": "Exact Notion book root URL or ID"
-            }
-          ],
-          "options": [
-            {
-              "name": "--mode",
-              "type": "TEXT",
-              "required": true,
-              "help": "publication or proof; explicit"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        }
-      }
-    },
     "cache": {
       "help": "Manage response cache",
       "arguments": [],
@@ -415,8 +278,8 @@
         }
       }
     },
-    "engine": {
-      "help": "Install the local renderer and API engine",
+    "files": {
+      "help": "Upload existing local files to Gumroad staging",
       "arguments": [],
       "options": [
         {
@@ -427,41 +290,30 @@
         }
       ],
       "commands": {
-        "install": {
-          "help": "Install locked npm dependencies and compile the standalone engine.",
-          "arguments": [],
-          "options": [
+        "upload": {
+          "help": "Upload through presign/parts/complete; return a private attachment receipt.",
+          "arguments": [
             {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        }
-      }
-    },
-    "formats": {
-      "help": "Formats operations with exact JSON inputs",
-      "arguments": [],
-      "options": [
-        {
-          "name": "--profile",
-          "type": "TEXT",
-          "required": false,
-          "help": "Auth profile name"
-        }
-      ],
-      "commands": {
-        "plan": {
-          "help": "planGumroadFormats: preserve exact source/hash/approval gates. See gumroad schema get planGumroadFormats.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--input-file",
+              "name": "path",
               "type": "file",
               "required": true,
-              "help": "JSON object matching the documented operation schema"
+              "help": "Existing nonempty local file, at most20GiB"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Authorize staging upload (does not attach to a product)",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Hash/inspect local file; no API calls",
+              "takes_value": false
             },
             {
               "name": "--table",
@@ -475,40 +327,14 @@
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Gumroad authentication profile"
-            }
-          ]
-        },
-        "update": {
-          "help": "updateGumroadFormats: preserve exact source/hash/approval gates. See gumroad schema get updateGumroadFormats.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--input-file",
-              "type": "file",
-              "required": true,
-              "help": "JSON object matching the documented operation schema"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Gumroad authentication profile"
+              "help": "Gumroad auth profile"
             }
           ]
         }
       }
     },
     "products": {
-      "help": "Read safe product metadata and attachment IDs",
+      "help": "Inspect, create draft, update and publish Gumroad products",
       "arguments": [],
       "options": [
         {
@@ -519,8 +345,72 @@
         }
       ],
       "commands": {
+        "create-draft": {
+          "help": "Create an explicitly priced product, always unpublished; optionally attach a staged file.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit product name"
+            },
+            {
+              "name": "--price-cents",
+              "type": "INTEGER",
+              "required": true,
+              "help": "[x>=0]  Explicit price in smallest currency units"
+            },
+            {
+              "name": "--currency",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit lowercase ISO currency"
+            },
+            {
+              "name": "--description-file",
+              "type": "file",
+              "required": false,
+              "help": "Approved UTF-8 HTML description"
+            },
+            {
+              "name": "--upload-receipt",
+              "type": "file",
+              "required": false,
+              "help": "Exact files upload JSON receipt to attach"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Authorize unpublished product creation",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Show request without API calls",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Table output",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Gumroad auth profile"
+            }
+          ]
+        },
         "get": {
-          "help": "Inspect product metadata, attachment IDs and target-state hash.",
+          "help": "Return full product API response plus stable editable-state hash.",
           "arguments": [
             {
               "name": "product_id",
@@ -542,12 +432,12 @@
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Gumroad authentication profile"
+              "help": "Gumroad auth profile"
             }
           ]
         },
         "list": {
-          "help": "List account product destinations; never expose paid-file download URLs.",
+          "help": "List complete API product records; filter before applying the result limit.",
           "arguments": [],
           "options": [
             {
@@ -584,194 +474,46 @@
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Gumroad authentication profile"
-            }
-          ]
-        }
-      }
-    },
-    "releases": {
-      "help": "Releases operations with exact JSON inputs",
-      "arguments": [],
-      "options": [
-        {
-          "name": "--profile",
-          "type": "TEXT",
-          "required": false,
-          "help": "Auth profile name"
-        }
-      ],
-      "commands": {
-        "create-draft": {
-          "help": "createGumroadDraft: preserve exact source/hash/approval gates. See gumroad schema get createGumroadDraft.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--input-file",
-              "type": "file",
-              "required": true,
-              "help": "JSON object matching the documented operation schema"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Gumroad authentication profile"
-            }
-          ]
-        },
-        "plan": {
-          "help": "planGumroadRelease: preserve exact source/hash/approval gates. See gumroad schema get planGumroadRelease.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--input-file",
-              "type": "file",
-              "required": true,
-              "help": "JSON object matching the documented operation schema"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Gumroad authentication profile"
+              "help": "Gumroad auth profile"
             }
           ]
         },
         "publish": {
-          "help": "publishGumroadBook: preserve exact source/hash/approval gates. See gumroad schema get publishGumroadBook.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--input-file",
-              "type": "file",
-              "required": true,
-              "help": "JSON object matching the documented operation schema"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Gumroad authentication profile"
-            }
-          ]
-        },
-        "update": {
-          "help": "updateGumroadBook: preserve exact source/hash/approval gates. See gumroad schema get updateGumroadBook.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--input-file",
-              "type": "file",
-              "required": true,
-              "help": "JSON object matching the documented operation schema"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Gumroad authentication profile"
-            }
-          ]
-        }
-      }
-    },
-    "schema": {
-      "help": "Inspect strict operation JSON schemas",
-      "arguments": [],
-      "options": [
-        {
-          "name": "--profile",
-          "type": "TEXT",
-          "required": false,
-          "help": "Auth profile name"
-        }
-      ],
-      "commands": {
-        "get": {
-          "help": "Return an operation's complete input schema and CLI mapping without authentication.",
+          "help": "Publish the exact selected existing product separately from creation/upload.",
           "arguments": [
             {
-              "name": "operation",
+              "name": "product_id",
               "type": "TEXT",
               "required": true,
-              "help": "Original Worker capability key"
+              "help": "Exact existing Gumroad product ID"
             }
           ],
           "options": [
             {
-              "name": "--table",
+              "name": "--confirm-product-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Repeat exact product ID to authorize publication"
+            },
+            {
+              "name": "--expected-state",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional state_hash from prior get/dry-run"
+            },
+            {
+              "name": "--yes",
               "type": "bool",
               "required": false,
-              "help": "Table output",
-              "short": "-t",
+              "help": "Authorize publication",
               "takes_value": false
             },
             {
-              "name": "--profile",
-              "type": "TEXT",
+              "name": "--dry-run",
+              "type": "bool",
               "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        },
-        "list": {
-          "help": "Discover all capability keys and command mappings without credentials.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--limit",
-              "type": "INTEGER",
-              "required": false,
-              "help": "[x>=1]  Maximum matching operation schemas",
-              "short": "-l",
-              "default": "100"
-            },
-            {
-              "name": "--filter",
-              "type": "TEXT",
-              "required": false,
-              "help": "Client-side field:op:value filter",
-              "short": "-f"
-            },
-            {
-              "name": "--properties",
-              "type": "TEXT",
-              "required": false,
-              "help": "Comma-separated output fields",
-              "short": "-p"
+              "help": "Inspect current product and show publication request; no writes",
+              "takes_value": false
             },
             {
               "name": "--table",
@@ -785,99 +527,90 @@
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Auth profile name"
-            }
-          ]
-        }
-      }
-    },
-    "smoke-drafts": {
-      "help": "Smoke-Drafts operations with exact JSON inputs",
-      "arguments": [],
-      "options": [
-        {
-          "name": "--profile",
-          "type": "TEXT",
-          "required": false,
-          "help": "Auth profile name"
-        }
-      ],
-      "commands": {
-        "create": {
-          "help": "createGumroadSmokeDraft: preserve exact source/hash/approval gates. See gumroad schema get createGumroadSmokeDraft.",
-          "arguments": [],
-          "options": [
-            {
-              "name": "--input-file",
-              "type": "file",
-              "required": true,
-              "help": "JSON object matching the documented operation schema"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
-              "type": "TEXT",
-              "required": false,
-              "help": "Gumroad authentication profile"
+              "help": "Gumroad auth profile"
             }
           ]
         },
         "update": {
-          "help": "updateGumroadSmokeDraft: preserve exact source/hash/approval gates. See gumroad schema get updateGumroadSmokeDraft.",
-          "arguments": [],
-          "options": [
+          "help": "Update selected metadata and/or one attachment; retain all other files by exact ID.",
+          "arguments": [
             {
-              "name": "--input-file",
-              "type": "file",
-              "required": true,
-              "help": "JSON object matching the documented operation schema"
-            },
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Table output",
-              "short": "-t",
-              "takes_value": false
-            },
-            {
-              "name": "--profile",
+              "name": "product_id",
               "type": "TEXT",
-              "required": false,
-              "help": "Gumroad authentication profile"
+              "required": true,
+              "help": "Exact existing Gumroad product ID"
             }
-          ]
-        }
-      }
-    },
-    "uploads": {
-      "help": "Uploads operations with exact JSON inputs",
-      "arguments": [],
-      "options": [
-        {
-          "name": "--profile",
-          "type": "TEXT",
-          "required": false,
-          "help": "Auth profile name"
-        }
-      ],
-      "commands": {
-        "smoke-test": {
-          "help": "smokeTestGumroadUpload: preserve exact source/hash/approval gates. See gumroad schema get smokeTestGumroadUpload.",
-          "arguments": [],
+          ],
           "options": [
             {
-              "name": "--input-file",
+              "name": "--name",
+              "type": "TEXT",
+              "required": false,
+              "help": "New product name; omitted preserves current"
+            },
+            {
+              "name": "--price-cents",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=0]  New price in smallest currency units"
+            },
+            {
+              "name": "--currency",
+              "type": "TEXT",
+              "required": false,
+              "help": "New lowercase ISO currency"
+            },
+            {
+              "name": "--description-file",
               "type": "file",
-              "required": true,
-              "help": "JSON object matching the documented operation schema"
+              "required": false,
+              "help": "New UTF-8 HTML description; omitted preserves current"
+            },
+            {
+              "name": "--upload-receipt",
+              "type": "file",
+              "required": false,
+              "help": "Exact staged files upload receipt"
+            },
+            {
+              "name": "--replace-file-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact existing attachment ID to replace"
+            },
+            {
+              "name": "--append-file",
+              "type": "bool",
+              "required": false,
+              "help": "Explicitly add staged file while retaining all existing files",
+              "takes_value": false
+            },
+            {
+              "name": "--expected-state",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional state_hash from a prior get/dry-run"
+            },
+            {
+              "name": "--confirm-live-update",
+              "type": "bool",
+              "required": false,
+              "help": "Authorize immediate buyer-facing changes to a published product",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Authorize this product update",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Read current product and show exact request; no writes",
+              "takes_value": false
             },
             {
               "name": "--table",
@@ -891,7 +624,7 @@
               "name": "--profile",
               "type": "TEXT",
               "required": false,
-              "help": "Gumroad authentication profile"
+              "help": "Gumroad auth profile"
             }
           ]
         }

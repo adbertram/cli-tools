@@ -1,37 +1,34 @@
-"""Gumroad owns its PAT; Notion retains its existing separately managed token."""
-import requests
+"""Gumroad personal-access-token configuration."""
 from cli_tools_shared.config import BaseConfig, config_for, resolve_tool_dir
 from cli_tools_shared.credentials import CredentialType
+
+
+API_URL = "https://api.gumroad.com/v2"
 
 
 class Config(BaseConfig):
     DIST_NAME = "gumroad-cli"
     CREDENTIAL_TYPES = [CredentialType.PERSONAL_ACCESS_TOKEN]
-    DEFAULT_BASE_URL = "https://api.gumroad.com/v2"
+    DEFAULT_BASE_URL = API_URL
     AUTH_SETUP_INSTRUCTIONS = (
         "Generate an own-account access token with edit_products at "
-        "https://gumroad.com/settings/advanced. Enter the access token, not an app secret. "
-        "Book commands separately reuse the CLI-tools secret notion-api-token."
+        "https://gumroad.com/settings/advanced. Enter the access token, not an app secret."
     )
 
     def __init__(self, profile=None):
         super().__init__(tool_dir=resolve_tool_dir(self.DIST_NAME), profile=profile)
 
     def test_connection(self):
+        from .client import GumroadClient
+        from cli_tools_shared.exceptions import ClientError
         try:
-            response = requests.get(
-                self.DEFAULT_BASE_URL + "/products",
-                headers={"Authorization": f"Bearer {self.personal_access_token}"},
-                timeout=45, allow_redirects=False,
-            )
-            if response.status_code != 200:
-                return {"api_test": f"failed: Gumroad HTTP {response.status_code}"}
-            data = response.json()
-            if not isinstance(data, dict) or data.get("success") is not True or not isinstance(data.get("products"), list):
+            data = GumroadClient(config=self).call("GET", "/products")
+            if not isinstance(data.get("products"), list):
                 return {"api_test": "failed: Invalid Gumroad product response"}
             return {"api_test": "passed"}
-        except (requests.RequestException, ValueError):
-            return {"api_test": "failed: Gumroad connection failed"}
+        except ClientError as exc:
+            return {"api_test": f"failed: {exc}"}
+
 
 
 _configs = {}
