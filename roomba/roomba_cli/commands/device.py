@@ -3,6 +3,7 @@
 Handles all robot configuration: list, get, add (manual), discover (passive scan).
 """
 import typer
+from cli_tools_shared.output import command
 from typing import Optional
 
 from pydantic import BaseModel
@@ -10,7 +11,7 @@ COMMAND_CREDENTIALS = {
     "add": ["custom"],
     "get": ["custom"],
     "list": ["custom"],
-    "discover": [],  # Passive scan, no credentials needed
+    "discover": ["no_auth"],  # Passive scan, no credentials needed
 }
 
 from ..client import get_client, ClientError
@@ -65,9 +66,11 @@ def extract_fields(items: list, fields: list) -> list:
 
 
 @app.command("list")
+@command
 def device_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
-    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of devices to return"),
+    limit: int = typer.Option(100, "--limit", "-l", min=1, help="Maximum number of devices to return"),
+    filter: Optional[list[str]] = typer.Option(None, "--filter", "-f", help="Filter field:operator:value"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated fields to display"),
 ):
     """List configured Roomba devices.
@@ -79,7 +82,9 @@ def device_list(
     """
     try:
         client = get_client()
-        robots = client.list_robots(limit=limit)
+        from cli_tools_shared.filters import apply_filters
+        robots = [model_to_dict(item) for item in client.list_robots(limit=None)]
+        robots = apply_filters(robots, filter, allowed_fields=["name", "ip", "blid", "mac", "sku", "software_ver", "password"])[:limit]
 
         if not robots:
             print_info("No robots configured.")
@@ -107,6 +112,7 @@ def device_list(
 
 
 @app.command("get")
+@command
 def device_get(
     robot: str | None = typer.Argument(None, help="Device name or IP address (defaults to configured robot)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -142,6 +148,7 @@ def device_get(
 
 
 @app.command("add")
+@command
 def device_add(
     name: str = typer.Argument(..., help="Device name (e.g., 'Living Room Roomba')"),
     ip: str = typer.Argument(..., help="Device IP address on the network"),
@@ -161,15 +168,7 @@ def device_add(
     config = get_config()
 
     if not blid or not password:
-        print_info(f"Device '{name}' at {ip} detected — BLID and password required.")
-        print_info("Enter credentials to save this device:")
-        if not blid:
-            blid = typer.prompt("BLID (device ID)", default="")
-        if not password:
-            password = typer.prompt("Password", default="", hide_input=True)
-
-    if not blid or not password:
-        print_error("Both BLID and password are required. Device not saved.")
+        print_error("Provide --blid and --password. Missing credentials; device not saved.")
         raise typer.Exit(code=1)
 
     config.add_robot(name=name, ip=ip, blid=blid, password=password)
@@ -177,6 +176,7 @@ def device_add(
 
 
 @app.command("discover")
+@command
 def device_discover():
     """Scan the local network for Roomba devices (passive, no credentials).
 

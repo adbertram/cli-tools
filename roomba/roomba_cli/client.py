@@ -30,6 +30,10 @@ class ClientError(Exception):
     pass
 
 
+class CloudAuthenticationError(ClientError):
+    """A read was rejected by the cloud authentication layer."""
+
+
 class RoombaClient:
     """Client for interacting with Roomba vacuums via roombapy 1.9."""
 

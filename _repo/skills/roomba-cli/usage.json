@@ -1,8 +1,8 @@
 {
   "tool": "roomba",
   "description": "CLI to control iRobot Roomba vacuums",
-  "discovered_at": "2026-06-20T19:54:40Z",
-  "total_commands": 22,
+  "discovered_at": "2026-10-20T20:37:10Z",
+  "total_commands": 40,
   "global_options": [
     {
       "name": "--version",
@@ -41,8 +41,9 @@
               "name": "--force",
               "type": "bool",
               "required": false,
-              "help": "Clear existing credentials and re-authenticate",
-              "short": "-F"
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
             }
           ]
         },
@@ -96,7 +97,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -117,12 +119,13 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 }
               ]
             },
             "list": {
-              "help": "List all profiles and show which is the default.",
+              "help": "List all profiles and show their auth types and active state.",
               "usage_instructions": "Use to list all profiles.",
               "arguments": [],
               "options": [
@@ -131,7 +134,8 @@
                   "type": "bool",
                   "required": false,
                   "help": "Display as table",
-                  "short": "-t"
+                  "short": "-t",
+                  "takes_value": false
                 },
                 {
                   "name": "--limit",
@@ -172,7 +176,42 @@
                   "type": "bool",
                   "required": false,
                   "help": "Skip confirmation",
-                  "short": "-F"
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
                 }
               ]
             },
@@ -207,7 +246,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             }
           ]
         },
@@ -221,14 +261,16 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--verbose",
               "type": "bool",
               "required": false,
               "help": "Show detailed checks",
-              "short": "-v"
+              "short": "-v",
+              "takes_value": false
             },
             {
               "name": "--profile",
@@ -251,7 +293,451 @@
           "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
           "usage_instructions": "Run `roomba cache clear --help` for exact arguments and options.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "cloud": {
+      "help": "Cloud reads and explicit experimental start/pause",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "auth-status": {
+          "help": "Show saved session expiry and renewal readiness without exposing secrets or logging in.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            }
+          ]
+        },
+        "favorites": {
+          "help": "Read favorites for the selected cloud robot",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Get the actual live favorite payload after validating selected-robot membership.",
+              "arguments": [
+                {
+                  "name": "favorite_id",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Exact cloud favorite ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--robot",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Cloud robot name or exact ID"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "CLI profile"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--timeout",
+                  "type": "FLOAT",
+                  "required": false,
+                  "help": "[1<=x<=60]  Response timeout in seconds",
+                  "default": "15"
+                }
+              ]
+            },
+            "list": {
+              "help": "List live favorites bound to this robot, including disabled/deleted flags.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--robot",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Cloud robot name or exact ID"
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "CLI profile"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=1]        Maximum favorites",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter field:operator:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields",
+                  "short": "-p"
+                },
+                {
+                  "name": "--timeout",
+                  "type": "FLOAT",
+                  "required": false,
+                  "help": "[1<=x<=60]  Response timeout in seconds",
+                  "default": "15"
+                }
+              ]
+            }
+          }
+        },
+        "import-capture": {
+          "help": "Import a verified app session and observed reads; renew expired tokens if session proof exists.",
+          "arguments": [
+            {
+              "name": "path",
+              "type": "file",
+              "required": true,
+              "help": "Private mitmproxy .flows capture containing successful login and reads"
+            }
+          ],
+          "options": [
+            {
+              "name": "--additional-capture",
+              "type": "file",
+              "required": false,
+              "help": "Additional private capture to merge; exact login access key must match"
+            },
+            {
+              "name": "--robot",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cloud robot name or ID to use as default; preserves every robot"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            }
+          ]
+        },
+        "pause": {
+          "help": "Pause cleaning once through experimental cloud control; no automatic retry.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact cloud robot name or ID to pause cleaning"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[1<=x<=60]  Total command and confirmation deadline",
+              "default": "30"
+            }
+          ]
+        },
+        "read": {
+          "help": "Make one signed GET for an evidenced resource. Cloud data is not live robot telemetry.",
+          "arguments": [
+            {
+              "name": "resource",
+              "type": "TEXT",
+              "required": true,
+              "help": "Captured resource name; see cloud robots list resources and README"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[1<=x<=60]  Response timeout in seconds",
+              "default": "15"
+            },
+            {
+              "name": "--robot",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cloud robot name or ID"
+            }
+          ]
+        },
+        "refresh": {
+          "help": "Renew AWS and MQTT tokens using the saved Gigya session; no password or robot action.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            }
+          ]
+        },
+        "robots": {
+          "help": "Inspect captured cloud inventory",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "get": {
+              "help": "Get one robot from the imported cloud inventory without contacting the device.",
+              "arguments": [
+                {
+                  "name": "robot",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Cloud robot name or exact ID"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "CLI profile"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List cloud robots from the imported login, without inventing LAN configuration.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "CLI profile"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "[x>=1]  Maximum robots",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter field:operator:value",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated fields",
+                  "short": "-p"
+                }
+              ]
+            }
+          }
+        },
+        "schedules": {
+          "help": "Read household schedules plus the selected robot's stored shadow schedules.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--robot",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cloud robot name or exact ID"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[1<=x<=60]  Total schedule-read deadline in seconds",
+              "default": "20"
+            }
+          ]
+        },
+        "select": {
+          "help": "Select the default cloud robot locally; does not change the robot or LAN configuration.",
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Cloud robot name or exact ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            }
+          ]
+        },
+        "shadow": {
+          "help": "Read the selected robot's Classic AWS shadow once; cloud state can be stale.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--robot",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cloud robot name or exact ID"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            },
+            {
+              "name": "--partition",
+              "type": "TEXT",
+              "required": false,
+              "help": "Combo read probe: ro-currentstate or rw-constatus; omitted for Classic"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[1<=x<=60]  Total MQTT operation deadline in seconds",
+              "default": "15"
+            }
+          ]
+        },
+        "start": {
+          "help": "Start cleaning once through experimental cloud control; moves the selected robot.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--robot",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact cloud robot name or ID to start cleaning"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[1<=x<=60]  Total command and confirmation deadline",
+              "default": "30"
+            }
+          ]
+        },
+        "status": {
+          "help": "Read observed battery, mission and connectivity with per-field source ages.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--robot",
+              "type": "TEXT",
+              "required": false,
+              "help": "Cloud robot name or exact ID"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "CLI profile"
+            },
+            {
+              "name": "--timeout",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[1<=x<=60]  Total status-read deadline in seconds",
+              "default": "20"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display fields with metadata ages",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
         }
       }
     },
@@ -271,25 +757,20 @@
         "dock": {
           "help": "Send robot to dock.",
           "examples": [
-            "roomba control dock \"Living Room\""
+            "roomba control dock \"Living Room\"",
+            "roomba control dock 192.168.1.50",
+            "roomba control dock  # uses default robot"
           ],
           "usage_instructions": "Use to send the robot back to the dock/base.",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
+              "type": "ROBOT",
+              "required": false,
               "help": "Robot name or IP address"
             }
           ],
           "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
             {
               "name": "--profile",
               "type": "TEXT",
@@ -301,25 +782,20 @@
         "evac": {
           "help": "Empty bin (for models with Clean Base).",
           "examples": [
-            "roomba control evac \"Living Room\""
+            "roomba control evac \"Living Room\"",
+            "roomba control evac 192.168.1.50",
+            "roomba control evac  # uses default robot"
           ],
           "usage_instructions": "Use to trigger bin evacuation (Clean Base models only).",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
+              "type": "ROBOT",
+              "required": false,
               "help": "Robot name or IP address"
             }
           ],
           "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
             {
               "name": "--profile",
               "type": "TEXT",
@@ -331,25 +807,20 @@
         "find": {
           "help": "Play sound to locate robot.",
           "examples": [
-            "roomba control find \"Living Room\""
+            "roomba control find \"Living Room\"",
+            "roomba control find 192.168.1.50",
+            "roomba control find  # uses default robot"
           ],
           "usage_instructions": "Use to make the robot beep so you can locate it.",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
+              "type": "ROBOT",
+              "required": false,
               "help": "Robot name or IP address"
             }
           ],
           "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
             {
               "name": "--profile",
               "type": "TEXT",
@@ -361,25 +832,20 @@
         "pause": {
           "help": "Pause cleaning.",
           "examples": [
-            "roomba control pause \"Living Room\""
+            "roomba control pause \"Living Room\"",
+            "roomba control pause 192.168.1.50",
+            "roomba control pause  # uses default robot"
           ],
           "usage_instructions": "Use to pause the current cleaning job.",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
+              "type": "ROBOT",
+              "required": false,
               "help": "Robot name or IP address"
             }
           ],
           "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
             {
               "name": "--profile",
               "type": "TEXT",
@@ -391,25 +857,44 @@
         "resume": {
           "help": "Resume cleaning after pause.",
           "examples": [
-            "roomba control resume \"Living Room\""
+            "roomba control resume \"Living Room\"",
+            "roomba control resume 192.168.1.50",
+            "roomba control resume  # uses default robot"
           ],
           "usage_instructions": "Use to resume a paused cleaning job.",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
+              "type": "ROBOT",
+              "required": false,
               "help": "Robot name or IP address"
             }
           ],
           "options": [
             {
-              "name": "--table",
-              "type": "bool",
+              "name": "--profile",
+              "type": "TEXT",
               "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "rooms": {
+          "help": "Get list of rooms/zones from robot. Displays available rooms and favorite zones based on the robot's map data.",
+          "examples": [
+            "roomba control rooms \"Living Room\"",
+            "roomba control rooms 192.168.1.50",
+            "roomba control rooms  # uses default robot"
+          ],
+          "arguments": [
+            {
+              "name": "robot",
+              "type": "ROBOT",
+              "required": false,
+              "help": "Robot name or IP address"
+            }
+          ],
+          "options": [
             {
               "name": "--profile",
               "type": "TEXT",
@@ -419,28 +904,21 @@
           ]
         },
         "start": {
-          "help": "Start cleaning.",
+          "help": "Start cleaning. Fetches the robot's current map/region data and sends a region-aware start command, mimicking what the iRobot HOME app does when you tap on a job to start it.",
           "examples": [
             "roomba control start \"Living Room\"",
-            "roomba control start 192.168.1.50"
+            "roomba control start 192.168.1.50",
+            "roomba control start  # uses default robot"
           ],
-          "usage_instructions": "Use to start a cleaning job. Use --rooms for specific room cleaning.",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
+              "type": "ROBOT",
+              "required": false,
               "help": "Robot name or IP address"
             }
           ],
           "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
             {
               "name": "--profile",
               "type": "TEXT",
@@ -454,14 +932,15 @@
           "examples": [
             "roomba control status \"Living Room\"",
             "roomba control status \"Living Room\" --table",
-            "roomba control status \"Living Room\" --timeout 15"
+            "roomba control status \"Living Room\" --timeout 15",
+            "roomba control status  # uses default robot"
           ],
           "usage_instructions": "Use to get live status from the robot (battery, state, etc.).",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
+              "type": "ROBOT",
+              "required": false,
               "help": "Robot name or IP address"
             }
           ],
@@ -471,7 +950,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--timeout",
@@ -491,25 +971,20 @@
         "stop": {
           "help": "Stop cleaning.",
           "examples": [
-            "roomba control stop \"Living Room\""
+            "roomba control stop \"Living Room\"",
+            "roomba control stop 192.168.1.50",
+            "roomba control stop  # uses default robot"
           ],
           "usage_instructions": "Use to stop the current cleaning job.",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
+              "type": "ROBOT",
+              "required": false,
               "help": "Robot name or IP address"
             }
           ],
           "options": [
-            {
-              "name": "--table",
-              "type": "bool",
-              "required": false,
-              "help": "Display as table",
-              "short": "-t"
-            },
             {
               "name": "--profile",
               "type": "TEXT",
@@ -520,9 +995,9 @@
         }
       }
     },
-    "robots": {
-      "help": "List and view robot information",
-      "usage_instructions": "Robot information -- list discovered robots and get details for a specific robot.",
+    "device": {
+      "help": "Manage Roomba device configuration",
+      "usage_instructions": "Device management -- list configured devices, get details, add manually, or discover passively on the network.",
       "arguments": [],
       "options": [
         {
@@ -533,21 +1008,81 @@
         }
       ],
       "commands": {
-        "get": {
-          "help": "Get details for a specific robot.",
+        "add": {
+          "help": "Add a Roomba device to the CLI configuration without network discovery.",
           "examples": [
-            "roomba robots get \"Living Room\"",
-            "roomba robots get 192.168.1.50",
-            "roomba robots get \"Living Room\" --table",
-            "roomba robots get \"Living Room\" --properties \"name,ip,blid\""
+            "roomba device add \"Kitchen\" 192.168.1.50",
+            "roomba device add \"Kitchen\" 192.168.1.50 --blid 1234567 --password abcdef",
+            "roomba device add Robo 10.0.0.5 -b 999999 -p secret123"
           ],
-          "usage_instructions": "Use to get details of a specific robot.",
+          "usage_instructions": "Manually configure a robot. NAME and IP required; BLID and password optional (will prompt interactively).",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device name (e.g., 'Living Room Roomba')"
+            },
+            {
+              "name": "ip",
+              "type": "TEXT",
+              "required": true,
+              "help": "Device IP address on the network"
+            }
+          ],
+          "options": [
+            {
+              "name": "--blid",
+              "type": "TEXT",
+              "required": false,
+              "help": "Device BLID identifier",
+              "short": "-b"
+            },
+            {
+              "name": "--password",
+              "type": "TEXT",
+              "required": false,
+              "help": "Device local password",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "discover": {
+          "help": "Scan the local network for Roomba devices (passive, no credentials). Discovers all visible robots without attempting password retrieval. Shows which ones are already configured and flags unconfigured ones.",
+          "examples": [
+            "roomba device discover"
+          ],
+          "usage_instructions": "Discover all visible robots without attempting password retrieval. Shows configured status for each.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get details for a specific Roomba device.",
+          "examples": [
+            "roomba device get \"Living Room\"",
+            "roomba device get 192.168.1.50",
+            "roomba device get  # uses default robot"
+          ],
+          "usage_instructions": "Retrieve full robot info by name or IP.",
           "arguments": [
             {
               "name": "robot",
-              "type": "TEXT",
-              "required": true,
-              "help": "Robot name or IP address"
+              "type": "ROBOT",
+              "required": false,
+              "help": "Device name or IP address (defaults to configured robot)"
             }
           ],
           "options": [
@@ -556,7 +1091,8 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--properties",
@@ -574,14 +1110,13 @@
           ]
         },
         "list": {
-          "help": "List configured or discovered Roomba robots.",
+          "help": "List configured Roomba devices.",
           "examples": [
-            "roomba robots list                   # List configured robots",
-            "roomba robots list --table           # Display as table",
-            "roomba robots list --discover        # Discover robots on network",
-            "roomba robots list --properties \"name,ip,blid\""
+            "roomba device list",
+            "roomba device list --table",
+            "roomba device list --properties \"name,ip,blid\""
           ],
-          "usage_instructions": "Use to list all discovered robots with their status.",
+          "usage_instructions": "Show all configured robots. Use --table for tabular view, --properties for specific fields.",
           "arguments": [],
           "options": [
             {
@@ -589,13 +1124,14 @@
               "type": "bool",
               "required": false,
               "help": "Display as table",
-              "short": "-t"
+              "short": "-t",
+              "takes_value": false
             },
             {
               "name": "--limit",
               "type": "INTEGER",
               "required": false,
-              "help": "Maximum number of robots to return",
+              "help": "[x>=1]  Maximum number of devices to return",
               "short": "-l",
               "default": "100"
             },
@@ -603,7 +1139,7 @@
               "name": "--filter",
               "type": "TEXT",
               "required": false,
-              "help": "Filter: field:op:value (e.g., name:eq:MyItem, status:contains:active)",
+              "help": "Filter field:operator:value",
               "short": "-f"
             },
             {
@@ -612,13 +1148,6 @@
               "required": false,
               "help": "Comma-separated fields to display",
               "short": "-p"
-            },
-            {
-              "name": "--discover",
-              "type": "bool",
-              "required": false,
-              "help": "Discover robots on network instead of listing configured",
-              "short": "-d"
             },
             {
               "name": "--profile",
@@ -634,15 +1163,16 @@
       "help": "Get live status from a robot (shortcut for 'control status').",
       "examples": [
         "roomba status \"Living Room\"",
-        "roomba status \"Living Room\" --table"
+        "roomba status \"Living Room\" --table",
+        "roomba status  # uses default robot"
       ],
       "usage_instructions": "Shortcut for `control status`. Use to quickly get live robot status (battery, cleaning state, etc.).",
       "arguments": [
         {
           "name": "robot",
-          "type": "TEXT",
-          "required": true,
-          "help": "Robot name or IP address"
+          "type": "ROBOT",
+          "required": false,
+          "help": "Robot name or IP address (defaults to configured robot)"
         }
       ],
       "options": [
@@ -651,7 +1181,8 @@
           "type": "bool",
           "required": false,
           "help": "Display as table",
-          "short": "-t"
+          "short": "-t",
+          "takes_value": false
         },
         {
           "name": "--timeout",
