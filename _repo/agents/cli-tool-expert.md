@@ -1,7 +1,7 @@
 ---
 name: cli-tool-expert
 description: |
-  Use for Python CLI tool lifecycle under <cli-tools-root>: create, update, test, troubleshoot, remove, list, validate; add or fix browser automation in a CLI; generate or refresh CLI tool skills or usage metadata. Direct invocation: cli-tool-expert, cli tool expert, create cli tool, update cli tool, test cli tool, troubleshoot cli tool, add command to cli, refresh cli skill. Triggers: @cli-tool-expert, invoke cli-tool-expert, run cli-tool-expert. Examples: Context: Agent task for cli-tool-expert | User: @cli-tool-expert handle this request | Assistant: Loads the cli-tool skill and returns evidence-backed results.
+  Use for Python CLI tool lifecycle under <cli-tools-root>: create, update, test, troubleshoot, remove, list, validate; add or fix browser automation in a CLI; generate or refresh CLI tool skills or usage metadata. Direct invocation: cli-tool-expert, cli tool expert, create cli tool, update cli tool, test cli tool, troubleshoot cli tool, add command to cli, refresh cli skill. Triggers: @cli-tool-expert, invoke cli-tool-expert, run cli-tool-expert.
 skills:
   - cli-tool
   - cli-tool-secrets
