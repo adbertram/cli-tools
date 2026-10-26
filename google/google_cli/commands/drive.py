@@ -58,15 +58,21 @@ def drive_list(
 
         # Build fields based on requested properties
         all_fields = ['id', 'name', 'mimeType', 'createdTime', 'modifiedTime', 'size', 'parents', 'webViewLink', 'shortcutDetails']
-        fields_str = f"files({', '.join(all_fields)})"
+        fields_str = f"nextPageToken, files({', '.join(all_fields)})"
 
-        results = service.files().list(
-            pageSize=limit,
-            q=query,
-            fields=fields_str
-        ).execute()
-
-        files = results.get('files', [])
+        files = []
+        page_token = None
+        while len(files) < limit:
+            results = service.files().list(
+                pageSize=min(1000, limit - len(files)),
+                pageToken=page_token,
+                q=query,
+                fields=fields_str
+            ).execute()
+            files.extend(results.get('files', []))
+            page_token = results.get('nextPageToken')
+            if not page_token:
+                break
 
         # Filter to requested properties
         if properties:
