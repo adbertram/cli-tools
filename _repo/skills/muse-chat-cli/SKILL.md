@@ -87,3 +87,17 @@ assistant. An `approval_required` result means human input is needed in Muse.
 - Monitored commands return the final reply, a structured timeout, or an approval gate.
 - Durable chat IDs are preserved so monitoring can resume without resending.
 </success_criteria>
+
+<response_correlation>
+Completed monitor output combines ordered assistant components with the same
+durable turn ID, including prose and cards. Different turn IDs remain an error.
+Completion requires one second of unchanged idle content within the overall
+timeout; new text/components or activity reset settling. `chat get` is a
+snapshot, with bounded idle hydration settling (up to five seconds), and may
+show an active partial response. Use monitor for final replies.
+
+Only newly created side chats can reconcile a temporary submitted-message ID:
+a bounded empty-history gap is tolerated, then the unique saved user turn must
+exactly match normalized submitted text. Existing chats never reanchor by text,
+and reconciliation never resends the message.
+</response_correlation>
