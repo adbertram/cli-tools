@@ -1,7 +1,7 @@
 """JSON error and presentation helpers shared by resource commands."""
 import functools
 import typer
-from cli_tools_shared.filters import apply_filters, apply_properties_filter, validate_filters
+from cli_tools_shared.filters import FilterValidationError, apply_filters, apply_limit, apply_properties_filter, validate_filters
 from cli_tools_shared.output import print_json, print_table
 from .client import WebullError, safe_error
 
@@ -13,7 +13,10 @@ def guard(fn):
         except typer.Exit:
             raise
         except Exception as exc:
-            error = exc if isinstance(exc, WebullError) else safe_error(exc)
+            if isinstance(exc, FilterValidationError):
+                error = WebullError("validation", "Invalid filter. Use field:operator:value, for example symbol:eq:MESZ6.")
+            else:
+                error = exc if isinstance(exc, WebullError) else safe_error(exc)
             print_json(error.as_dict())
             raise typer.Exit(1) from None
     return wrapped
@@ -24,7 +27,7 @@ def render(body, *, table=False, filters=None, properties=None, limit=None):
         validate_filters(filters)
     if isinstance(body, list):
         rows = apply_filters(body, filters) if filters else body
-        rows = rows[:limit] if limit is not None else rows
+        rows = apply_limit(rows, limit)
         if properties:
             rows = apply_properties_filter(rows, properties)
     else:

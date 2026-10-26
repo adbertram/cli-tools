@@ -6,6 +6,7 @@ from cli_tools_shared.output import command, print_json
 from ..client import WebullClient, WebullError
 from ..presentation import guard, render
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -13,9 +14,9 @@ app = typer.Typer(help="Inspect and manage orders", no_args_is_help=True)
 COMMAND_CREDENTIALS = {name: ["custom"] for name in ("list", "open", "history", "get", "place", "replace", "cancel")}
 
 def order_page(account, history, page_size, last_client_order_id, start_date, end_date, limit, filters, properties, table):
-    body = WebullClient().orders(account, history=history, page_size=limit if limit is not None else page_size,
+    body = WebullClient().orders(account, history=history, page_size=page_size,
                                 last_client_order_id=last_client_order_id, start_date=start_date, end_date=end_date)
-    render(body, table=table, filters=filters, properties=properties)
+    render(body, table=table, filters=filters, properties=properties, limit=limit)
 
 
 @app.command("list")
@@ -24,9 +25,9 @@ def order_page(account, history, page_size, last_client_order_id, start_date, en
 @guard
 def open_orders(
     account: str,
-    page_size: int = typer.Option(100, "--page-size", min=1, help="API page size"),
+    page_size: int = typer.Option(100, "--page-size", min=10, max=100, help="API page size (10 through 100)"),
     last_client_order_id: Optional[str] = typer.Option(None, "--last-client-order-id", help="Exact API cursor"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-l", min=1, help="API page size; overrides --page-size"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", min=1, help="Maximum rows returned from this API page (local cap)"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Local field:op:value filter"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated output fields"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -40,11 +41,11 @@ def open_orders(
 @guard
 def order_history(
     account: str,
-    page_size: int = typer.Option(100, "--page-size", min=1, help="API page size"),
+    page_size: int = typer.Option(100, "--page-size", min=10, max=100, help="API page size (10 through 100)"),
     last_client_order_id: Optional[str] = typer.Option(None, "--last-client-order-id", help="Exact API cursor"),
     start_date: Optional[str] = typer.Option(None, "--start-date", help="API start date, passed unchanged"),
     end_date: Optional[str] = typer.Option(None, "--end-date", help="API end date, passed unchanged"),
-    limit: Optional[int] = typer.Option(None, "--limit", "-l", min=1, help="API page size; overrides --page-size"),
+    limit: Optional[int] = typer.Option(None, "--limit", "-l", min=1, help="Maximum rows returned from this API page (local cap)"),
     filter: Optional[List[str]] = typer.Option(None, "--filter", "-f", help="Local field:op:value filter"),
     properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated output fields"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -61,9 +62,16 @@ def get_order(account: str, client_order_id: str, table: bool = typer.Option(Fal
     render(WebullClient().order(account, client_order_id), table=table)
 
 
+def finite_float(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("Nonfinite numbers are not valid order JSON.")
+    return number
+
+
 def read_orders(source):
     try:
-        orders = json.loads(sys.stdin.read() if source == "-" else Path(source).read_text())
+        orders = json.loads(sys.stdin.read() if source == "-" else Path(source).read_text(), parse_constant=finite_float, parse_float=finite_float)
     except (ValueError, OSError):
         raise WebullError("validation", "orders-json must contain a JSON array of order objects.") from None
     if not isinstance(orders, list) or not orders or any(not isinstance(order, dict) for order in orders):
@@ -74,9 +82,13 @@ def read_orders(source):
     return orders
 
 
-def mutation(action, account, orders_json, yes, dry_run, send_before_epoch_ms=None):
+def validate_confirmation(yes, dry_run):
     if yes == dry_run:
         raise WebullError("validation", "Choose exactly one of --yes or --dry-run for order mutations.")
+
+
+def mutation(action, account, orders_json, yes, dry_run, send_before_epoch_ms=None):
+    validate_confirmation(yes, dry_run)
     orders = read_orders(orders_json)
     if dry_run:
         print_json({"dry_run": True, "action": action, "account_id": account, "new_orders": orders})
@@ -113,8 +125,7 @@ def cancel_order(account: str, client_order_id: str,
                  yes: bool = typer.Option(False, "--yes", help="Send the broker request"),
                  dry_run: bool = typer.Option(False, "--dry-run", help="Print without sending")):
     """Cancel one broker order by caller-defined client order ID."""
-    if yes == dry_run:
-        raise WebullError("validation", "Choose exactly one of --yes or --dry-run for order mutations.")
+    validate_confirmation(yes, dry_run)
     if dry_run:
         print_json({"dry_run": True, "action": "cancel", "account_id": account, "client_order_id": client_order_id})
     else:

@@ -74,6 +74,75 @@ def test_live_gate_and_production_host_gate():
     assert client.hosts["api"] == "sandbox.edited.test"
 
 
+@pytest.mark.parametrize("field", ["api_host", "quotes_api_host", "events_api_host"])
+@pytest.mark.parametrize("hostname", ["api.webull.com", "data-api.webull.com", "events-api.webull.com"])
+@pytest.mark.parametrize("spelling", [lambda host:host.upper(), lambda host:host+":443", lambda host:host+".", lambda host:host.upper()+".:0443", lambda host:host+":80"])
+def test_sandbox_rejects_equivalent_production_hostnames(field,hostname,spelling):
+    with pytest.raises(WebullError) as error:
+        WebullClient(config=config(),options=Options(**{field:spelling(hostname)}))
+    assert error.value.kind == "authorization"
+
+
+def test_valid_host_spelling_is_canonicalized_without_changing_environment():
+    client=WebullClient(config=config(),options=Options(api_host="SANDBOX.Edited.Test.:0443"))
+    assert client.hosts["api"] == "sandbox.edited.test:443"
+    client=WebullClient(config=config("token"),options=Options(environment="live",confirm_live=True,api_host="API.WEBULL.COM.:0443"))
+    assert client.hosts["api"] == "api.webull.com:443"
+
+
+@pytest.mark.parametrize("host", ["api..webull.com", "api.webull.com..", "api.webull.com:0", "api.webull.com:65536", "api.webull.com:", "api.webull.com%2e", "https://api.webull.com", "user@api.webull.com", " api.webull.com"])
+def test_malformed_hostnames_fail_before_sdk_construction(host):
+    with pytest.raises(WebullError) as error:
+        WebullClient(config=config(),options=Options(api_host=host))
+    assert error.value.kind == "validation"
+
+
+@pytest.mark.parametrize("action", ["open", "history", "list"])
+@pytest.mark.parametrize("value", [1, 9, 101])
+def test_order_page_size_rejects_unsupported_api_values(monkeypatch,action,value):
+    import webull_cli.commands.order as module
+    monkeypatch.setattr(module,"WebullClient",lambda:pytest.fail("Invalid page size must not reach broker client"))
+    result=runner.invoke(app,["order",action,"A","--page-size",str(value)])
+    assert result.exit_code == 2
+    assert "10" in result.output and "100" in result.output
+
+
+@pytest.mark.parametrize("action", ["open", "history", "list"])
+@pytest.mark.parametrize("value", [10, 100])
+def test_order_page_size_boundaries_reach_api_unchanged(monkeypatch,action,value):
+    import webull_cli.commands.order as module
+    calls=[]
+    body=[{"client_order_id":"unchanged-combo-id"}]
+    def orders(account,**kwargs):
+        calls.append((account,kwargs))
+        return body
+    monkeypatch.setattr(module,"WebullClient",lambda:SimpleNamespace(orders=orders))
+    result=runner.invoke(app,["order",action,"A","--page-size",str(value)])
+    assert result.exit_code == 0,result.output
+    assert calls[0][1]["page_size"] == value
+    assert json.loads(result.stdout) == body
+
+
+@pytest.mark.parametrize("action", ["open", "history", "list"])
+@pytest.mark.parametrize("value", [1, 3, 5])
+def test_order_limit_caps_output_without_changing_api_page_or_cursor(monkeypatch,action,value):
+    import webull_cli.commands.order as module
+    calls=[]
+    body=[{"client_order_id":f"combo-{i}","orders":[{"client_order_id":f"leg-{i}"}]} for i in range(10)]
+    def orders(account,**kwargs):
+        calls.append((account,kwargs))
+        return body
+    monkeypatch.setattr(module,"WebullClient",lambda:SimpleNamespace(orders=orders))
+    result=runner.invoke(app,["order",action,"A","--limit",str(value),"--last-client-order-id","previous-combo"])
+    assert result.exit_code==0,result.output
+    assert calls[0][1]["page_size"]==100
+    assert calls[0][1]["last_client_order_id"]=="previous-combo"
+    rows=json.loads(result.stdout)
+    assert rows==body[:value]
+    assert rows[-1]["client_order_id"]==f"combo-{value-1}"
+    assert len(body)==10
+
+
 def test_sdk_hosts_timeout_and_token(monkeypatch):
     from webull.core import client as sdk_module
     calls=[]
@@ -122,6 +191,15 @@ def test_cli_native_response_and_explicit_filter(monkeypatch):
 @pytest.mark.parametrize("payload", ['{}','[]','[null]','[{"client_order_id":"x"},{"client_order_id":"x"}]'])
 def test_invalid_orders_never_send(payload):
     result=runner.invoke(app,["order","replace","A","--orders-json","-","--dry-run"],input=payload)
+    assert result.exit_code == 1
+    assert json.loads(result.stdout)["error"]["kind"] == "validation"
+
+
+@pytest.mark.parametrize("action", ["place", "replace"])
+@pytest.mark.parametrize("number", ["NaN", "Infinity", "-Infinity", "1e9999", "-1e9999"])
+def test_nonfinite_nested_order_json_is_rejected(action,number):
+    payload='[{"client_order_id":"order-1","nested":{"values":['+number+']}}]'
+    result=runner.invoke(app,["order",action,"A","--orders-json","-","--dry-run"],input=payload)
     assert result.exit_code == 1
     assert json.loads(result.stdout)["error"]["kind"] == "validation"
 
@@ -175,6 +253,49 @@ def test_stream_emits_tick_and_disconnect_with_all_fields(monkeypatch):
         client.stream("MESmain",events.append)
     assert events[0]=={"event":"tick","data":{"basic":{"symbol":"MESmain","category":"US_FUTURES"},"time":"123","price":"5.25","volume":"1","side":"B"}}
     assert events[1]=={"event":"disconnect"}
+
+
+@pytest.mark.parametrize("stage", ["construction", "setup"])
+def test_stream_setup_failures_emit_only_one_jsonl_error(monkeypatch,stage):
+    import webull_cli.commands.futures as module
+    def fail(*args,**kwargs):raise RuntimeError("SECRET SDK headers")
+    monkeypatch.setattr(module,"WebullClient",fail if stage == "construction" else lambda:SimpleNamespace(stream=fail))
+    result=runner.invoke(app,["futures","stream","MESmain"])
+    assert result.exit_code == 1
+    lines=result.stdout.splitlines()
+    assert len(lines)==1
+    event=json.loads(lines[0])
+    assert event["event"]=="error" and event["error"]["kind"]=="upstream"
+    assert "SECRET" not in result.output
+
+
+def test_stream_suppresses_duplicate_terminal_errors(monkeypatch):
+    import webull_cli.commands.futures as module
+    def stream(symbol,emit,**kwargs):
+        emit({"event":"error","error":{"kind":"payload","message":"Malformed Webull TICK payload."}})
+        raise RuntimeError("Connection ended after the decoder stopped it")
+    monkeypatch.setattr(module,"WebullClient",lambda:SimpleNamespace(stream=stream))
+    result=runner.invoke(app,["futures","stream","MESmain"])
+    assert result.exit_code==1
+    assert [json.loads(line)["error"]["kind"] for line in result.stdout.splitlines()]==["payload"]
+
+
+def test_stream_nonfinite_configuration_is_jsonl_validation():
+    result=runner.invoke(app,["futures","stream","MESmain","--socket-loop-seconds","nan"])
+    assert result.exit_code==1
+    event=json.loads(result.stdout)
+    assert event["event"]=="error" and event["error"]["kind"]=="validation"
+
+
+def test_local_filter_failure_is_safe_actionable_validation(monkeypatch):
+    import webull_cli.commands.account as module
+    monkeypatch.setattr(module,"WebullClient",lambda:SimpleNamespace(account_list=lambda:[]))
+    result=runner.invoke(app,["account","list","--filter","badfilter-SECRET"])
+    assert result.exit_code==1
+    error=json.loads(result.stdout)["error"]
+    assert error["kind"]=="validation"
+    assert "field:operator:value" in error["message"]
+    assert "SECRET" not in result.output
 
 
 def test_empty_token_is_structured_validation():

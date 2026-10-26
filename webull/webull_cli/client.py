@@ -12,6 +12,8 @@ from decimal import Decimal
 from cli_tools_shared.exceptions import ClientError
 from .config import get_config
 
+CATEGORY_US_FUTURES = "US_FUTURES"
+
 
 HOSTS = {
     "sandbox": {"api": "api.sandbox.webull.com", "quotes-api": "data-api.sandbox.webull.com", "events-api": "events-api.sandbox.webull.com"},
@@ -83,6 +85,19 @@ def positive(value, name):
         raise WebullError("validation", f"{name} must be finite and positive.")
 
 
+def canonical_host(value):
+    """Normalize DNS-equivalent spelling before environment authorization."""
+    if not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*(?::[0-9]+)?", value):
+        raise WebullError("validation", "Webull hosts must be hostnames, optionally with a port.")
+    hostname, _, port = value.partition(":")
+    hostname = hostname.removesuffix(".").lower()
+    if len(hostname) > 253 or any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in hostname.split(".")):
+        raise WebullError("validation", "Webull hosts must contain valid DNS labels.")
+    if port and not 1 <= int(port) <= 65535:
+        raise WebullError("validation", "Webull host ports must be between 1 and 65535.")
+    return hostname + (f":{int(port)}" if port else "")
+
+
 def tick_json(value):
     """Keep every decoded market-data field, including nested basic metadata."""
     if isinstance(value, Decimal):
@@ -112,10 +127,10 @@ class WebullClient:
         self.hosts = dict(HOSTS[opts.environment])
         for key, value in (("api", opts.api_host), ("quotes-api", opts.quotes_api_host), ("events-api", opts.events_api_host)):
             if value is not None:
-                if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.-]*(?::[0-9]+)?", value):
-                    raise WebullError("validation", "Webull hosts must be hostnames, optionally with a port.")
                 self.hosts[key] = value
-        if opts.environment != "live" and any(value in HOSTS["live"].values() for value in self.hosts.values()):
+        self.hosts = {key: canonical_host(value) for key, value in self.hosts.items()}
+        production_names = {canonical_host(value).partition(":")[0] for value in HOSTS["live"].values()}
+        if opts.environment != "live" and any(value.partition(":")[0] in production_names for value in self.hosts.values()):
             raise WebullError("authorization", "Production Webull hosts require --environment live --confirm-live.")
         self._api = self._trade = self._data = None
         self._send_before_epoch_ms = None
@@ -215,7 +230,7 @@ class WebullClient:
         if self.options.environment == "live" and not self.config.access_token:
             raise WebullError("authentication", "Production account access requires an authorized access token. Save it with 'webull auth token'.")
 
-    def stream(self, symbol, emit, *, category="US_FUTURES", reconnect_attempts=3, reconnect_delay_milliseconds=1000,
+    def stream(self, symbol, emit, *, category=CATEGORY_US_FUTURES, reconnect_attempts=3, reconnect_delay_milliseconds=1000,
                mqtt_port=8883, socket_loop_seconds=1, close_grace_seconds=2):
         from webull.data.data_streaming_client import DataStreamingClient
         from webull.data.internal.default_retry_policy import DefaultQuotesRetryPolicy

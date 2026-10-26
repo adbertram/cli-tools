@@ -8,6 +8,8 @@ Use the `webull` CLI to access Webull OpenAPI accounts, orders, futures historic
 
 Use the repository installer: `_repo/skills/cli-tool/scripts/install-cli-tool.sh webull`.
 
+This is the local TickSmith-compatible SDK tool. Webull also publishes a separate [upstream Go CLI](https://github.com/webull-inc/webull-openapi-cli) with the same command name and a different interface. It is not a drop-in replacement for this tool's JSON, streaming, or send-deadline contract.
+
 ## Authentication
 
 Create an OpenAPI application in Webull's [account center](https://www.webull.com/center). Run `webull auth login` and enter the application key and secret in the hidden prompts. The CLI stores reusable credentials in the CLI-tools secret manager and saves references in its authentication profile. Never put raw credentials in `.env` files or command arguments.
@@ -25,8 +27,8 @@ webull auth profiles get default --table
 webull auth profiles create research
 webull auth profiles select research
 webull auth profiles rename research research-two
-webull auth profiles delete research-two --yes
-webull auth profiles remove research-two --yes
+webull auth profiles delete research-two --force
+webull auth profiles remove research-two --force
 ```
 
 ## Global options
@@ -70,9 +72,9 @@ webull order cancel ACCOUNT_ID CLIENT_ORDER_ID --dry-run
 webull order cancel ACCOUNT_ID CLIENT_ORDER_ID --yes
 ```
 
-`account get` is an alias of `account balance`. `order list` is an alias of `order open`. Open/history return exactly one API page. `--page-size` or its `--limit/-l` alias is passed to the broker; `--last-client-order-id` preserves the exact cursor. History date filters pass unchanged to the SDK. The caller owns cursor traversal. Optional `--filter/-f` and `--properties/-p` operate locally on that returned page because the API does not accept arbitrary field filters.
+`account get` is an alias of `account balance`. `order list` is an alias of `order open`. Open/history fetch exactly one API page. `--page-size` is passed to the broker and must be between 10 and 100 (default 100). Optional `--limit/-l` is a positive local output cap on that page; it does not change the API page size. `--last-client-order-id` and every returned combo's client order ID remain unchanged, including when output is capped, so the caller can use the last returned ID as its next cursor. History date filters pass unchanged to the SDK. The caller owns cursor traversal. Optional `--filter/-f` and `--properties/-p` also operate locally on the returned page because the API does not accept arbitrary field filters. Omitting these presentation options preserves the complete broker page.
 
-Place and replace read a nonempty JSON array of raw SDK order objects from `--orders-json FILE`, or stdin when the value is `-`. Every object must have a caller-defined unique `client_order_id` of at most 32 characters. Place, replace, and cancel require exactly one of `--yes` or `--dry-run`. This low-level broker tool does not calculate position size, attach stops, or enforce TickSmith strategy and account risk policies. TickSmith performs those checks before calling it.
+Place and replace read a nonempty strict JSON array of raw SDK order objects from `--orders-json FILE`, or stdin when the value is `-`. Numeric NaN, Infinity, and overflowing numbers are rejected, including in nested fields. Every object must have a caller-defined unique `client_order_id` of at most 32 characters. Place, replace, and cancel require exactly one of `--yes` or `--dry-run`. This low-level broker tool does not calculate position size, attach stops, or enforce TickSmith strategy and account risk policies. TickSmith performs those checks before calling it.
 
 `--send-before-epoch-ms` on place and replace is an optional absolute UTC deadline. It is checked after credential/SDK setup and immediately before the SDK transport; an expired deadline returns `kind=not_sent` without sending. This lets TickSmith keep an entry's original price-freshness deadline across process startup.
 
