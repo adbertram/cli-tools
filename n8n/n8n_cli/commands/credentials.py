@@ -1,11 +1,10 @@
 """Credentials commands - list, get, create, delete, and inspect n8n credentials on the server."""
 import json
-import sys
 import typer
 from typing import Optional, List
 
 from ..n8n_api import get_n8n_api_client, N8nApiError
-from cli_tools_shared.output import command, print_json, print_table, print_error, print_success, handle_error
+from cli_tools_shared.output import print_json, print_table, print_error, print_success, handle_error
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 
 app = typer.Typer(help="Manage n8n credentials on the server", no_args_is_help=True)
@@ -28,15 +27,11 @@ COMMAND_CREDENTIALS = {
     ],
     "schema": [
         "api_key"
-    ],
-    "update": [
-        "api_key"
     ]
 }
 
 
 @app.command("list")
-@command
 def credentials_list(
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of results"),
@@ -78,7 +73,6 @@ def credentials_list(
 
 
 @app.command("get")
-@command
 def credentials_get(
     credential_id: str = typer.Argument(..., help="Credential ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -117,12 +111,10 @@ def credentials_get(
 
 
 @app.command("create")
-@command
 def credentials_create(
     cred_type: str = typer.Argument(..., help="Credential type name (e.g., brickowlApi)"),
-    data: Optional[str] = typer.Argument(None, help="Credential data as JSON string; use --data-stdin for secrets"),
+    data: str = typer.Argument(..., help="Credential data as JSON string"),
     name: Optional[str] = typer.Option(None, "--name", "-n", help="Display name (defaults to credential type)"),
-    data_stdin: bool = typer.Option(False, "--data-stdin", help="Read credential JSON from piped stdin instead of DATA"),
 ):
     """
     Create a credential on the n8n server.
@@ -131,13 +123,20 @@ def credentials_create(
     Use 'n8n credentials schema <type>' to see required fields.
 
     Example:
-        $HOME/.local/bin/n8n credentials create brickowlApi --data-stdin --name "Brickowl Prod"
-
-    Supply exactly one of DATA or --data-stdin. Pipe JSON into stdin; do not
-    type secrets into an interactive terminal or put them in command arguments.
+        n8n credentials create brickowlApi '{"apiKey": "abc123"}'
+        n8n credentials create brickowlApi '{"apiKey": "abc"}' --name "Brickowl Prod"
     """
     try:
-        cred_data = _read_credential_data(data, data_stdin)
+        # Parse JSON data
+        try:
+            cred_data = json.loads(data)
+        except json.JSONDecodeError as e:
+            print_error(f"Invalid JSON data: {e}")
+            raise typer.Exit(1)
+
+        if not isinstance(cred_data, dict):
+            print_error("Credential data must be a JSON object")
+            raise typer.Exit(1)
 
         api = get_n8n_api_client()
 
@@ -174,52 +173,7 @@ def credentials_create(
         raise typer.Exit(handle_error(e))
 
 
-@app.command("update")
-@command
-def credentials_update(
-    credential_id: str = typer.Argument(..., help="Credential ID to update"),
-    data: Optional[str] = typer.Argument(None, help="Credential data as JSON string; use --data-stdin for secrets"),
-    name: Optional[str] = typer.Option(None, "--name", "-n", help="New display name"),
-    data_stdin: bool = typer.Option(False, "--data-stdin", help="Read credential JSON from piped stdin instead of DATA"),
-):
-    """
-    Update an existing credential's data on the n8n server.
-
-    The JSON payload replaces the credential's stored data, so include every
-    field the credential type needs. Use 'n8n credentials schema <type>' to see
-    the fields; the server enforces conditional requirements and rejects fields
-    a type prohibits.
-
-    Example:
-        $HOME/.local/bin/n8n credentials update qe03iDk3T8FNbNTg --data-stdin --name "Brickowl Prod"
-
-    Supply exactly one of DATA or --data-stdin. Pipe JSON into stdin; do not
-    type secrets into an interactive terminal or put them in command arguments.
-    """
-    try:
-        cred_data = _read_credential_data(data, data_stdin)
-
-        api = get_n8n_api_client()
-
-        # The credential type owns conditional required/prohibited fields, so the
-        # server is the only validator here. Its rejection is surfaced verbatim.
-        update_fields = {"data": cred_data}
-        if name is not None:
-            update_fields["name"] = name
-
-        result = api.update_credential(credential_id, **update_fields)
-
-        print_success(f"Updated credential '{result.get('name')}' (id: {result.get('id')})")
-        print_json(result)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
-
-
 @app.command("delete")
-@command
 def credentials_delete(
     credential_id: str = typer.Argument(..., help="Credential ID to delete"),
 ):
@@ -240,7 +194,6 @@ def credentials_delete(
 
 
 @app.command("rename")
-@command
 def credentials_rename(
     credential_id: str = typer.Argument(..., help="Credential ID to rename"),
     name: str = typer.Argument(..., help="New display name"),
@@ -262,7 +215,6 @@ def credentials_rename(
 
 
 @app.command("schema")
-@command
 def credentials_schema(
     cred_type: str = typer.Argument(..., help="Credential type name (e.g., brickowlApi)"),
 ):
@@ -280,34 +232,6 @@ def credentials_schema(
 
     except Exception as e:
         raise typer.Exit(handle_error(e))
-
-
-def _read_credential_data(data: Optional[str], data_stdin: bool) -> dict:
-    """Resolve credential JSON from DATA or piped stdin into a dict.
-
-    Secrets never reach argv or an interactive prompt: exactly one input source
-    is accepted, and --data-stdin refuses a terminal before reading.
-    """
-    if (data is not None) == data_stdin:
-        print_error("Provide exactly one of DATA or --data-stdin")
-        raise typer.Exit(1)
-    if data_stdin:
-        if sys.stdin.isatty():
-            print_error("--data-stdin requires piped or redirected input")
-            raise typer.Exit(1)
-        data = sys.stdin.read()
-
-    try:
-        cred_data = json.loads(data)
-    except json.JSONDecodeError as e:
-        print_error(f"Invalid JSON data at line {e.lineno}, column {e.colno}")
-        raise typer.Exit(1)
-
-    if not isinstance(cred_data, dict):
-        print_error("Credential data must be a JSON object")
-        raise typer.Exit(1)
-
-    return cred_data
 
 
 def _type_to_display_name(cred_type: str) -> str:
