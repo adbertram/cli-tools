@@ -129,6 +129,7 @@
 | `vues` | Vues (evrgreen) clipping campaigns, linked accounts, submissions and earnings |
 | `vyro` | Read Vyro clipping campaigns and account eligibility |
 | `weather` | The `weather` CLI provides a command-line interface for Weather API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `webull` | Trade and inspect Webull accounts, futures orders and market data through the official OpenAPI |
 | `whisper` | The `whisper` CLI wraps whisper.cpp (`whisper-cli`) for local, offline speech-to-text. Use it for JSON transcripts with timestamped segments; output mirrors `openai-whisper` so the two are swappable. |
 | `whop` | Read Whop participant accounts and Content Rewards campaigns, submissions, and earnings |
 | `x` | The `x` CLI provides a command-line interface for X API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
