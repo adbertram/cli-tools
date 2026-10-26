@@ -1,8 +1,8 @@
 {
   "tool": "webull",
   "description": "CLI interface for webull",
-  "discovered_at": "2026-10-26T13:27:39Z",
-  "total_commands": 25,
+  "discovered_at": "2026-10-26T14:41:12Z",
+  "total_commands": 26,
   "global_options": [],
   "commands": {
     "account": {
@@ -17,6 +17,50 @@
         }
       ],
       "commands": {
+        "accounting": {
+          "help": "Read complete raw history, balance and positions using one SDK client.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "History start date"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "History end date"
+            },
+            {
+              "name": "--read-interval-seconds",
+              "type": "FLOAT",
+              "required": true,
+              "help": "Required caller-resolved interval between history reads"
+            },
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[10<=x<=100]  History API page size",
+              "default": "100"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "balance": {
           "help": "Get an account's full balance response.",
           "arguments": [

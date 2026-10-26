@@ -32,6 +32,7 @@ webull <command-group> <action> [arguments] [options]
 
 | Task | Command |
 |------|---------|
+| Read complete accounting in one SDK session | `webull account accounting <ACCOUNT> --start-date DATE --end-date DATE --page-size 100 --read-interval-seconds SECONDS` |
 | Get an account's full balance response | `webull account balance <ACCOUNT>` |
 | Get an account's full balance response | `webull account get <ACCOUNT>` |
 | List accounts, preserving every API field by default | `webull account list` |
@@ -69,6 +70,8 @@ Every order keeps its caller-supplied client_order_id. A write error with `kind=
 <principle name="Credential Storage and Streaming">
 Use `webull auth login` for hidden app key/secret prompts and `webull auth token` for a hidden token prompt or securely piped input. Reusable credentials live in the CLI-tools secret manager, never raw `.env` values or command arguments.
 
+`account accounting` returns complete raw history, balance and positions in one SDK session, following history pages until empty and using the required caller-configured read interval. Any read or cursor error aborts without partial output.
+
 REST output preserves full broker JSON by default. Order open/history return one unchanged page; the caller follows its cursor. `futures stream` emits JSONL tick, disconnect, and error events until interrupted. Every disconnect invalidates previously buffered prices; error events require explicit recovery rather than silent continuation.
 </principle>
 
@@ -78,7 +81,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 </principle>
 
 <principle name="Command Groups">
-- **account** -- Inspect Webull accounts (subcommands: balance, get, list, positions)
+- **account** -- Inspect Webull accounts (subcommands: accounting, balance, get, list, positions)
 - **auth** -- Manage webull authentication (subcommands: login, logout, profiles, status, test, token)
 - **futures** -- Read futures market data (subcommands: bars, stream)
 - **order** -- Inspect and manage broker orders (subcommands: cancel, get, history, list, open, place, replace)

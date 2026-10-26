@@ -49,10 +49,13 @@ webull account list --limit 1 --filter 'account_type:eq:FUTURES' --properties ac
 webull account balance ACCOUNT_ID --table
 webull account get ACCOUNT_ID --table
 webull account positions ACCOUNT_ID
+webull account accounting ACCOUNT_ID --start-date 2026-10-01 --end-date 2026-10-26 --page-size 100 --read-interval-seconds 2
 webull account positions ACCOUNT_ID --limit 10 --filter 'symbol:eq:MESZ6' --properties symbol,quantity --table
 ```
 
 Account and position endpoints have no server-side pagination or filtering. Their optional `--limit/-l`, `--filter/-f`, and `--properties/-p` are applied locally; omitted options preserve the complete raw broker response. `--table/-t` changes presentation.
+
+`account accounting` reuses one SDK client for complete history, balance, and positions. It follows the last combo client order ID until an empty page (including after short pages), waits the required caller-supplied interval between history pages, and aborts on malformed or repeated cursors or any failed read. Output is exactly `{ "history": [...], "balance": {...}, "positions": [...] }`; no partial success is emitted. The caller must supply its configured read interval.
 
 ## Orders
 

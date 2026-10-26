@@ -324,3 +324,84 @@ def test_token_pipe_does_not_echo(monkeypatch):
     assert result.exit_code==0,result.output
     assert saved==[{"ACCESS_TOKEN":"SECRET-TOKEN"}]
     assert "SECRET-TOKEN" not in result.output
+
+
+def accounting_client(monkeypatch, pages, *, balance=None, positions=None):
+    client = WebullClient(config=config())
+    events = []
+    pages = iter(pages)
+    def response(value):
+        if isinstance(value, Exception):
+            raise value
+        return SimpleNamespace(json=lambda: value)
+    def history(account, **kwargs):
+        events.append(('history', kwargs))
+        return response(next(pages))
+    def balance_read(account):
+        events.append(('balance', account))
+        return response({} if balance is None else balance)
+    def positions_read(account):
+        events.append(('positions', account))
+        return response([] if positions is None else positions)
+    client._trade = SimpleNamespace(order_v3=SimpleNamespace(get_order_history=history),
+        account_v2=SimpleNamespace(get_account_balance=balance_read, get_account_position=positions_read))
+    monkeypatch.setattr('webull_cli.client.time.sleep', lambda seconds: events.append(('sleep', seconds)))
+    return client, events
+
+
+def test_accounting_follows_short_pages_to_empty_and_reuses_client(monkeypatch):
+    first = {'client_order_id': 'combo-1', 'orders': [{'client_order_id': 'leg-1'}], 'extra': True}
+    second = {'client_order_id': 'combo-2'}
+    client, events = accounting_client(monkeypatch, [[first], [second], []], balance={'raw': 3}, positions=[{'raw': 4}])
+    trade = client.trade
+    assert client.accounting('A', start_date='2026-10-01', end_date='2026-10-26', page_size=100,
+                             read_interval_seconds=2.5) == {'history': [first, second], 'balance': {'raw': 3}, 'positions': [{'raw': 4}]}
+    assert client.trade is trade
+    assert [event[0] for event in events] == ['history', 'sleep', 'history', 'sleep', 'history', 'balance', 'positions']
+    assert [event[1].get('last_client_order_id') for event in events if event[0] == 'history'] == [None, 'combo-1', 'combo-2']
+    assert all(event[1] == 2.5 for event in events if event[0] == 'sleep')
+
+
+@pytest.mark.parametrize('pages', [[{}], [[None]], [[{}]], [[{'client_order_id': ''}]],
+    [[{'client_order_id': 'a'}], [{'client_order_id': 'a'}]], [RuntimeError('SECRET')]])
+def test_accounting_bad_history_aborts_before_balance(monkeypatch, pages):
+    client, events = accounting_client(monkeypatch, pages)
+    with pytest.raises(WebullError):
+        client.accounting('A', start_date='x', end_date='y', page_size=100, read_interval_seconds=2)
+    assert not any(event[0] == 'balance' for event in events)
+
+
+@pytest.mark.parametrize('balance,positions', [([], []), ({}, {}), (RuntimeError('SECRET'), []), ({}, RuntimeError('SECRET'))])
+def test_accounting_balance_positions_errors_abort(monkeypatch, balance, positions):
+    client, events = accounting_client(monkeypatch, [[]], balance=balance, positions=positions)
+    with pytest.raises(WebullError):
+        client.accounting('A', start_date='x', end_date='y', page_size=100, read_interval_seconds=2)
+    assert not any(event[0] == 'sleep' for event in events)
+
+
+@pytest.mark.parametrize('interval', [0, -1, float('nan'), float('inf')])
+def test_accounting_invalid_interval_never_reads(monkeypatch, interval):
+    client, events = accounting_client(monkeypatch, [[]])
+    with pytest.raises(WebullError):
+        client.accounting('A', start_date='x', end_date='y', page_size=100, read_interval_seconds=interval)
+    assert events == []
+
+
+def test_accounting_cli_uses_one_client_and_exact_output(monkeypatch):
+    import webull_cli.commands.account as module
+    calls = []
+    body = {'history': [], 'balance': {}, 'positions': []}
+    def factory():
+        calls.append('client')
+        def accounting(account, **kwargs):
+            calls.append((account, kwargs))
+            return body
+        return SimpleNamespace(accounting=accounting)
+    monkeypatch.setattr(module, 'WebullClient', factory)
+    args = ['account', 'accounting', 'A', '--start-date', '2026-10-01', '--end-date', '2026-10-26']
+    assert runner.invoke(app, args).exit_code == 2
+    assert calls == []
+    result = runner.invoke(app, args + ['--read-interval-seconds', '2.5'])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == body
+    assert calls == ['client', ('A', {'start_date': '2026-10-01', 'end_date': '2026-10-26', 'page_size': 100, 'read_interval_seconds': 2.5})]

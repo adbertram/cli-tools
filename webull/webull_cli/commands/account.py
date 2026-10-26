@@ -7,7 +7,7 @@ from ..client import WebullClient, WebullError
 from ..presentation import guard, render
 
 app = typer.Typer(help="Inspect accounts", no_args_is_help=True)
-COMMAND_CREDENTIALS = {name: ["custom"] for name in ("list", "get", "balance", "positions")}
+COMMAND_CREDENTIALS = {name: ["custom"] for name in ("list", "get", "balance", "positions", "accounting")}
 
 @app.command("list")
 @command
@@ -44,3 +44,18 @@ def account_positions(
     """List account positions."""
     render(WebullClient().positions(account), table=table, filters=filter, properties=properties, limit=limit)
 
+
+
+@app.command("accounting")
+@command
+@guard
+def account_accounting(
+    account: str,
+    start_date: str = typer.Option(..., "--start-date", help="History start date"),
+    end_date: str = typer.Option(..., "--end-date", help="History end date"),
+    read_interval_seconds: float = typer.Option(..., "--read-interval-seconds", help="Required caller-resolved interval between history reads"),
+    page_size: int = typer.Option(100, "--page-size", min=10, max=100, help="History API page size"),
+):
+    """Read complete raw history, balance and positions using one SDK client."""
+    print_json(WebullClient().accounting(account, start_date=start_date, end_date=end_date,
+                                        page_size=page_size, read_interval_seconds=read_interval_seconds))

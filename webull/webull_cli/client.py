@@ -202,6 +202,33 @@ class WebullClient:
         method = self.trade.order_v3.get_order_history if history else self.trade.order_v3.get_order_open
         return self.call(method, account, **kwargs)
 
+    def accounting(self, account, *, start_date, end_date, page_size, read_interval_seconds):
+        """Read complete raw history, balance and positions with one SDK client."""
+        positive(read_interval_seconds, "read-interval-seconds")
+        if type(page_size) is not int or not 10 <= page_size <= 100:
+            raise WebullError("validation", "page-size must be between 10 and 100.")
+        history, cursors, cursor = [], set(), None
+        while True:
+            page = self.orders(account, history=True, page_size=page_size,
+                               last_client_order_id=cursor, start_date=start_date, end_date=end_date)
+            if not isinstance(page, list) or any(not isinstance(row, dict) for row in page):
+                raise WebullError("upstream", "Malformed Webull accounting history page.")
+            if not page:
+                break
+            cursor = page[-1].get("client_order_id")
+            if not isinstance(cursor, str) or not cursor.strip() or cursor in cursors:
+                raise WebullError("upstream", "Malformed or repeated Webull accounting history cursor.")
+            cursors.add(cursor)
+            history.extend(page)
+            time.sleep(read_interval_seconds)
+        balance = self.balance(account)
+        if not isinstance(balance, dict):
+            raise WebullError("upstream", "Malformed Webull accounting balance.")
+        positions = self.positions(account)
+        if not isinstance(positions, list):
+            raise WebullError("upstream", "Malformed Webull accounting positions.")
+        return {"history": history, "balance": balance, "positions": positions}
+
     def order(self, account, client_order_id):
         self.require_account_auth()
         return self.call(self.trade.order_v3.get_order_detail, account, client_order_id)
