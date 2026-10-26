@@ -231,6 +231,8 @@ list_commands = []
 list_commands = []
 
 [cli_specific.youtube]
+# `channel videos captions add` sits four levels deep.
+max_nested_depth = 4
 list_commands = [
     "channel videos list",
 ]
