@@ -1,7 +1,7 @@
 {
   "tool": "gumroad",
   "description": "CLI interface for gumroad",
-  "discovered_at": "2026-10-26T20:39:51Z",
+  "discovered_at": "2026-10-26T20:45:00Z",
   "total_commands": 29,
   "global_options": [],
   "commands": {
@@ -262,7 +262,14 @@
     "books": {
       "help": "Read current Notion manuscripts and build derived artifacts",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "build-epub": {
           "help": "Build current Notion Drafts; attach exact artifact and source manifest to the root.",
@@ -300,6 +307,12 @@
               "help": "Table output",
               "short": "-t",
               "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -339,6 +352,12 @@
               "help": "Table output",
               "short": "-t",
               "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -366,6 +385,12 @@
               "help": "Table output",
               "short": "-t",
               "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -393,19 +418,40 @@
     "engine": {
       "help": "Install the local renderer and API engine",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "install": {
           "help": "Install locked npm dependencies and compile the standalone engine.",
           "arguments": [],
-          "options": []
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
         }
       }
     },
     "formats": {
       "help": "Formats operations with exact JSON inputs",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "plan": {
           "help": "planGumroadFormats: preserve exact source/hash/approval gates. See gumroad schema get planGumroadFormats.",
@@ -464,7 +510,14 @@
     "products": {
       "help": "Read safe product metadata and attachment IDs",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Inspect product metadata, attachment IDs and target-state hash.",
@@ -540,7 +593,14 @@
     "releases": {
       "help": "Releases operations with exact JSON inputs",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "create-draft": {
           "help": "createGumroadDraft: preserve exact source/hash/approval gates. See gumroad schema get createGumroadDraft.",
@@ -651,7 +711,14 @@
     "schema": {
       "help": "Inspect strict operation JSON schemas",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "get": {
           "help": "Return an operation's complete input schema and CLI mapping without authentication.",
@@ -671,6 +738,12 @@
               "help": "Table output",
               "short": "-t",
               "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         },
@@ -707,6 +780,12 @@
               "help": "Table output",
               "short": "-t",
               "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
             }
           ]
         }
@@ -715,7 +794,14 @@
     "smoke-drafts": {
       "help": "Smoke-Drafts operations with exact JSON inputs",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "create": {
           "help": "createGumroadSmokeDraft: preserve exact source/hash/approval gates. See gumroad schema get createGumroadSmokeDraft.",
@@ -774,7 +860,14 @@
     "uploads": {
       "help": "Uploads operations with exact JSON inputs",
       "arguments": [],
-      "options": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
       "commands": {
         "smoke-test": {
           "help": "smokeTestGumroadUpload: preserve exact source/hash/approval gates. See gumroad schema get smokeTestGumroadUpload.",

@@ -8,6 +8,12 @@ from gumroad_cli import main, client
 
 runner = CliRunner()
 
+@pytest.fixture(autouse=True)
+def credential_gate_without_external_access(monkeypatch):
+    from gumroad_cli.config import Config
+    monkeypatch.setattr(Config, "_get", lambda self, field: "synthetic-token" if field == "PERSONAL_ACCESS_TOKEN" else None)
+
+
 
 def test_all_worker_capabilities_exposed():
     worker_keys = {

@@ -40,7 +40,7 @@ gumroad schema get updateGumroadFormats
 gumroad engine install
 ```
 
-For the complex release/upload operations, `--input-file` is a strict JSON object matching the printed schema. Every field is required, including explicit nulls. Unknown fields/types/enums fail before credential access or network calls. Hashes and approval flags must reflect actual review; they are never generated as a substitute for review. Example read-only release plan input:
+For the complex release/upload operations, `--input-file` is a strict JSON object matching the printed schema. Every field is required, including explicit nulls. Unknown fields/types/enums fail before network calls. Hashes and approval flags must reflect actual review; they are never generated as a substitute for review. Example read-only release plan input:
 
 ```json
 {

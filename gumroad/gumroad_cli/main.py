@@ -7,6 +7,8 @@ from jsonschema import Draft202012Validator
 from cli_tools_shared import create_app, run_app
 from cli_tools_shared.auth_commands import create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
+from cli_tools_shared.command_registry import register_commands
+from importlib import import_module
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, validate_filters
 from cli_tools_shared.output import command, print_json, print_table
 from . import __version__
@@ -36,6 +38,18 @@ def validate_input(operation, payload):
 def invoke(operation, payload, profile, table=False):
     validate_input(operation, payload)
     render(run_operation(operation, payload, profile), table)
+
+
+def _no_gumroad_config(profile=None):
+    """Avoid even reading Gumroad credentials for schema/engine/book-only commands."""
+    return None
+
+
+def register_group(name, group_app):
+    module = import_module(".commands." + name.replace("-", "_"), __package__)
+    module.app = group_app
+    factory = _no_gumroad_config if name in {"books", "schema", "engine"} else get_config
+    register_commands(app, factory, module, name=name, help=group_app.info.help or name)
 
 
 products = typer.Typer(help="Read safe product metadata and attachment IDs", no_args_is_help=True)
@@ -70,7 +84,7 @@ def get_product(
     """Inspect product metadata, attachment IDs and target-state hash."""
     invoke("inspectGumroadProduct", {"productId": product_id}, profile, table)
 
-app.add_typer(products, name="products")
+register_group("products", products)
 books = typer.Typer(help="Read current Notion manuscripts and build derived artifacts", no_args_is_help=True)
 
 @books.command("inspect")
@@ -99,7 +113,7 @@ def build_command(operation):
 
 books.command("build-pdf")(build_command("buildGumroadBook"))
 books.command("build-epub")(build_command("buildGumroadEpub"))
-app.add_typer(books, name="books")
+register_group("books", books)
 
 
 def file_command(operation):
@@ -123,7 +137,7 @@ for group in ["uploads", "smoke-drafts", "releases", "formats"]:
     for operation, spec in CONTRACTS.items():
         if spec["group"] == group:
             subapp.command(spec["command"])(file_command(operation))
-    app.add_typer(subapp, name=group)
+    register_group(group, subapp)
 
 schema = typer.Typer(help="Inspect strict operation JSON schemas", no_args_is_help=True)
 @schema.command("list")
@@ -155,7 +169,7 @@ def get_schema(
     if operation not in CONTRACTS:
         raise typer.BadParameter("Unknown operation. Choose: " + ", ".join(CONTRACTS))
     render(CONTRACTS[operation], table)
-app.add_typer(schema, name="schema")
+register_group("schema", schema)
 
 engine = typer.Typer(help="Install the local renderer and API engine", no_args_is_help=True)
 @engine.command("install")
@@ -163,7 +177,7 @@ engine = typer.Typer(help="Install the local renderer and API engine", no_args_i
 def engine_install():
     """Install locked npm dependencies and compile the standalone engine."""
     print_json(install_engine())
-app.add_typer(engine, name="engine")
+register_group("engine", engine)
 app.add_typer(create_auth_app(get_config, tool_name="gumroad"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")
 
