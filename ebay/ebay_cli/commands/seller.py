@@ -8,6 +8,7 @@ COMMAND_CREDENTIALS = {
     "listings": ["oauth_authorization_code"],
     "locations": ["oauth_authorization_code"],
     "messages": ["oauth_authorization_code"],
+    "offers": ["oauth_authorization_code"],
     "orders": ["oauth_authorization_code"],
     "payment-policies": ["oauth_authorization_code"],
     "policies": ["oauth_authorization_code"],
