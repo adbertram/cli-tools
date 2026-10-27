@@ -18,7 +18,7 @@ app = create_app(name="podio", help="CLI interface for Podio API - Manage apps, 
 # Import and register command modules
 # These will be imported as they're created
 try:
-    from .commands import item, app as app_cmd, task, space, org, auth, comment, webhook, conversation, file, webform
+    from .commands import item, app as app_cmd, task, space, org, auth, comment, webhook, conversation, file, webform, view
     register_commands(app, get_config, item, name="item", help="Manage Podio items")
     register_commands(app, get_config, app_cmd, name="app", help="Manage Podio applications")
     register_commands(app, get_config, task, name="task", help="Manage Podio tasks")
@@ -30,6 +30,7 @@ try:
     register_commands(app, get_config, conversation, name="conversation", help="Manage Podio conversations")
     register_commands(app, get_config, file, name="file", help="Manage Podio files")
     register_commands(app, get_config, webform, name="webform", help="Manage Podio webforms")
+    register_commands(app, get_config, view, name="view", help="Manage Podio app views")
     app.add_typer(create_cache_app(get_config), name="cache")
 except ImportError:
     # Commands not yet implemented - will add as we build them

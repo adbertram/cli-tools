@@ -19,6 +19,9 @@ COMMAND_CREDENTIALS = {
     "list": [
         "oauth_authorization_code"
     ],
+    "share": [
+        "oauth_authorization_code"
+    ],
     "update": [
         "oauth_authorization_code"
     ],
@@ -29,6 +32,7 @@ COMMAND_CREDENTIALS = {
 import json
 import sys
 from typing import Optional, List, Any, Dict
+from enum import Enum
 from pathlib import Path
 import typer
 
@@ -40,6 +44,12 @@ from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio items")
+
+
+class ShareAccess(str, Enum):
+    view = "view"
+    comment = "comment"
+    rate = "rate"
 
 
 @app.command("get")
@@ -323,6 +333,47 @@ def delete_item(
         client.Item.delete(item_id=item_id, silent=silent, hook=not no_hook)
         print_success(f"Item {item_id} deleted successfully")
         print_output({"item_id": item_id, "deleted": True}, table=table)
+    except TransportException as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("share")
+@command
+def share_item(
+    item_id: int = typer.Argument(..., help="Item ID to share"),
+    email: List[str] = typer.Option(..., "--email", "-e", help="Email address to share with (repeat for several)"),
+    access: ShareAccess = typer.Option(..., "--access", "-a", help="What the recipients may do: view, comment or rate"),
+    message: Optional[str] = typer.Option(None, "--message", "-m", help="Message sent to the recipients"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Share an item with people by email (POST /grant/item/{item_id}).
+
+    Recipients need not be Podio members yet. Each address is sent as a
+    {"type": "mail", "id": <address>} contact identifier.
+
+    Examples:
+        podio item share 12345 --email a@example.com --access view
+        podio item share 12345 -e a@example.com -e b@example.com --access comment --message "Please review"
+    """
+    try:
+        body = {
+            "people": [{"type": "mail", "id": address} for address in email],
+            "action": access.value,
+        }
+        if message:
+            body["message"] = message
+
+        client = get_client()
+        result = client.transport.POST(
+            url=f"/grant/item/{item_id}", body=json.dumps(body), type="application/json"
+        )
+        print_success(f"Item {item_id} shared with {len(email)} recipient(s)")
+        print_output(
+            {"item_id": item_id, "emails": email, "access": access.value, "response": format_response(result)},
+            table=table,
+        )
     except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)

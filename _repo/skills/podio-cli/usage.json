@@ -1,8 +1,8 @@
 {
   "tool": "podio",
   "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
-  "discovered_at": "2026-09-14T18:21:07Z",
-  "total_commands": 94,
+  "discovered_at": "2026-10-27T19:11:30Z",
+  "total_commands": 104,
   "global_options": [
     {
       "name": "--version",
@@ -119,6 +119,45 @@
             }
           ],
           "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Permanently delete a Podio application with all its items, widgets, filters and shares. This cannot be undone. Prompts for confirmation unless --yes is given; without a terminal, --yes is required.",
+          "examples": [
+            "podio app delete 12345",
+            "podio app delete 12345 --yes"
+          ],
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip the confirmation prompt",
+              "short": "-y",
+              "takes_value": false
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -2106,6 +2145,43 @@
             }
           ]
         },
+        "replace": {
+          "help": "Mark a file as the replacement for an older file. Calls POST /file/{new_file_id}/replace with {\"old_file_id\": ...}. Only files of type \"attachment\" can be replaced.",
+          "examples": [
+            "podio file replace 222 111",
+            "podio file replace 222 111 --table"
+          ],
+          "arguments": [
+            {
+              "name": "new_file_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "File ID of the replacement (new) file"
+            },
+            {
+              "name": "old_file_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "File ID of the attachment being replaced"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "upload": {
           "help": "Upload a file to Podio. Returns the file_id which can be used to attach the file to items, tasks, comments, etc.",
           "examples": [
@@ -2433,6 +2509,58 @@
             }
           ]
         },
+        "share": {
+          "help": "Share an item with people by email (POST /grant/item/{item_id}). Recipients need not be Podio members yet. Each address is sent as a {\"type\": \"mail\", \"id\": <address>} contact identifier.",
+          "examples": [
+            "podio item share 12345 --email a@example.com --access view",
+            "podio item share 12345 -e a@example.com -e b@example.com --access comment --message \"Please review\""
+          ],
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Item ID to share"
+            }
+          ],
+          "options": [
+            {
+              "name": "--email",
+              "type": "TEXT",
+              "required": true,
+              "help": "Email address to share with (repeat for several)",
+              "short": "-e"
+            },
+            {
+              "name": "--access",
+              "type": "view|comment|rate",
+              "required": true,
+              "help": "What the recipients may do: view, comment or rate",
+              "short": "-a"
+            },
+            {
+              "name": "--message",
+              "type": "TEXT",
+              "required": false,
+              "help": "Message sent to the recipients",
+              "short": "-m"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
         "update": {
           "help": "Update an existing Podio item. Reads update data from a JSON file or stdin. Update data format (same as create): { \"fields\": [ {\"external_id\": \"status\", \"values\": [{\"value\": \"completed\"}]} ] }",
           "examples": [
@@ -2727,6 +2855,179 @@
               "help": "Auth profile name"
             }
           ]
+        },
+        "member": {
+          "help": "Manage Podio space members",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "add": {
+              "help": "Add users to a space by email (POST /space/{space_id}/member/). Sends invitations to the given addresses, new or existing Podio users.",
+              "examples": [
+                "podio space member add 12345 --email a@example.com --role regular",
+                "podio space member add 12345 -e a@example.com -e b@example.com --role light --message \"Welcome\""
+              ],
+              "arguments": [
+                {
+                  "name": "space_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Space ID to add members to"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--email",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Email address to invite (repeat for several)",
+                  "short": "-e"
+                },
+                {
+                  "name": "--role",
+                  "type": "regular|light|admin",
+                  "required": true,
+                  "help": "Role of the new members",
+                  "short": "-r"
+                },
+                {
+                  "name": "--message",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Personalized message for the invitation",
+                  "short": "-m"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "get": {
+              "help": "Get the membership details of one user on a space (GET /space/{space_id}/member/{user_id}/v2).",
+              "examples": [
+                "podio space member get 12345 77109345",
+                "podio space member get 12345 77109345 --table"
+              ],
+              "arguments": [
+                {
+                  "name": "space_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Space ID"
+                },
+                {
+                  "name": "user_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "User ID of the member"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            },
+            "list": {
+              "help": "List the members of a space (GET /space/{space_id}/member/v2/). Each member has profile, employee, role (light, regular, admin or blank), grants and is_partner.",
+              "examples": [
+                "podio space member list 12345",
+                "podio space member list 12345 --member-type admin",
+                "podio space member list 12345 --query adam --limit 10",
+                "podio space member list 12345 --filter \"role:eq:admin\"",
+                "podio space member list 12345 --properties \"profile,role\"",
+                "podio space member list 12345 --table"
+              ],
+              "arguments": [
+                {
+                  "name": "space_id",
+                  "type": "INTEGER",
+                  "required": true,
+                  "help": "Space ID to list members of"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--member-type",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Only this member type: employee, external, admin, regular, light, guest"
+                },
+                {
+                  "name": "--query",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Search term matched against members",
+                  "short": "-q"
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum members to return",
+                  "short": "-l",
+                  "default": "100"
+                },
+                {
+                  "name": "--offset",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Position in the member list to start from",
+                  "default": "0"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., role:eq:admin, profile.name:contains:Adam)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                },
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Output as formatted table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--profile",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Auth profile name"
+                }
+              ]
+            }
+          }
         }
       }
     },
@@ -3252,6 +3553,196 @@
               "type": "TEXT",
               "required": false,
               "help": "Update due date (YYYY-MM-DD format)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "view": {
+      "help": "Manage Podio app views",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "create": {
+          "help": "Create a view on an application from a JSON definition. Reads the view definition from a JSON file or stdin. Documented keys: name, private, sort_by, sort_desc, filters, layout, fields, grouping. View data format: { \"name\": \"Open items\", \"private\": false, \"sort_by\": \"created_on\", \"sort_desc\": true, \"filters\": [{\"key\": \"<field_id>\", \"values\": [\"<value>\"]}] }",
+          "examples": [
+            "podio view create 12345 --json-file view.json"
+          ],
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to create the view in"
+            }
+          ],
+          "options": [
+            {
+              "name": "--json-file",
+              "type": "PATH",
+              "required": false,
+              "help": "Path to JSON file with the view definition (default: read stdin)"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a view. Prompts for confirmation unless --yes is given; without a terminal, --yes is required.",
+          "examples": [
+            "podio view delete 67890",
+            "podio view delete 67890 --yes"
+          ],
+          "arguments": [
+            {
+              "name": "view_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "View ID to delete"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip the confirmation prompt",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get the definition of a view (GET /view/app/{app_id}/{view}).",
+          "examples": [
+            "podio view get 12345 67890",
+            "podio view get 12345 last",
+            "podio view get 12345 67890 --table"
+          ],
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID the view belongs to"
+            },
+            {
+              "name": "view",
+              "type": "TEXT",
+              "required": true,
+              "help": "View ID, view name, or 'last' for the last view used"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Output as formatted table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List the views of an application.",
+          "examples": [
+            "podio view list 12345",
+            "podio view list 12345 --include-standard-views",
+            "podio view list 12345 --filter \"name:contains:Open\"",
+            "podio view list 12345 --properties \"view_id,name\"",
+            "podio view list 12345 --table"
+          ],
+          "arguments": [
+            {
+              "name": "app_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Application ID to list views from"
+            }
+          ],
+          "options": [
+            {
+              "name": "--include-standard-views",
+              "type": "bool",
+              "required": false,
+              "help": "Also include Podio's standard views",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Maximum views to return",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:contains:Open)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated list of fields to include",
+              "short": "-p"
             },
             {
               "name": "--table",

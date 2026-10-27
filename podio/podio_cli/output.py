@@ -25,6 +25,9 @@ from cli_tools_shared.output import (  # noqa: F401
 )
 import json
 import re
+import sys
+
+import typer
 
 
 # --- CLI-specific helpers ---
@@ -162,12 +165,40 @@ def handle_api_error(error: Exception) -> int:
     return 1
 
 
+def confirm_or_refuse(action: str, yes: bool) -> None:
+    """Guard an irreversible command: skip with --yes, prompt on a TTY, refuse otherwise."""
+    if yes:
+        return
+    if not sys.stdin.isatty():
+        print_error(f"Refusing to {action} without --yes")
+        raise typer.Exit(1)
+    if not typer.confirm(f"About to {action}. This cannot be undone. Continue?"):
+        print_error("Aborted.")
+        raise typer.Exit(1)
+
+
+def read_json_input(json_file) -> Any:
+    """Load JSON from --json-file, or from stdin when no file is given."""
+    if json_file:
+        if not json_file.exists():
+            print_error(f"File not found: {json_file}")
+            raise typer.Exit(1)
+        source, label = json_file.read_text(), str(json_file)
+    else:
+        source, label = sys.stdin.read(), "stdin"
+    try:
+        return json.loads(source)
+    except json.JSONDecodeError as e:
+        print_error(f"Invalid JSON from {label}: {e}")
+        raise typer.Exit(1)
+
+
 def _add_id_alias(item: dict) -> dict:
     """Add a generic 'id' field if a resource-specific ID field exists."""
     if not isinstance(item, dict) or "id" in item:
         return item
     for key in ("app_id", "space_id", "org_id", "task_id", "file_id",
-                "comment_id", "hook_id", "conversation_id", "form_id"):
+                "comment_id", "hook_id", "conversation_id", "form_id", "view_id"):
         if key in item:
             item["id"] = item[key]
             break

@@ -16,6 +16,9 @@ COMMAND_CREDENTIALS = {
     "list": [
         "oauth_authorization_code"
     ],
+    "replace": [
+        "oauth_authorization_code"
+    ],
     "upload": [
         "oauth_authorization_code"
     ]
@@ -274,6 +277,40 @@ def copy_file(
         formatted = format_response(result)
         print_success(f"File {file_id} copied successfully")
         print_output(formatted, table=table)
+    except TransportException as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("replace")
+@command
+def replace_file(
+    new_file_id: int = typer.Argument(..., help="File ID of the replacement (new) file"),
+    old_file_id: int = typer.Argument(..., help="File ID of the attachment being replaced"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Mark a file as the replacement for an older file.
+
+    Calls POST /file/{new_file_id}/replace with {"old_file_id": ...}.
+    Only files of type "attachment" can be replaced.
+
+    Examples:
+        podio file replace 222 111
+        podio file replace 222 111 --table
+    """
+    try:
+        client = get_client()
+        result = client.transport.POST(
+            url=f"/file/{new_file_id}/replace",
+            body=json.dumps({"old_file_id": old_file_id}),
+            type="application/json",
+        )
+        print_success(f"File {new_file_id} now replaces file {old_file_id}")
+        print_output(
+            {"new_file_id": new_file_id, "old_file_id": old_file_id, "replaced": True, "response": format_response(result)},
+            table=table,
+        )
     except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
