@@ -346,6 +346,44 @@ ebay seller messages reply 123456 --body "Yes" --public --email-copy
 
 **Available fields:** message_id, sender, subject, body, source (inbox/buyer_question), created_date, item_id, item_title, message_status, responses
 
+#### Best Offers
+
+Manage Best Offers from buyers using the Trading API.
+
+```bash
+# List all active Best Offers
+ebay seller offers list
+ebay seller offers list --table
+
+# Filter by item
+ebay seller offers list --item-id 123456789012
+
+# List all offers (including expired/declined)
+ebay seller offers list --status All
+
+# Get details for a specific offer
+ebay seller offers get 1234567890
+ebay seller offers get 1234567890 --table
+
+# Accept an offer
+ebay seller offers accept 1234567890 --item-id 123456789012
+ebay seller offers accept 1234567890 --item-id 123456789012 --yes
+ebay seller offers accept 1234567890 --item-id 123456789012 --message "Thanks!"
+
+# Decline an offer
+ebay seller offers decline 1234567890 --item-id 123456789012 --yes
+ebay seller offers decline 1234567890 --item-id 123456789012 --message "Sorry, too low"
+
+# Send a counter offer
+ebay seller offers counter 1234567890 --item-id 123456789012 --price 45.00 --yes
+ebay seller offers counter 1234567890 --item-id 123456789012 --price 45.00 --quantity 2
+ebay seller offers counter 1234567890 --item-id 123456789012 --price 45.00 --message "Best I can do"
+```
+
+**Available fields:** best_offer_id, buyer_user_id, price, quantity, status, expiration_time, item_id, item_title, item_current_price, buyer_message, buyer_feedback_score, buyer_positive_feedback_percent, best_offer_code_type (BuyerBestOffer/BuyerCounterOffer)
+
+**Response actions require confirmation** with `--yes` or an interactive prompt. Accept/decline/counter operations show offer details before executing.
+
 #### Shipping Quotes
 
 Get shipping rates for a package without purchasing.
