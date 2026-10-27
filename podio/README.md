@@ -284,6 +284,8 @@ podio app activate <app_id>
 podio app deactivate <app_id>
 
 # Permanently delete an app and all its items (DELETE /app/{app_id})
+# Requires an API client with Podio trust level 2 or higher; otherwise Podio returns
+# HTTP 403 and the command exits 1 (delete the app in the Podio web app instead).
 podio app delete <app_id> [--yes]
 
 # Export app to Excel
@@ -381,8 +383,10 @@ podio item update <item_id> [--json-file file.json] [--silent] [--no-hook]
 # Delete an item
 podio item delete <item_id> [--silent] [--no-hook]
 
-# Share an item with people by email (POST /grant/item/{item_id})
-podio item share <item_id> --email <address> [--email <address> ...] --access view|comment|rate [--message "text"]
+# Share an item with people by email (POST /grant/item/{item_id}, sends access_level)
+# Requires an API client with Podio trust level 2 or higher; otherwise Podio returns
+# HTTP 403 and the command exits 1 (share the item in the Podio web app instead).
+podio item share <item_id> --email <address> [--email <address> ...] --access edit|view [--message "text"]
 
 # Get item field values (v2 API - clean format)
 podio item values <item_id>
@@ -682,6 +686,8 @@ podio space member list <space_id> [--member-type employee|external|admin|regula
 podio space member get <space_id> <user_id>
 
 # Invite people to a space by email (POST /space/{space_id}/member/)
+# Requires an API client with Podio trust level 2 or higher; otherwise Podio returns
+# HTTP 403 and the command exits 1 (add the members in the Podio web app instead).
 podio space member add <space_id> --email <address> [--email <address> ...] --role regular|light|admin [--message "text"]
 ```
 
@@ -743,6 +749,8 @@ podio view delete 67890 --yes
 ### Destructive Command Guard
 
 `podio app delete` and `podio view delete` are irreversible. They prompt for confirmation on a terminal, accept `--yes`/`-y` to skip the prompt, and refuse to run (exit code 1) when stdin is not a terminal and `--yes` is missing.
+
+`podio item share`, `podio app delete` and `podio space member add` need an API client with a Podio trust level of 2 or higher. Without it Podio answers HTTP 403 ("Only available for clients with a trust level of 2 or higher") and the CLI prints an error naming the requirement and exits 1. Do those actions in the Podio web app instead (`item delete`, `view create` and `file replace` are not affected).
 
 ### Webhook Commands
 

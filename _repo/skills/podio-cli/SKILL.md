@@ -29,8 +29,10 @@ podio <command-group> <action> [arguments] [options]
 | Upload a file | `podio file upload ./file.pdf` |
 | List app views | `podio view list APP_ID` |
 | List space members | `podio space member list SPACE_ID` |
-| Share an item by email | `podio item share ITEM_ID --email a@example.com --access view` |
-| Delete an app or view (irreversible) | `podio app delete APP_ID --yes`, `podio view delete VIEW_ID --yes` |
+| Share an item by email (needs API client trust level 2+; on 403 share in the Podio web app) | `podio item share ITEM_ID --email a@example.com --access view` |
+| Delete an app (needs API client trust level 2+; on 403 use the Podio web app) or view (irreversible) | `podio app delete APP_ID --yes`, `podio view delete VIEW_ID --yes` |
+
+Trust level: `item share`, `app delete` and `space member add` need an API client with Podio trust level 2 or higher. This CLI's client lacks it, so Podio returns HTTP 403 and the CLI exits 1 with a trust-level error. Do those actions in the Podio web app; do not retry.
 </quick_start>
 
 <essential_principles>

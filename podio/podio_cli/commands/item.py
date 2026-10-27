@@ -47,9 +47,8 @@ app = typer.Typer(help="Manage Podio items")
 
 
 class ShareAccess(str, Enum):
+    edit = "edit"
     view = "view"
-    comment = "comment"
-    rate = "rate"
 
 
 @app.command("get")
@@ -343,7 +342,7 @@ def delete_item(
 def share_item(
     item_id: int = typer.Argument(..., help="Item ID to share"),
     email: List[str] = typer.Option(..., "--email", "-e", help="Email address to share with (repeat for several)"),
-    access: ShareAccess = typer.Option(..., "--access", "-a", help="What the recipients may do: view, comment or rate"),
+    access: ShareAccess = typer.Option(..., "--access", "-a", help="Access level granted to the recipients: edit or view"),
     message: Optional[str] = typer.Option(None, "--message", "-m", help="Message sent to the recipients"),
     table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
 ):
@@ -351,7 +350,12 @@ def share_item(
     Share an item with people by email (POST /grant/item/{item_id}).
 
     Recipients need not be Podio members yet. Each address is sent as a
-    {"type": "mail", "id": <address>} contact identifier.
+    {"type": "mail", "id": <address>} contact identifier, with the --access
+    value sent as access_level (edit or view).
+
+    Podio only allows item sharing through the API for API clients with a trust
+    level of 2 or higher. Without it Podio answers HTTP 403 and this command
+    exits 1; share the item in the Podio web app instead.
 
     Examples:
         podio item share 12345 --email a@example.com --access view
@@ -360,7 +364,7 @@ def share_item(
     try:
         body = {
             "people": [{"type": "mail", "id": address} for address in email],
-            "action": access.value,
+            "access_level": access.value,
         }
         if message:
             body["message"] = message

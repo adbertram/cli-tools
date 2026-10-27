@@ -1,7 +1,7 @@
 {
   "tool": "podio",
   "description": "CLI interface for Podio API - Manage apps, items, tasks, and more",
-  "discovered_at": "2026-10-27T19:11:30Z",
+  "discovered_at": "2026-10-27T19:35:11Z",
   "total_commands": 104,
   "global_options": [
     {
@@ -136,7 +136,7 @@
           ]
         },
         "delete": {
-          "help": "Permanently delete a Podio application with all its items, widgets, filters and shares. This cannot be undone. Prompts for confirmation unless --yes is given; without a terminal, --yes is required.",
+          "help": "Permanently delete a Podio application with all its items, widgets, filters and shares. This cannot be undone. Prompts for confirmation unless --yes is given; without a terminal, --yes is required. Podio only allows this through the API for API clients with a trust level of 2 or higher. Without it Podio answers HTTP 403 and this command exits 1; delete the app in the Podio web app instead.",
           "examples": [
             "podio app delete 12345",
             "podio app delete 12345 --yes"
@@ -2510,7 +2510,7 @@
           ]
         },
         "share": {
-          "help": "Share an item with people by email (POST /grant/item/{item_id}). Recipients need not be Podio members yet. Each address is sent as a {\"type\": \"mail\", \"id\": <address>} contact identifier.",
+          "help": "Share an item with people by email (POST /grant/item/{item_id}). Recipients need not be Podio members yet. Each address is sent as a {\"type\": \"mail\", \"id\": <address>} contact identifier, with the --access value sent as access_level (edit or view). Podio only allows item sharing through the API for API clients with a trust level of 2 or higher. Without it Podio answers HTTP 403 and this command exits 1; share the item in the Podio web app instead.",
           "examples": [
             "podio item share 12345 --email a@example.com --access view",
             "podio item share 12345 -e a@example.com -e b@example.com --access comment --message \"Please review\""
@@ -2533,9 +2533,9 @@
             },
             {
               "name": "--access",
-              "type": "view|comment|rate",
+              "type": "edit|view",
               "required": true,
-              "help": "What the recipients may do: view, comment or rate",
+              "help": "Access level granted to the recipients: edit or view",
               "short": "-a"
             },
             {
@@ -2862,7 +2862,7 @@
           "options": [],
           "commands": {
             "add": {
-              "help": "Add users to a space by email (POST /space/{space_id}/member/). Sends invitations to the given addresses, new or existing Podio users.",
+              "help": "Add users to a space by email (POST /space/{space_id}/member/). Sends invitations to the given addresses, new or existing Podio users. Podio only allows this through the API for API clients with a trust level of 2 or higher. Without it Podio answers HTTP 403 and this command exits 1; add the members in the Podio web app instead.",
               "examples": [
                 "podio space member add 12345 --email a@example.com --role regular",
                 "podio space member add 12345 -e a@example.com -e b@example.com --role light --message \"Welcome\""

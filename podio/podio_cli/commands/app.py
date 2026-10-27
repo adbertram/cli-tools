@@ -263,6 +263,10 @@ def delete_app(
     This cannot be undone. Prompts for confirmation unless --yes is given;
     without a terminal, --yes is required.
 
+    Podio only allows this through the API for API clients with a trust level of
+    2 or higher. Without it Podio answers HTTP 403 and this command exits 1;
+    delete the app in the Podio web app instead.
+
     Examples:
         podio app delete 12345
         podio app delete 12345 --yes

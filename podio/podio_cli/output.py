@@ -145,6 +145,14 @@ def handle_api_error(error: Exception) -> int:
         print_error("Resource not found.")
         return 1
 
+    # Podio gates some endpoints behind API client trust level 2
+    if status_code == "403" and "trust level" in error_str:
+        print_error(
+            "Podio refused this operation: this API client lacks the required trust level "
+            "(2 or higher; upgrades go through Podio support). Do it in the Podio web app instead."
+        )
+        return 1
+
     # Check for permission errors
     if status_code == "403":
         print_error("Permission denied or invalid resource ID. Check that the ID is correct and you have access to this resource.")

@@ -283,7 +283,7 @@ def test_item_share_posts_grant_with_mail_contact_identifiers(wire):
     state["data"] = b'{"invitable": [{"profile_id": 5}]}'
     result = runner.invoke(
         item.app,
-        ["share", "900", "--email", "a@example.com", "--email", "b@example.com", "--access", "comment", "--message", "Look"],
+        ["share", "900", "--email", "a@example.com", "--email", "b@example.com", "--access", "edit", "--message", "Look"],
     )
     assert result.exit_code == 0, result.output
     assert calls == [{
@@ -291,7 +291,7 @@ def test_item_share_posts_grant_with_mail_contact_identifiers(wire):
         "url": "https://api.podio.com/grant/item/900",
         "body": {
             "people": [{"type": "mail", "id": "a@example.com"}, {"type": "mail", "id": "b@example.com"}],
-            "action": "comment",
+            "access_level": "edit",
             "message": "Look",
         },
     }]
@@ -300,14 +300,14 @@ def test_item_share_posts_grant_with_mail_contact_identifiers(wire):
 
 def test_item_share_omits_message_when_absent(wire):
     calls, _ = wire
-    result = runner.invoke(item.app, ["share", "900", "-e", "a@example.com", "--access", "rate"])
+    result = runner.invoke(item.app, ["share", "900", "-e", "a@example.com", "--access", "view"])
     assert result.exit_code == 0
-    assert calls[0]["body"] == {"people": [{"type": "mail", "id": "a@example.com"}], "action": "rate"}
+    assert calls[0]["body"] == {"people": [{"type": "mail", "id": "a@example.com"}], "access_level": "view"}
 
 
 def test_item_share_rejects_unknown_access_and_missing_email(wire):
     calls, _ = wire
-    assert runner.invoke(item.app, ["share", "900", "-e", "a@example.com", "--access", "edit"]).exit_code == 2
+    assert runner.invoke(item.app, ["share", "900", "-e", "a@example.com", "--access", "comment"]).exit_code == 2
     assert runner.invoke(item.app, ["share", "900", "--access", "view"]).exit_code == 2
     assert calls == []
 
@@ -318,3 +318,30 @@ def test_item_share_api_error_exits_nonzero(wire):
     result = runner.invoke(item.app, ["share", "900", "-e", "a@example.com", "--access", "view"])
     assert result.exit_code != 0
     assert "shared with" not in result.stderr
+
+
+TRUST_LEVEL_403 = (
+    b'{"error":"forbidden","error_description":"Only available for clients with a trust level of 2 '
+    b'or higher. To get your API client upgraded to a higher trust level contact support at '
+    b'https://support.sharefile.com."}'
+)
+
+
+@pytest.mark.parametrize(
+    "module, args",
+    [
+        (item, ["share", "900", "-e", "a@example.com", "--access", "view"]),
+        (app_cmd, ["delete", "55", "--yes"]),
+        (space, ["member", "add", "77", "-e", "a@example.com", "--role", "light"]),
+    ],
+    ids=["item-share", "app-delete", "space-member-add"],
+)
+def test_trust_level_403_reports_web_app_requirement(wire, module, args):
+    _, state = wire
+    state.update(status=403, data=TRUST_LEVEL_403)
+    result = runner.invoke(module.app, args)
+    assert result.exit_code == 1
+    assert "trust level" in result.stderr
+    assert "Podio web app" in result.stderr
+    assert "Permission denied" not in result.stderr
+    assert result.stdout == ""

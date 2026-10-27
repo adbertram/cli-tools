@@ -233,6 +233,10 @@ def add_members(
 
     Sends invitations to the given addresses, new or existing Podio users.
 
+    Podio only allows this through the API for API clients with a trust level of
+    2 or higher. Without it Podio answers HTTP 403 and this command exits 1;
+    add the members in the Podio web app instead.
+
     Examples:
         podio space member add 12345 --email a@example.com --role regular
         podio space member add 12345 -e a@example.com -e b@example.com --role light --message "Welcome"
