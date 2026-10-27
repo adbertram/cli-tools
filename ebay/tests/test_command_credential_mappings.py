@@ -34,6 +34,7 @@ def test_seller_group_commands_are_oauth_only():
         "listings",
         "locations",
         "messages",
+        "offers",
         "orders",
         "payment-policies",
         "policies",
@@ -41,6 +42,7 @@ def test_seller_group_commands_are_oauth_only():
         "shipping-labels",
         "shipping-quote",
         "templates",
+        "videos",
     }
     for group in oauth_only_groups:
         assert credentials[group] == ["oauth_authorization_code"]
