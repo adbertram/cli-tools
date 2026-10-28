@@ -24,6 +24,8 @@ CHAT_ID_RE = re.compile(r"^/thread/([0-9a-fA-F-]{36})/?$")
 DEFAULT_TIMEOUT_SECONDS = 120
 SEND_ACK_TIMEOUT_SECONDS = 20
 SIDE_ID_TIMEOUT_SECONDS = 30
+RESPONSE_SETTLE_SECONDS = 1.0
+HISTORY_SETTLE_TIMEOUT_SECONDS = 5.0
 
 activity = get_activity_logger("muse-chat")
 
@@ -289,6 +291,8 @@ class MuseChatClient:
         text matches. Any other history still refuses to match.
         """
         deadline = time.monotonic() + timeout
+        stable_signature = None
+        stable_since = None
         while True:
             snapshot = MuseChatClient._snapshot(page)
             current_turn = next(
@@ -307,6 +311,12 @@ class MuseChatClient:
                         chat_id, turn_message_id, current_turn["message_id"],
                     )
                     turn_message_id = current_turn["message_id"]
+            if current_turn is None and new_side_message is not None and not user_turns:
+                stable_signature, stable_since = None, None
+                remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    page.wait_for_timeout(min(250, max(1, int(remaining * 1000))))
+                    continue
             if current_turn is None:
                 raise ClientError(
                     f"Muse chat {chat_id!r} no longer exposed submitted turn "
@@ -334,7 +344,11 @@ class MuseChatClient:
             elif responses:
                 response_turn_ids = {row.get("turn_id") for row in responses}
                 if None not in response_turn_ids and len(response_turn_ids) == 1:
-                    latest_response = responses[-1]["text"]
+                    # Distinct durable message IDs are ordered components of
+                    # one answer, including prose and task cards. Never dedup
+                    # genuine components by their text.
+                    components = {row["message_id"]: row["text"] for row in responses}
+                    latest_response = "\n\n".join(components.values())
                 else:
                     response_ambiguous = True
 
@@ -363,7 +377,14 @@ class MuseChatClient:
                     "unrelated response."
                 )
 
+            now = time.monotonic()
+            signature = tuple((row["message_id"], row.get("turn_id"), row["text"]) for row in responses)
             if latest_response and not snapshot["typing"] and not snapshot["working"]:
+                if signature != stable_signature:
+                    stable_signature, stable_since = signature, now
+            else:
+                stable_signature, stable_since = None, None
+            if stable_since is not None and now <= deadline and now - stable_since >= RESPONSE_SETTLE_SECONDS:
                 return {
                     "status": "completed",
                     "chat_id": chat_id,
@@ -372,7 +393,7 @@ class MuseChatClient:
                     "response": latest_response,
                 }
 
-            remaining = deadline - time.monotonic()
+            remaining = deadline - now
             if remaining <= 0:
                 return {
                     "status": "timeout",
@@ -573,7 +594,18 @@ class MuseChatClient:
     def get_chat(self, chat_id: str) -> dict:
         validated = self._validate_chat_id(chat_id)
         page = self._open_chat(validated)
+        deadline = time.monotonic() + HISTORY_SETTLE_TIMEOUT_SECONDS
         snapshot = self._snapshot(page)
+        previous = snapshot
+        stable_since = time.monotonic()
+        while not snapshot["typing"] and not snapshot["working"]:
+            now = time.monotonic()
+            if now - stable_since >= RESPONSE_SETTLE_SECONDS or now >= deadline:
+                break
+            page.wait_for_timeout(min(250, max(1, int((deadline - now) * 1000))))
+            snapshot = self._snapshot(page)
+            if snapshot != previous:
+                previous, stable_since = snapshot, time.monotonic()
         return normalize_chat(
             {
                 "id": validated,

@@ -1,0 +1,971 @@
+{
+  "tool": "webull",
+  "description": "CLI interface for webull",
+  "discovered_at": "2026-10-26T14:41:12Z",
+  "total_commands": 26,
+  "global_options": [],
+  "commands": {
+    "account": {
+      "help": "Inspect Webull accounts",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "accounting": {
+          "help": "Read complete raw history, balance and positions using one SDK client.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "History start date"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "History end date"
+            },
+            {
+              "name": "--read-interval-seconds",
+              "type": "FLOAT",
+              "required": true,
+              "help": "Required caller-resolved interval between history reads"
+            },
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[10<=x<=100]  History API page size",
+              "default": "100"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "balance": {
+          "help": "Get an account's full balance response.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get an account's full balance response.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List accounts, preserving every API field by default.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum accounts (local limit; Webull has no pagination)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Local field:op:value filter",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "positions": {
+          "help": "List account positions.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum positions (local limit; Webull has no pagination)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Local field:op:value filter",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "auth": {
+      "help": "Manage webull authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        },
+        "token": {
+          "help": "Save an access token from a hidden terminal prompt or piped stdin.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Authentication profile"
+            }
+          ]
+        }
+      }
+    },
+    "futures": {
+      "help": "Read futures market data",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "bars": {
+          "help": "Get full futures history bar responses.",
+          "arguments": [
+            {
+              "name": "symbol",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Webull market category",
+              "default": "US_FUTURES"
+            },
+            {
+              "name": "--timespan",
+              "type": "TEXT",
+              "required": false,
+              "help": "Webull bar timespan",
+              "default": "M1"
+            },
+            {
+              "name": "--count",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=1200]  Number of bars per API request",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "stream": {
+          "help": "Emit JSONL tick, disconnect and error events until interrupted.",
+          "arguments": [
+            {
+              "name": "symbol",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Webull market category",
+              "default": "US_FUTURES"
+            },
+            {
+              "name": "--reconnect-attempts",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=0]         SDK reconnect attempts",
+              "default": "3"
+            },
+            {
+              "name": "--reconnect-delay-milliseconds",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=0]         Reconnect delay",
+              "default": "1000"
+            },
+            {
+              "name": "--mqtt-port",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=65535]  MQTT TLS port",
+              "default": "8883"
+            },
+            {
+              "name": "--socket-loop-seconds",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[x>=0.001]   MQTT socket loop timeout",
+              "default": "1"
+            },
+            {
+              "name": "--close-grace-seconds",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[x>=0]       Parent close grace budget",
+              "default": "2"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "order": {
+      "help": "Inspect and manage broker orders",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "cancel": {
+          "help": "Cancel one broker order by caller-defined client order ID.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "client_order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Send the broker request",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print without sending",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get the full broker response for a client order ID.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "client_order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "history": {
+          "help": "Get one page of history with exact API cursor and date filters.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[10<=x<=100]  API page size (10 through 100)",
+              "default": "100"
+            },
+            {
+              "name": "--last-client-order-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact API cursor"
+            },
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "API start date, passed unchanged"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "API end date, passed unchanged"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]        Maximum rows returned from this API page (local cap)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Local field:op:value filter",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "Get one page of working orders; caller follows the unchanged cursor.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[10<=x<=100]  API page size (10 through 100)",
+              "default": "100"
+            },
+            {
+              "name": "--last-client-order-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact API cursor"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]        Maximum rows returned from this API page (local cap)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Local field:op:value filter",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "open": {
+          "help": "Get one page of working orders; caller follows the unchanged cursor.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--page-size",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[10<=x<=100]  API page size (10 through 100)",
+              "default": "100"
+            },
+            {
+              "name": "--last-client-order-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact API cursor"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]        Maximum rows returned from this API page (local cap)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Local field:op:value filter",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated output fields",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "place": {
+          "help": "Place caller-defined orders once; never retry an uncertain write.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--orders-json",
+              "type": "TEXT",
+              "required": true,
+              "help": "JSON array file; - reads stdin"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Send the broker request",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Validate and print without sending",
+              "takes_value": false
+            },
+            {
+              "name": "--send-before-epoch-ms",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Refuse transport after this UTC epoch millisecond deadline"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "replace": {
+          "help": "Replace caller-defined orders once.",
+          "arguments": [
+            {
+              "name": "account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--orders-json",
+              "type": "TEXT",
+              "required": true,
+              "help": "JSON array file; - reads stdin"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Send the broker request",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Validate and print without sending",
+              "takes_value": false
+            },
+            {
+              "name": "--send-before-epoch-ms",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Refuse transport after this UTC epoch millisecond deadline"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `webull` CLI. Run `webull --help` to discover command groups and `--help` on any subcommand for its options."
+}

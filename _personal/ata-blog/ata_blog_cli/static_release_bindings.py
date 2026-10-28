@@ -1,0 +1,2 @@
+# P11 release manifest binding
+P11_RELEASE_MANIFEST_SHA256 = ("ba5650e7f7d02510de76e006eb23f8683a9ec401ad4b485e0d436ea02776dac1")

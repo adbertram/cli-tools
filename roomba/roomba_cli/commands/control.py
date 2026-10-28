@@ -1,11 +1,13 @@
 """Control commands for Roomba CLI."""
 import typer
+from cli_tools_shared.output import command
 from typing import Optional
 
 from ..client import get_client, ClientError
 from cli_tools_shared.output import print_json, print_table, print_success, print_error, handle_error
 
 COMMAND_CREDENTIALS = {
+    "rooms": ["custom"],
     "dock": ["custom"],
     "evac": ["custom"],
     "find": ["custom"],
@@ -48,6 +50,7 @@ def _send_command(robot, command):
 
 
 @app.command("start")
+@command
 def control_start(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
@@ -84,6 +87,7 @@ def control_start(
 
 
 @app.command("stop")
+@command
 def control_stop(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
@@ -103,6 +107,7 @@ def control_stop(
 
 
 @app.command("pause")
+@command
 def control_pause(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
@@ -122,6 +127,7 @@ def control_pause(
 
 
 @app.command("resume")
+@command
 def control_resume(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
@@ -141,6 +147,7 @@ def control_resume(
 
 
 @app.command("dock")
+@command
 def control_dock(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
@@ -160,6 +167,7 @@ def control_dock(
 
 
 @app.command("find")
+@command
 def control_find(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
@@ -179,6 +187,7 @@ def control_find(
 
 
 @app.command("evac")
+@command
 def control_evac(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):
@@ -198,6 +207,7 @@ def control_evac(
 
 
 @app.command("status")
+@command
 def control_status(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -235,6 +245,7 @@ def control_status(
 
 
 @app.command("rooms")
+@command
 def control_rooms(
     robot: str | None = typer.Argument(None, help="Robot name or IP address"),
 ):

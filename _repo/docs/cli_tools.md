@@ -42,6 +42,7 @@
 | `dropbox` | The `dropbox` CLI provides a command-line interface for Dropbox API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `ebay` | The `ebay` CLI provides a command-line interface for eBay Fulfillment API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `elevenlabs` | The `elevenlabs` CLI provides a command-line interface for Elevenlabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `envato` | Envato Market API - search CodeCanyon, ThemeForest, and other Envato marketplace items and read sales counts, ratings, prices, and update dates |
 | `facebook` | The `facebook` CLI wraps playwright with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `facebook-ads` | Wrapper for Meta's official Ads CLI, with complete native command passthrough and upstream-owned authentication |
 | `fedex` | The `fedex` CLI provides a command-line interface for Fedex API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -56,6 +57,7 @@
 | `google-lighthouse` | The `google-lighthouse` CLI wraps lighthouse with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `grammarly` | The `grammarly` CLI provides a command-line interface for Grammarly API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `grokbot-sessions` | The `grokbot-sessions` CLI reads Grok Bot (Grokbot) session transcripts over the live Cursor-hosted `aiserver.v1.GrokBotService` Connect RPC API, adopting the desktop app's signed-in session. Use it to list agents, page transcripts, group turns, and inspect approvals, tool-card calls, subagent surfaces, and automations with the same command shape as `claude-code-sessions`, `codex-sessions`, and `deepseek-sessions`. |
+| `gumroad` | Inspect Gumroad products, upload existing files, create drafts, update metadata and attachments, and publish selected products through the Gumroad API |
 | `harmony` | The `harmony` CLI lets you manage Logitech Harmony hubs, activities, devices, and commands. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `hermes-sessions` | Query and analyze Hermes Agent session state from the local Hermes home |
 | `humanrail` | CLI interface for HumanRail (browser automation, worker side) |
@@ -129,6 +131,7 @@
 | `vues` | Vues (evrgreen) clipping campaigns, linked accounts, submissions and earnings |
 | `vyro` | Read Vyro clipping campaigns and account eligibility |
 | `weather` | The `weather` CLI provides a command-line interface for Weather API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `webull` | Trade and inspect Webull accounts, futures orders and market data through the official OpenAPI |
 | `whisper` | The `whisper` CLI wraps whisper.cpp (`whisper-cli`) for local, offline speech-to-text. Use it for JSON transcripts with timestamped segments; output mirrors `openai-whisper` so the two are swappable. |
 | `whop` | Read Whop participant accounts and Content Rewards campaigns, submissions, and earnings |
 | `x` | The `x` CLI provides a command-line interface for X API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

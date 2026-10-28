@@ -21,7 +21,6 @@ def _shell_quote(s: str) -> str:
 
 
 @app.command("show")
-@command
 def config_show(
     plist_path: str = typer.Option(N8N_PLIST, "--plist", help="LaunchDaemon plist path on server"),
 ):
@@ -55,7 +54,6 @@ def config_show(
 
 
 @app.command("set")
-@command
 def config_set(
     key: str = typer.Argument(..., help=f"Config key: {', '.join(VALID_KEYS.keys())}"),
     value: str = typer.Argument(..., help="Value to set"),

@@ -4,7 +4,7 @@ import typer
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from cli_tools_shared.output import command, print_json, print_table, print_error, print_info, handle_error
+from cli_tools_shared.output import print_json, print_table, print_error, print_info, handle_error
 from cli_tools_shared.filters import apply_filters, apply_properties_filter, apply_limit
 from ..parsers import format_local_time
 from ..n8n_api import get_n8n_api_client
@@ -23,10 +23,7 @@ def _fetch_executions_in_range(client, status, workflow_id, include_data, start_
     """Paginate /executions and keep executions whose startedAt falls in [start_utc, end_utc].
 
     Date filtering must use startedAt: a running execution has no stoppedAt yet.
-    A null startedAt means the execution never started (queued "new", or
-    "canceled" while queued); n8n's own startedAfter/startedBefore filters are
-    SQL comparisons on startedAt, so such rows are never in a date range.
-    Any other non-timezone-aware startedAt fails explicitly.
+    Unknown timestamps cannot establish inclusion and must fail explicitly.
     Read every page rather than infer completeness from row ordering.
     """
     results = []
@@ -57,8 +54,6 @@ def _fetch_executions_in_range(client, status, workflow_id, include_data, start_
             if not isinstance(ex, dict):
                 raise ValueError("Invalid execution inventory: expected execution object")
             started = ex.get("startedAt")
-            if started is None:
-                continue
             try:
                 if not isinstance(started, str):
                     raise ValueError
@@ -66,10 +61,7 @@ def _fetch_executions_in_range(client, status, workflow_id, include_data, start_
                 if timestamp.tzinfo is None:
                     raise ValueError
             except ValueError:
-                raise ValueError(
-                    f"Invalid execution inventory: execution {ex.get('id')} startedAt {started!r} "
-                    "cannot establish date-filter inclusion"
-                ) from None
+                raise ValueError("Invalid execution inventory: startedAt cannot establish date-filter inclusion") from None
             ex_utc = timestamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
             if start_utc <= ex_utc <= end_utc:
                 results.append(ex)
@@ -92,15 +84,11 @@ COMMAND_CREDENTIALS = {
     ],
     "list": [
         "api_key"
-    ],
-    "stop": [
-        "api_key"
     ]
 }
 
 
 @app.command("list")
-@command
 def executions_list(
     from_dt: str = typer.Option(None, "--from", help="Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Default: start of today"),
     to_dt: str = typer.Option(None, "--to", help="End datetime. Default: now"),
@@ -117,9 +105,7 @@ def executions_list(
 
     Paginates through all executions and filters by startedAt client-side
     (the API has no date filter parameter; running executions have no
-    stoppedAt; executions that never started, such as queued ones, have no
-    startedAt and are excluded, matching n8n's own date filter). The n8n
-    public API omits currently-running executions
+    stoppedAt). The n8n public API omits currently-running executions
     unless status=running is requested, so when no --status is given the
     command also fetches running executions and merges them in.
 
@@ -202,7 +188,6 @@ def executions_list(
 
 
 @app.command("get")
-@command
 def executions_get(
     execution_id: str = typer.Argument(..., help="Execution ID"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -236,30 +221,7 @@ def executions_get(
         raise typer.Exit(handle_error(e))
 
 
-@app.command("stop")
-@command
-def executions_stop(
-    execution_id: str = typer.Argument(..., help="ID of a running or waiting execution"),
-):
-    """
-    Stop a running or waiting execution.
-
-    Uses the internal REST endpoint POST /rest/executions/{id}/stop (the public
-    API has no stop endpoint), so EMAIL and PASSWORD session auth is required.
-    Fails when the execution has already finished.
-
-    Example:
-        n8n executions stop 12345
-    """
-    try:
-        result = get_n8n_api_client().stop_execution(execution_id)
-        print_json(result)
-    except Exception as e:
-        raise typer.Exit(handle_error(e))
-
-
 @app.command("events")
-@command
 def executions_events(
     from_dt: str = typer.Option(None, "--from", help="Start datetime (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Default: start of today"),
     to_dt: str = typer.Option(None, "--to", help="End datetime. Default: now"),

@@ -187,11 +187,8 @@ n8n workflows node connect WORKFLOW_ID --from "Router" --to "Branch 2" --output-
 n8n credentials list
 n8n credentials list --table
 
-# Create a credential from an existing protected JSON input file
-$HOME/.local/bin/n8n credentials create brickowlApi --data-stdin --name "Brickowl Prod" < /private/path/credential.json
-
-# Update an existing credential's data (and optionally its display name)
-$HOME/.local/bin/n8n credentials update CREDENTIAL_ID --data-stdin --name "Brickowl Prod" < /private/path/credential.json
+# Create a credential
+n8n credentials create brickowlApi '{"apiKey":"abc123"}'
 
 # Get credential type schema
 n8n credentials schema brickowlApi
@@ -199,17 +196,6 @@ n8n credentials schema brickowlApi
 # Delete a credential
 n8n credentials delete CREDENTIAL_ID
 ```
-
-Credential creation and update accept exactly one input: positional `DATA` JSON
-(legacy compatibility) or `--data-stdin`. Use stdin for secrets so the JSON is absent
-from process arguments and shell history. Pipe a credential producer into the command
-or redirect an existing protected file; interactive terminal input is rejected.
-Empty, malformed, and non-object JSON fail before the API call.
-
-`credentials update` replaces the credential's stored data with the JSON supplied, so
-include every field the credential type needs. A credential type may make fields
-conditionally required or prohibited; the server owns that validation and its rejection
-is reported verbatim.
 
 ### Data Tables
 
@@ -257,11 +243,6 @@ n8n executions list --from 2026-02-12 --table
 n8n executions list --from 2026-02-12 --status error --table
 n8n executions list --from "2026-02-12T08:00" --to "2026-02-12T09:00"
 n8n executions list --workflow-id 17VB4GJjjp0ijgjJ
-
-# Stop a running or waiting execution (internal REST API; needs EMAIL/PASSWORD session auth)
-# Prints the stop result, e.g. {"mode": "manual", "startedAt": "...", "stoppedAt": "...", "finished": false, "status": "canceled"}
-# Exits 1 when the execution is already finished or does not exist
-n8n executions stop 20635
 
 # Query event log files (audit trail, workflow events, node events)
 n8n executions events --from 2026-02-12 --type audit --table
@@ -361,23 +342,6 @@ PASSWORD=          # UI login password
 SSH_HOST=          # SSH host for server commands (e.g., localhost)
                    # Set to "localhost" when running on the n8n server itself (skips SSH)
 ```
-
-## Failure Diagnosis
-
-Commands that use n8n's internal REST API (`data-tables`, `credentials`, `nodes`,
-and `executions stop`) log in first with the configured `EMAIL`/`PASSWORD`. The
-CLI keeps the two failure modes apart instead of reporting both as a login
-problem:
-
-- **The server never answered** (read or connect timeout, or connection
-  refused): the error names the endpoint and the timeout, states that no
-  credentials were rejected, and exits `1`. A heap-exhausted or restarting n8n
-  process shows this symptom; check `n8n server version` and retry.
-- **The server answered and rejected the credentials** (`HTTP 401`/`403`): the
-  error starts with `Login failed:` and points at `n8n auth login`.
-
-Both modes exit non-zero and write nothing to stdout, so a monitor that checks
-the exit status fails closed instead of continuing with stale or missing data.
 
 ## Exit Codes
 

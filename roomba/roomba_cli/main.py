@@ -1,5 +1,6 @@
 """Main entry point for Roomba CLI."""
 import typer
+from cli_tools_shared.output import command
 from . import __version__
 from cli_tools_shared import create_app, run_app, create_auth_app
 from cli_tools_shared.cache_commands import create_cache_app
@@ -57,7 +58,6 @@ def _roomba_login_handler(config, force):
             print_info("Retrieving credentials via iRobot cloud...")
 
             try:
-                import getpass
                 import subprocess as sub
                 import re as re_mod2
 
@@ -67,17 +67,27 @@ def _roomba_login_handler(config, force):
                     continue
 
                 # Prompt for iRobot account credentials
-                email = input("iRobot account email: ")
-                password = getpass.getpass("iRobot account password: ")
+                from cli_tools_shared.auth_commands import _prompt_and_save
+                from cli_tools_shared.config import read_cli_tool_secret
+                import os
+                for field in ("USERNAME", "PASSWORD"):
+                    if not config._get(field):
+                        existing = read_cli_tool_secret("roomba-" + field.lower())
+                        if existing:
+                            os.environ[field] = existing
+                _prompt_and_save(config, [("USERNAME", "iRobot account email", False), ("PASSWORD", "iRobot account password", True)])
+                email = config._get("USERNAME")
+                password = config._get("PASSWORD")
 
                 # Run dorita980's getPasswordCloud.js to get local MQTT creds
                 proc = sub.run(
-                    ["node", _dorita980_path, email, password],
+                    ["node", "-e", "const fs=require('fs');const c=JSON.parse(fs.readFileSync(0,'utf8'));const file=process.argv[1];process.argv=[process.execPath,file,c.username,c.password];require(file)", _dorita980_path],
+                    input=__import__("json").dumps({"username": email, "password": password}),
                     capture_output=True, text=True, timeout=30,
                 )
 
                 if proc.returncode != 0:
-                    print_error(f"Cloud auth failed: {proc.stderr.strip()}")
+                    print_error("Cloud authentication failed")
                     continue
 
                 # Parse dorita980 output lines like "BLID=> XXXX" and "Password=> YYYY <= Yes..."
@@ -103,7 +113,7 @@ def _roomba_login_handler(config, force):
                 print_error("Cloud auth timed out after 30 seconds.")
                 continue
             except Exception as e:
-                print_error(f"Cloud auth failed: {e}")
+                print_error("Cloud authentication failed")
                 continue
 
     if saved_count == 0:
@@ -132,6 +142,9 @@ auth_app = create_auth_app(
 app.add_typer(auth_app, name="auth", help="Manage robot authentication and discovery")
 app.add_typer(create_cache_app(get_config), name="cache", help="Manage CLI cache")
 
+from .commands import cloud
+register_commands(app, get_config, cloud, name="cloud", help="Cloud reads and explicit experimental start/pause")
+
 # Register command modules
 from .commands import control
 register_commands(app, get_config, control, name="control", help="Control robots (start, stop, dock, etc.)")
@@ -141,6 +154,7 @@ register_commands(app, get_config, device, name="device", help="Manage Roomba de
 
 
 @app.command("status")
+@command
 def status(
     robot: str | None = typer.Argument(None, help="Robot name or IP address (defaults to configured robot)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),

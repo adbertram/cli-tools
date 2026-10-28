@@ -103,12 +103,19 @@ def find_unwrapped_commands(pkg_dir: Path) -> list[str]:
     violations: list[str] = []
     for path in _iter_source_files(pkg_dir):
         tree = ast.parse(path.read_text(), filename=str(path))
+        wrappers = {
+            node.name for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and any(isinstance(stmt, ast.Return) and isinstance(stmt.value, ast.Call)
+                    and isinstance(stmt.value.func, ast.Name) and stmt.value.func.id == "command"
+                    for stmt in node.body)
+        }
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if not _is_typer_command(node):
                 continue
-            if _command_is_guarded(node):
+            if _command_is_guarded(node) or any(isinstance(_decorator_target(d), ast.Name) and _decorator_target(d).id in wrappers for d in node.decorator_list):
                 continue
             try:
                 rel = path.relative_to(pkg_dir.parent)
@@ -299,4 +306,19 @@ def test_scan_ignores_callbacks_and_undecorated_helpers(tmp_path):
         "def helper():\n"
         "    raise RuntimeError('boom')\n",
     )
+    assert find_unwrapped_commands(pkg_dir) == []
+
+
+def test_scan_accepts_local_wrapper_returning_shared_command(tmp_path):
+    pkg_dir = _make_pkg(tmp_path, "commands.py", """
+from cli_tools_shared.output import command
+def history_command(function):
+    def invoke():
+        return function()
+    return command(invoke)
+@app.command()
+@history_command
+def action():
+    pass
+""")
     assert find_unwrapped_commands(pkg_dir) == []

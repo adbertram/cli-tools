@@ -25,6 +25,8 @@ class Config(BaseConfig):
     CREDENTIAL_TYPES = [CredentialType.CUSTOM]
     CUSTOM_REQUIRED_FIELDS: list[str] = []
     CUSTOM_ALL_FIELDS: list[str] = []
+    ADDITIONAL_AUTH_FIELDS = ("USERNAME", "PASSWORD")
+    ADDITIONAL_SENSITIVE_AUTH_FIELDS = ("USERNAME", "PASSWORD")
 
     def __init__(self, tool_dir: Path = None, profile: str = None):
         if tool_dir is None:

@@ -208,7 +208,7 @@ def test_monitor_refuses_direct_reply_mixed_with_proactive_update():
         MuseChatClient._monitor_turn(page, "main", 1, 10, "u-current")
 
 
-def test_monitor_uses_final_message_when_candidates_share_turn_id():
+def test_monitor_combines_ordered_components_when_candidates_share_turn_id():
     page = SimpleNamespace(
         url="https://muse.ai/",
         evaluate=lambda _script: {
@@ -236,7 +236,7 @@ def test_monitor_uses_final_message_when_candidates_share_turn_id():
     )
     result = MuseChatClient._monitor_turn(page, "main", 1, 10, "u-current")
     assert result["status"] == "completed"
-    assert result["response"] == "final answer"
+    assert result["response"] == "progress\n\nfinal answer"
 
 
 def test_monitor_refuses_proactive_update_before_requested_reply():

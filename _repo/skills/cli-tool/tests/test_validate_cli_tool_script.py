@@ -574,6 +574,38 @@ def test_find_cli_tools_accepts_explicit_json_mode():
     assert {"name", "readme", "description"} <= set(records[0])
 
 
+def test_find_cli_tools_summary_flag_compacts_json_and_markdown():
+    script = REPO_ROOT / "_repo/scripts/find-cli-tools.sh"
+
+    json_result = subprocess.run(
+        [str(script), "--json", "--summary"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert json_result.returncode == 0, json_result.stderr
+    records = json.loads(json_result.stdout)
+    assert records
+    # --summary drops `readme` and trims `description` to one sentence, for
+    # both --json and --markdown, so a full discovery pass across every tool
+    # stays cheap regardless of output format.
+    assert set(records[0]) == {"name", "description"}
+    assert records[0]["description"].count(". ") == 0
+
+    markdown_result = subprocess.run(
+        [str(script), "--markdown", "--summary"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert markdown_result.returncode == 0, markdown_result.stderr
+    markdown_lines = [line for line in markdown_result.stdout.splitlines() if line.startswith("- ")]
+    assert markdown_lines
+    assert all(line.count(". ") == 0 for line in markdown_lines)
+
+
 def test_find_cli_tools_accepts_exact_tool_name_filter():
     script = REPO_ROOT / "_repo/scripts/find-cli-tools.sh"
 

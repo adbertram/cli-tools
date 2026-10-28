@@ -8,11 +8,13 @@ Use it when you need scriptable, JSON-first access from agents, automation, or t
 
 ## Features
 
-- **Hierarchical command structure** - Organized by resource type (items, apps, tasks, spaces, comments, files, webhooks, conversations, webforms)
+- **Hierarchical command structure** - Organized by resource type (items, apps, views, tasks, spaces, comments, files, webhooks, conversations, webforms)
 - **JSON output** - Perfect for scripting and automation
 - **Environment-based authentication** - Secure credential management via .env
 - **Comprehensive coverage** - Support for items, apps, tasks, spaces, comments, files, webhooks, and conversations
-- **File management** - Upload, attach, download, and copy files
+- **File management** - Upload, attach, download, copy, and replace files
+- **Sharing and membership** - Share items by email, list and invite space members
+- **View management** - List, create, and delete app views
 - **Webhook support** - Create, manage, and validate webhooks including field-level webhooks
 - **Conversation management** - Direct messages, object conversations, search, and events
 - **App field management** - Add, update, delete, and export application fields
@@ -281,6 +283,11 @@ podio app activate <app_id>
 # Deactivate an app
 podio app deactivate <app_id>
 
+# Permanently delete an app and all its items (DELETE /app/{app_id})
+# Requires an API client with Podio trust level 2 or higher; otherwise Podio returns
+# HTTP 403 and the command exits 1 (delete the app in the Podio web app instead).
+podio app delete <app_id> [--yes]
+
 # Export app to Excel
 podio app export <app_id> [--output file.xlsx] [--format xlsx|xls] [--limit N]
 
@@ -375,6 +382,11 @@ podio item update <item_id> [--json-file file.json] [--silent] [--no-hook]
 
 # Delete an item
 podio item delete <item_id> [--silent] [--no-hook]
+
+# Share an item with people by email (POST /grant/item/{item_id}, sends access_level)
+# Requires an API client with Podio trust level 2 or higher; otherwise Podio returns
+# HTTP 403 and the command exits 1 (share the item in the Podio web app instead).
+podio item share <item_id> --email <address> [--email <address> ...] --access edit|view [--message "text"]
 
 # Get item field values (v2 API - clean format)
 podio item values <item_id>
@@ -607,6 +619,9 @@ podio file download <file_id> [--output ./local-file.docx]
 
 # Copy a file (creates new file_id)
 podio file copy <file_id>
+
+# Replace an old attachment with a new file (POST /file/{new_file_id}/replace, body old_file_id)
+podio file replace <new_file_id> <old_file_id>
 ```
 
 **Examples:**
@@ -638,6 +653,9 @@ podio file download 2412642794 --output ./downloads/my-report.docx
 
 # Copy a file (useful for attaching same file to multiple objects)
 podio file copy 2412642794
+
+# Mark file 222 as the replacement for old attachment 111
+podio file replace 222 111
 ```
 
 **Valid Reference Types for Attach:**
@@ -660,6 +678,17 @@ podio space list [--org-id <org_id>]  # Uses PODIO_ORGANIZATION_ID if not provid
 
 # Find space by URL
 podio space find-by-url <space_url>
+
+# List the members of a space (GET /space/{space_id}/member/v2/)
+podio space member list <space_id> [--member-type employee|external|admin|regular|light|guest] [--query text] [--limit 100] [--offset 0] [--filter "role:eq:admin"] [--properties "profile,role"] [--table]
+
+# Get one member's details (GET /space/{space_id}/member/{user_id}/v2)
+podio space member get <space_id> <user_id>
+
+# Invite people to a space by email (POST /space/{space_id}/member/)
+# Requires an API client with Podio trust level 2 or higher; otherwise Podio returns
+# HTTP 403 and the command exits 1 (add the members in the Podio web app instead).
+podio space member add <space_id> --email <address> [--email <address> ...] --role regular|light|admin [--message "text"]
 ```
 
 **Examples:**
@@ -680,7 +709,48 @@ podio space list
 
 # Find space by URL
 podio space find-by-url https://podio.com/ata-learning-llc/progress-content-management
+
+# List space members, then only the admins
+podio space member list 10479826
+podio space member list 10479826 --filter "role:eq:admin" --properties "profile,role"
+
+# Invite two people as light members with a message
+podio space member add 10479826 --email a@example.com --email b@example.com --role light --message "Welcome"
 ```
+
+### View Commands
+
+Manage the saved views of an app.
+
+```bash
+# List views (GET /view/app/{app_id}/); --include-standard-views adds Podio's standard views
+podio view list <app_id> [--include-standard-views] [--limit 100] [--filter "name:contains:Open"] [--properties "view_id,name"] [--table]
+
+# Get a view definition by ID, name, or "last" (GET /view/app/{app_id}/{view})
+podio view get <app_id> <view_id|name|last>
+
+# Create a view from a JSON definition (POST /view/app/{app_id}/); reads stdin when --json-file is omitted
+podio view create <app_id> [--json-file view.json]
+
+# Delete a view (DELETE /view/{view_id})
+podio view delete <view_id> [--yes]
+```
+
+**Examples:**
+```bash
+podio view list 12345 --properties "view_id,name,items"
+podio view get 12345 67890
+cat view.json | podio view create 12345
+podio view delete 67890 --yes
+```
+
+`view create` accepts the documented keys `name`, `private`, `sort_by`, `sort_desc`, `filters` (a list of `{"key": ..., "values": ...}`), `layout`, `fields`, and `grouping`, and prints the new `view_id`.
+
+### Destructive Command Guard
+
+`podio app delete` and `podio view delete` are irreversible. They prompt for confirmation on a terminal, accept `--yes`/`-y` to skip the prompt, and refuse to run (exit code 1) when stdin is not a terminal and `--yes` is missing.
+
+`podio item share`, `podio app delete` and `podio space member add` need an API client with a Podio trust level of 2 or higher. Without it Podio answers HTTP 403 ("Only available for clients with a trust level of 2 or higher") and the CLI prints an error naming the requirement and exits 1. Do those actions in the Podio web app instead (`item delete`, `view create` and `file replace` are not affected).
 
 ### Webhook Commands
 
@@ -1039,7 +1109,8 @@ pypodio-cli/
 │       ├── app.py           # Application commands
 │       ├── item.py          # Item commands
 │       ├── task.py          # Task commands
-│       ├── space.py         # Space commands
+│       ├── space.py         # Space and space member commands
+│       ├── view.py          # App view commands
 │       ├── org.py           # Organization commands
 │       ├── auth.py          # Authentication commands
 │       ├── comment.py       # Comment commands

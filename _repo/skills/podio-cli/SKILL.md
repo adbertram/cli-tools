@@ -27,6 +27,12 @@ podio <command-group> <action> [arguments] [options]
 | Get item field values | `podio item values ITEM_ID` |
 | Create a task | `podio task create "Task text"` |
 | Upload a file | `podio file upload ./file.pdf` |
+| List app views | `podio view list APP_ID` |
+| List space members | `podio space member list SPACE_ID` |
+| Share an item by email (needs API client trust level 2+; on 403 share in the Podio web app) | `podio item share ITEM_ID --email a@example.com --access view` |
+| Delete an app (needs API client trust level 2+; on 403 use the Podio web app) or view (irreversible) | `podio app delete APP_ID --yes`, `podio view delete VIEW_ID --yes` |
+
+Trust level: `item share`, `app delete` and `space member add` need an API client with Podio trust level 2 or higher. This CLI's client lacks it, so Podio returns HTTP 403 and the CLI exits 1 with a trust-level error. Do those actions in the Podio web app; do not retry.
 </quick_start>
 
 <essential_principles>
@@ -36,17 +42,18 @@ This file contains complete command syntax, all arguments, all options, and usag
 </principle>
 
 <principle name="Command Groups">
-- **item** -- Manage items (get, list, create, update, delete, values, field-value)
-- **app** -- Manage applications (get, list, items, activate, deactivate, create, update, export, field)
+- **item** -- Manage items (get, list, create, update, delete, share, values, field-value)
+- **app** -- Manage applications (get, list, items, activate, deactivate, create, update, delete, export, field)
 - **task** -- Manage tasks (list, get, create, complete, delete, update, label)
-- **space** -- Manage spaces (get, list)
+- **space** -- Manage spaces (get, list, member list, member get, member add)
 - **org** -- Manage organizations (list, get)
 - **auth** -- Authentication (login, logout, status, refresh, test)
 - **comment** -- Manage comments (create, list, get, update, delete)
 - **webhook** -- Manage webhooks (get, create, list, verify, validate, update, delete, field)
 - **conversation** -- Messaging (list, get, create, reply, mark-read, mark-unread, star, unstar, leave, search, events, on-object, participant)
-- **file** -- File operations (upload, attach, list, get, download, copy)
+- **file** -- File operations (upload, attach, list, get, download, copy, replace)
 - **webform** -- Manage webforms (list, get, submit, field, attachments)
+- **view** -- Manage app views (list, get, create, delete)
 - **auth** -- Authentication commands and nested `auth profiles` management
 </principle>
 </essential_principles>

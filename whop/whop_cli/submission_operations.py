@@ -295,6 +295,11 @@ def join_campaign(client,campaign_id,*,expected_account_id,confirm):
         observed={'joined':result['joined'],'already':result['already'],'join_controls':result['join_controls'],
                   'submit_controls':result['submit_controls'],'too_many':result.get('too_many') is True,'timeout':result.get('timeout') is True}
         raise ClientError('campaign_join_not_observed:'+json.dumps(observed,separators=(',',':')))
+    # A transient loading state also removes Join Campaign. Only a fresh native
+    # membership read can turn the control transition into confirmed enrollment.
+    membership=client._rest('/api/campaign/campaigns/'+campaign_id)['data']
+    if not isinstance(membership,dict) or membership.get('id')!=campaign_id or membership.get('joined') is not True:
+        raise ClientError('campaign_join_outcome_unknown: native membership not confirmed')
     return {'campaign_id':campaign_id,'actor':{'account_id':actor['id'],'username':actor['username']},
             'joined':True,'already_joined':bool(result['already']),'submit_controls':int(result['submit_controls'])}
 

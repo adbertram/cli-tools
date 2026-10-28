@@ -1310,6 +1310,8 @@ class CloudflareClient:
             if limit and len(items) >= limit:
                 return items[:limit]
             info = response.get("result_info")
+            if isinstance(info, dict) and "total_pages" not in info and isinstance(info.get("total_count"), int) and info.get("per_page"):
+                info = {**info, "total_pages": -(-info["total_count"] // info["per_page"])}
             if not isinstance(info, dict) or info.get("page") != page or not isinstance(info.get("total_pages"), int):
                 raise ClientError(f"Invalid Email Routing {resource} pagination: expected page and total_pages")
             if page >= info["total_pages"]:

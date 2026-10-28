@@ -1,17 +1,7 @@
 ---
 name: cli-tool
-description: >-
-  MANDATORY: CLI tool skill router for ALL cli-tools requests. Use this skill
-  first for any available CLI tool, service CLI operation, CLI command
-  execution, or CLI lifecycle work. DO NOT run cli-tools commands, guess
-  command syntax, or load individual [tool]-cli skills directly before this
-  router selects them. For service operations, route through
-  [cli-tools-root]/_repo/skills/cli-tool/workflows/skill-router.md to
-  [cli-tools-root]/_repo/skills/[tool]-cli/SKILL.md and the adjacent
-  usage.json. For lifecycle work, delegate to cli-tool-expert
-  and use this skill's lifecycle workflows. Triggers: any cli tool, cli
-  command, service cli, [tool] cli, run cli, execute cli, create cli, update
-  cli, test cli, fix cli, add command, list cli tools, cli standards.
+description: |
+  MANDATORY: CLI tool skill router for ALL cli-tools requests. DO NOT run cli-tools commands, guess command syntax, or load individual [tool]-cli skills directly before this router selects them. Triggers: any cli tool, cli command, service cli, [tool] cli, run cli, execute cli, create cli, update cli, test cli, fix cli, add command, list cli tools, cli standards.
 ---
 
 <objective>
@@ -54,11 +44,17 @@ For any request that uses an existing CLI tool, read `<cli-tools-root>/_repo/ski
 Use `<cli-tools-root>/_repo/scripts/find-cli-tools.sh` to enumerate the
 available CLI tools from the source tree. The script prints one JSON array of
 records with `name`, `readme`, and `description`, where `description` is
-extracted from each tool README's `## DESCRIPTION` block. The `readme` value is
-relative to `<cli-tools-root>` unless it is already absolute; resolve it against
-that root before deriving the tool directory or checking files. The default mode is
-JSON, and `--json` is accepted as an explicit alias for that default. To inspect
-one CLI, pass the exact tool name as a positional filter, for example
+extracted from each tool README's `## DESCRIPTION` block and is full and
+untruncated by default. The `readme` value is relative to `<cli-tools-root>`
+unless it is already absolute; resolve it against that root before deriving
+the tool directory or checking files. The default mode is JSON, and `--json`
+is accepted as an explicit alias for that default. Pass `--summary` to trim
+every `description` to its first sentence and drop `readme`, for both `--json`
+and `--markdown`: use it for a full discovery pass across every tool, so
+scanning what's available doesn't cost full-detail tokens per tool. Omit
+`--summary` to get full detail, normally once already filtered to one or a
+few names. To inspect one CLI, pass the exact tool name as a positional
+filter, for example
 `<cli-tools-root>/_repo/scripts/find-cli-tools.sh --json notion`; the output is
 still a JSON array. When filtering the saved output with `jq`, iterate the array
 explicitly, for example `jq -e '.[] | select(.name == "google")' <file>`. Do not

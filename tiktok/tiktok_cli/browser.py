@@ -168,11 +168,10 @@ def _tiktok_login_handler(browser: "TiktokBrowser", page) -> None:
             )
         if issue == "rate_limit":
             raise BrowserAutomationError(
-                "TikTok is rate-limiting logins for this account/IP "
-                "('Maximum number of attempts reached. Try again later.'). "
-                "Wait before retrying — do not hammer the login. Re-run "
-                "'tiktok auth login --credential-type browser_session' after "
-                "the cooldown, ideally from an interactive shell."
+                "TikTok's login page matched a rate-limiting or temporary-error "
+                "text pattern. This handler did not capture the exact matched "
+                "message, affected account/IP, or cooldown. No authenticated "
+                "session was saved. Do not repeatedly retry this login."
             )
         if issue == "bad_credentials":
             raise BrowserAutomationError(

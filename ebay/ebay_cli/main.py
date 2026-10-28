@@ -26,6 +26,7 @@ from .commands import (
     listings,
     locations,
     messages,
+    offers,
     orders,
     payment_policies,
     policies,
@@ -79,6 +80,7 @@ SELLER_GROUPS = (
     ("videos", "Manage eBay listing videos", videos),
     ("locations", "Manage eBay merchant locations", locations),
     ("messages", "Manage eBay seller messages", messages),
+    ("offers", "Manage Best Offers from buyers", offers),
     ("store", "Manage eBay store", store),
 )
 

@@ -9,20 +9,35 @@ COMMAND_CREDENTIALS = {
     ],
     "list": [
         "oauth_authorization_code"
+    ],
+    "member": [
+        "oauth_authorization_code"
     ]
 }
+import json
+from enum import Enum
+from urllib.parse import urlencode
 import typer
-from typing import Optional, Any
+from typing import List, Optional, Any
 
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..config import get_config
 from cli_tools_shared.output import command
-from ..output import print_json, print_output, print_error, print_warning, handle_api_error, format_response
+from ..output import print_json, print_output, print_success, print_error, print_warning, handle_api_error, format_response
 from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
 
 app = typer.Typer(help="Manage Podio spaces")
+
+member_app = typer.Typer(help="Manage Podio space members")
+app.add_typer(member_app, name="member")
+
+
+class MemberRole(str, Enum):
+    regular = "regular"
+    light = "light"
+    admin = "admin"
 
 
 @app.command("get")
@@ -132,3 +147,114 @@ def find_space_by_url_deprecated(
     print_warning("'podio space find-by-url' is deprecated. Use 'podio space get --url <url>' instead.")
     return get_space(url=url, table=table)
 
+
+
+@member_app.command("list")
+@command
+def list_members(
+    space_id: int = typer.Argument(..., help="Space ID to list members of"),
+    member_type: Optional[str] = typer.Option(None, "--member-type", help="Only this member type: employee, external, admin, regular, light, guest"),
+    query: Optional[str] = typer.Option(None, "--query", "-q", help="Search term matched against members"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum members to return"),
+    offset: int = typer.Option(0, "--offset", help="Position in the member list to start from"),
+    filter: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter: field:op:value (e.g., role:eq:admin, profile.name:contains:Adam)"),
+    properties: Optional[str] = typer.Option(None, "--properties", "-p", help="Comma-separated list of fields to include"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    List the members of a space (GET /space/{space_id}/member/v2/).
+
+    Each member has profile, employee, role (light, regular, admin or blank), grants and is_partner.
+
+    Examples:
+        podio space member list 12345
+        podio space member list 12345 --member-type admin
+        podio space member list 12345 --query adam --limit 10
+        podio space member list 12345 --filter "role:eq:admin"
+        podio space member list 12345 --properties "profile,role"
+        podio space member list 12345 --table
+    """
+    try:
+        params = {"limit": limit, "offset": offset}
+        if member_type:
+            params["member_type"] = member_type
+        if query:
+            params["query"] = query
+
+        client = get_client()
+        result = client.transport.GET(url=f"/space/{space_id}/member/v2/?{urlencode(params)}")
+        formatted = format_response(result)
+
+        if filter and isinstance(formatted, list):
+            formatted = apply_filters(formatted, [filter])
+        if properties:
+            formatted = apply_properties(formatted, properties)
+
+        print_output(formatted, table=table)
+    except TransportException as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@member_app.command("get")
+@command
+def get_member(
+    space_id: int = typer.Argument(..., help="Space ID"),
+    user_id: int = typer.Argument(..., help="User ID of the member"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Get the membership details of one user on a space (GET /space/{space_id}/member/{user_id}/v2).
+
+    Examples:
+        podio space member get 12345 77109345
+        podio space member get 12345 77109345 --table
+    """
+    try:
+        client = get_client()
+        result = client.transport.GET(url=f"/space/{space_id}/member/{user_id}/v2")
+        print_output(format_response(result), table=table)
+    except TransportException as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@member_app.command("add")
+@command
+def add_members(
+    space_id: int = typer.Argument(..., help="Space ID to add members to"),
+    email: List[str] = typer.Option(..., "--email", "-e", help="Email address to invite (repeat for several)"),
+    role: MemberRole = typer.Option(..., "--role", "-r", help="Role of the new members"),
+    message: Optional[str] = typer.Option(None, "--message", "-m", help="Personalized message for the invitation"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Add users to a space by email (POST /space/{space_id}/member/).
+
+    Sends invitations to the given addresses, new or existing Podio users.
+
+    Podio only allows this through the API for API clients with a trust level of
+    2 or higher. Without it Podio answers HTTP 403 and this command exits 1;
+    add the members in the Podio web app instead.
+
+    Examples:
+        podio space member add 12345 --email a@example.com --role regular
+        podio space member add 12345 -e a@example.com -e b@example.com --role light --message "Welcome"
+    """
+    try:
+        body = {"role": role.value, "mails": email}
+        if message:
+            body["message"] = message
+
+        client = get_client()
+        result = client.transport.POST(
+            url=f"/space/{space_id}/member/", body=json.dumps(body), type="application/json"
+        )
+        print_success(f"Added {len(email)} member(s) to space {space_id}")
+        print_output(
+            {"space_id": space_id, "role": role.value, "emails": email, "response": format_response(result)},
+            table=table,
+        )
+    except TransportException as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)

@@ -1866,6 +1866,98 @@ class EbayClient:
 
         return self._make_trading_api_request("AddMemberMessageRTQ", request_xml)
 
+    def get_best_offers(
+        self,
+        item_id: Optional[str] = None,
+        best_offer_status: str = "Active",
+        entries_per_page: int = 100,
+        page_number: int = 1,
+    ) -> str:
+        """
+        Get Best Offers using Trading API GetBestOffers.
+
+        Args:
+            item_id: Filter by item ID (optional; omit to get offers across all listings)
+            best_offer_status: Filter by status (Active, Accepted, Declined, Expired, etc.)
+            entries_per_page: Number of offers per page (max 200)
+            page_number: Page number to retrieve
+
+        Returns:
+            XML response as string
+        """
+        # Build optional elements
+        optional_elements = []
+        if item_id:
+            optional_elements.append(f"    <ItemID>{item_id}</ItemID>")
+
+        optional_xml = "\n".join(optional_elements)
+
+        request_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+<GetBestOffersRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+    <DetailLevel>ReturnAll</DetailLevel>
+{optional_xml}
+    <BestOfferStatus>{best_offer_status}</BestOfferStatus>
+    <Pagination>
+        <EntriesPerPage>{min(entries_per_page, 200)}</EntriesPerPage>
+        <PageNumber>{page_number}</PageNumber>
+    </Pagination>
+</GetBestOffersRequest>"""
+
+        return self._make_trading_api_request("GetBestOffers", request_xml)
+
+    def respond_to_best_offer(
+        self,
+        item_id: str,
+        best_offer_id: str,
+        action: str,
+        seller_response: Optional[str] = None,
+        counter_offer_price: Optional[str] = None,
+        counter_offer_quantity: Optional[int] = None,
+    ) -> str:
+        """
+        Respond to a Best Offer using Trading API RespondToBestOffer.
+
+        Args:
+            item_id: The eBay item ID
+            best_offer_id: The Best Offer ID
+            action: Action to take (Accept, Decline, or Counter)
+            seller_response: Optional message to buyer
+            counter_offer_price: Required for Counter action
+            counter_offer_quantity: Optional quantity for Counter action
+
+        Returns:
+            XML response as string
+
+        Raises:
+            ClientError: If action is Counter and counter_offer_price is missing
+        """
+        if action == "Counter" and not counter_offer_price:
+            raise ClientError("Counter action requires counter_offer_price")
+
+        # Escape seller response if provided
+        response_elements = []
+        if seller_response:
+            escaped_response = seller_response.replace("]]>", "]]]]><![CDATA[>")
+            response_elements.append(f"    <SellerResponse><![CDATA[{escaped_response}]]></SellerResponse>")
+
+        # Build counter offer elements if this is a counter
+        if action == "Counter":
+            response_elements.append(f'    <CounterOfferPrice currencyID="USD">{counter_offer_price}</CounterOfferPrice>')
+            if counter_offer_quantity:
+                response_elements.append(f"    <CounterOfferQuantity>{counter_offer_quantity}</CounterOfferQuantity>")
+
+        response_xml = "\n".join(response_elements)
+
+        request_xml = f"""<?xml version="1.0" encoding="utf-8"?>
+<RespondToBestOfferRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+    <ItemID>{item_id}</ItemID>
+    <BestOfferID>{best_offer_id}</BestOfferID>
+    <Action>{action}</Action>
+{response_xml}
+</RespondToBestOfferRequest>"""
+
+        return self._make_trading_api_request("RespondToBestOffer", request_xml)
+
 
 # Module-level client instances - keyed by profile
 _clients: Dict[str, EbayClient] = {}

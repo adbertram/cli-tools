@@ -127,3 +127,30 @@ uv run --project muse-chat --with pytest python -m pytest muse-chat/tests -q
 ```
 
 The CLI requires Python 3.11 or newer.
+
+### Multipart replies and saved side-chat turns
+
+A completed reply includes all ordered assistant message components carrying
+one durable response turn ID, including prose and task cards. Distinct message
+IDs are preserved even when their text is identical. Replies from different
+turns remain ambiguous and are never silently combined. Monitoring waits for
+one second of unchanged, idle response content; new components, text changes,
+or typing/working activity restart that window within the total timeout.
+
+`chat get` returns a history snapshot. For idle history it waits up to five
+seconds for one second of unchanged messages so delayed card hydration can
+finish. Active replies remain snapshots; use `chat monitor` to wait for final
+content. Browser hydration can change beyond that bounded window, so the CLI
+does not claim an authoritative server-side completion event.
+
+A newly created side chat can replace its temporary user-message ID while it
+saves. Monitoring tolerates a bounded empty-history gap and reanchors only to
+that new chat's unique user turn with the exact normalized submitted text.
+Other user turns or mismatching text still fail correlation. No prompt is
+resent during reconciliation.
+
+Regression verified 2026-10-20: a task card previously replaced the prose in
+monitor output because only the last same-turn component was selected. Initial
+history hydration could also return only prose before the card appeared. The
+ordered aggregation and idle window fix both paths; synthetic tests cover
+multiple components, repeated polls, activity, deadlines, and draft-ID gaps.

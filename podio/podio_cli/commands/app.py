@@ -10,6 +10,9 @@ COMMAND_CREDENTIALS = {
     "deactivate": [
         "oauth_authorization_code"
     ],
+    "delete": [
+        "oauth_authorization_code"
+    ],
     "export": [
         "oauth_authorization_code"
     ],
@@ -38,7 +41,7 @@ from typing import Optional, Any, List
 from cli_tools_shared.filters import apply_filters, validate_filters, FilterValidationError
 from ..client import get_client
 from ..config import get_config
-from ..output import print_json, print_output, print_error, handle_api_error, format_response
+from ..output import print_json, print_output, print_error, print_success, confirm_or_refuse, handle_api_error, format_response
 from cli_tools_shared.output import command
 from pypodio2.transport import TransportException
 from ..filter_map import FilterMap, apply_properties
@@ -242,6 +245,38 @@ def deactivate_app(
         result = client.Application.deactivate(app_id=app_id)
         formatted = format_response(result)
         print_output(formatted, table=table)
+    except TransportException as e:
+        exit_code = handle_api_error(e)
+        raise typer.Exit(exit_code)
+
+
+@app.command("delete")
+@command
+def delete_app(
+    app_id: int = typer.Argument(..., help="Application ID to delete"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt"),
+    table: bool = typer.Option(False, "--table", "-t", help="Output as formatted table"),
+):
+    """
+    Permanently delete a Podio application with all its items, widgets, filters and shares.
+
+    This cannot be undone. Prompts for confirmation unless --yes is given;
+    without a terminal, --yes is required.
+
+    Podio only allows this through the API for API clients with a trust level of
+    2 or higher. Without it Podio answers HTTP 403 and this command exits 1;
+    delete the app in the Podio web app instead.
+
+    Examples:
+        podio app delete 12345
+        podio app delete 12345 --yes
+    """
+    try:
+        confirm_or_refuse(f"delete app {app_id} and all of its items", yes)
+        client = get_client()
+        client.Application.delete(app_id=app_id)
+        print_success(f"App {app_id} deleted successfully")
+        print_output({"app_id": app_id, "deleted": True}, table=table)
     except TransportException as e:
         exit_code = handle_api_error(e)
         raise typer.Exit(exit_code)
