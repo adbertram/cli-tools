@@ -605,6 +605,13 @@ class BrickOwlBrowser(_BrickOwlAutomation):
                 'input[name="main_subject"], input[name="subject"]'
             )
             if subject_input:
+                max_length = self._page.evaluate(
+                    "() => document.querySelector('input[name=\"main_subject\"], input[name=\"subject\"]').maxLength"
+                )
+                # The site's prefilled subject fits its form. Adding "Re: " can
+                # exceed the limit and leave an unsent validation error.
+                if max_length > 0 and len(reply_subject) > max_length:
+                    reply_subject = original_subject
                 subject_input.fill(reply_subject)
 
         # Fill in the message body (Brick Owl uses name="main_message")
@@ -624,21 +631,28 @@ class BrickOwlBrowser(_BrickOwlAutomation):
         send_button.click()
         self._page.wait_for_timeout(3000)
 
-        # Check for success
-        current_url = self._page.url
-        page_content = self._page.content().lower()
-        success = (
-            "/messages" in current_url
-            or "sent" in page_content
-            or "message sent" in page_content
-            or "/contact" not in current_url
-        )
+        # A failed contact form still contains the navigation text "Messages Sent".
+        # Check form/alert state instead of treating that word as send proof.
+        result = self._page.evaluate("""() => ({
+            url: location.href,
+            formPresent: !!document.querySelector('textarea[name="main_message"]'),
+            alerts: [...document.querySelectorAll('.alert')].map(el => el.innerText.trim())
+        })""")
+        if result["formPresent"]:
+            raise RuntimeError(
+                f"Brick Owl reply was not confirmed: contact form remains at {result['url']}; "
+                f"alerts={result['alerts']!r}"
+            )
+        if "/messages" not in result["url"]:
+            raise RuntimeError(
+                f"Brick Owl reply was not confirmed: unexpected destination {result['url']}"
+            )
 
         return {
-            "success": success,
+            "success": True,
             "message_id": message_id,
             "action": "reply",
-            "message": "Reply sent successfully" if success else "Reply may have failed. Please verify on Brick Owl.",
+            "message": "Reply sent successfully",
         }
 
     def send_order_message(self, order_id: str, user_id: str, subject: str, body: str) -> dict:
