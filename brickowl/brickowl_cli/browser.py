@@ -45,6 +45,62 @@ class _BrickOwlAutomation(BrowserAutomation):
     AUTH_LOGIN_PASSWORD_SECRET = "brickowl-legacy-password"
 
 
+# Scrapes Brick Owl's message DataTable rows. The date cell carries a hidden
+# epoch-seconds sort key (UTC), exposed as ``timestamp``.
+MESSAGE_ROWS_SCRIPT = r"""() => {
+    const results = [];
+    const rows = document.querySelectorAll('table tbody tr');
+
+    for (const row of rows) {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 5) continue;
+
+        const subjectLink = row.querySelector('a[href*="/messages/all/"]');
+        if (!subjectLink) continue;
+
+        const href = subjectLink.href;
+        const msgIdMatch = href.match(/\/messages\/all\/(\d+)/);
+        if (!msgIdMatch) continue;
+
+        const messageId = msgIdMatch[1];
+        const tsSpan = cells[1]?.querySelector('span[hidden]');
+        const timestamp = tsSpan ? parseInt(tsSpan.textContent, 10) || null : null;
+        const date = (cells[1]?.innerText || '').replace(tsSpan ? tsSpan.textContent : '', '').trim();
+        const from = cells[2]?.textContent?.trim() || '';
+        const to = cells[3]?.textContent?.trim() || '';
+        const subject = subjectLink.textContent?.trim() || '';
+
+        const orderMatch = subject.match(/Order #(\d+)/);
+        const orderId = orderMatch ? orderMatch[1] : null;
+
+        const statusCell = cells[4];
+        const statusIcons = statusCell?.querySelectorAll('[title]') || [];
+        const statuses = Array.from(statusIcons).map(i => i.getAttribute('title'));
+        const is_unread = statusIcons.length > 0 &&
+            Array.from(statusIcons).some(i => i.classList.contains('icon-envelope'));
+        const response_required = Array.from(statusIcons).some(
+            i => i.classList.contains('icon-exclamation'));
+        const status = statuses.join(', ');
+
+        results.push({
+            message_id: messageId,
+            date,
+            timestamp,
+            from: from,
+            to,
+            subject,
+            order_id: orderId,
+            status,
+            is_unread,
+            response_required,
+            url: href
+        });
+    }
+
+    return results;
+}"""
+
+
 class BrickOwlBrowser(_BrickOwlAutomation):
     """Brick Owl browser operations backed by shared BrowserAutomation.
 
@@ -218,57 +274,67 @@ class BrickOwlBrowser(_BrickOwlAutomation):
                 else:
                     self._page.goto(target_url)
 
-        messages = self._page.evaluate("""() => {
-            const results = [];
-            const rows = document.querySelectorAll('table tbody tr');
-
-            for (const row of rows) {
-                const cells = row.querySelectorAll('td');
-                if (cells.length < 5) continue;
-
-                const subjectLink = row.querySelector('a[href*="/messages/all/"]');
-                if (!subjectLink) continue;
-
-                const href = subjectLink.href;
-                const msgIdMatch = href.match(/\\/messages\\/all\\/(\\d+)/);
-                if (!msgIdMatch) continue;
-
-                const messageId = msgIdMatch[1];
-                const date = cells[1]?.innerText?.trim() || '';
-                const from = cells[2]?.textContent?.trim() || '';
-                const to = cells[3]?.textContent?.trim() || '';
-                const subject = subjectLink.textContent?.trim() || '';
-
-                const orderMatch = subject.match(/Order #(\\d+)/);
-                const orderId = orderMatch ? orderMatch[1] : null;
-
-                const statusCell = cells[4];
-                const statusIcons = statusCell?.querySelectorAll('[title]') || [];
-                const statuses = Array.from(statusIcons).map(i => i.getAttribute('title'));
-                const is_unread = statusIcons.length > 0 &&
-                    Array.from(statusIcons).some(i => i.classList.contains('icon-envelope'));
-                const response_required = Array.from(statusIcons).some(
-                    i => i.classList.contains('icon-exclamation'));
-                const status = statuses.join(', ');
-
-                results.push({
-                    message_id: messageId,
-                    date,
-                    from: from,
-                    to,
-                    subject,
-                    order_id: orderId,
-                    status,
-                    is_unread,
-                    response_required,
-                    url: href
-                });
-            }
-
-            return results;
-        }""")
+        messages = self._page.evaluate(MESSAGE_ROWS_SCRIPT)
 
         return messages
+
+    def list_messages_paged(self, folder: str = "received", since_ts: Optional[int] = None,
+                            max_pages: int = 100) -> list:
+        """List messages live across every DataTables page (never cached).
+
+        Brick Owl renders 20 rows per page and pages client-side via the
+        "Next" control, so ``list_messages`` (and the old ``--page`` slicing
+        of that single page) never saw older messages. This clicks through
+        pages until a row is older than ``since_ts`` or "Next" is disabled,
+        and raises if ``max_pages`` is reached first.
+        """
+        self._ensure_authenticated()
+        user_id = self.get_user_id()
+        if not user_id:
+            raise RuntimeError("Could not determine user ID.")
+        folder_path = {"received": "messages", "sent": "messages/sent", "all": "messages/all"}.get(folder, "messages")
+        target_url = f"https://www.brickowl.com/user/{user_id}/{folder_path}"
+        self._page.goto(target_url)
+        try:
+            self._page.wait_for_selector('table tbody tr a[href*="/messages/all/"]', timeout=15000)
+        except Exception:
+            if "/messages" not in (self._page.url or ""):
+                raise RuntimeError(f"Brick Owl message list did not render; landed at {self._page.url!r}.")
+            return []
+
+        results, seen = [], set()
+        for _ in range(max_pages):
+            rows = self._page.evaluate(MESSAGE_ROWS_SCRIPT) or []
+            for r in rows:
+                if r["message_id"] not in seen:
+                    seen.add(r["message_id"])
+                    results.append(r)
+            stamps = [r.get("timestamp") for r in rows if r.get("timestamp")]
+            if since_ts is not None and stamps and min(stamps) < since_ts:
+                return results
+            has_next = self._page.evaluate(
+                "() => { const n = document.querySelector('.dataTables_paginate li.next');"
+                " return !!n && !n.classList.contains('disabled'); }"
+            )
+            if not has_next or not rows:
+                return results
+            first_id = rows[0]["message_id"]
+            self._page.evaluate("() => document.querySelector('.dataTables_paginate li.next a').click()")
+            for _wait in range(30):  # up to ~15s for the DataTable to redraw
+                self._page.wait_for_timeout(500)
+                new_first = self._page.evaluate(
+                    "() => { const a = document.querySelector('table tbody tr a[href*=\"/messages/all/\"]');"
+                    " return a ? a.href : null; }"
+                )
+                if new_first and not new_first.rstrip("/").endswith("/" + first_id):
+                    break
+            else:
+                raise RuntimeError("Brick Owl message table did not advance to the next page.")
+        if since_ts is not None:
+            raise RuntimeError(
+                f"Scanned {max_pages} Brick Owl message pages without reaching the start date; raise --max-pages."
+            )
+        return results
 
     @cached
     def get_message(self, message_id: str) -> dict:

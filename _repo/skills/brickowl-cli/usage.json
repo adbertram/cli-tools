@@ -1,8 +1,8 @@
 {
   "tool": "brickowl",
   "description": "CLI interface for Brickowl API",
-  "discovered_at": "2026-09-26T23:55:02Z",
-  "total_commands": 58,
+  "discovered_at": "2026-10-28T17:13:54Z",
+  "total_commands": 59,
   "global_options": [
     {
       "name": "--version",
@@ -1496,6 +1496,76 @@
               "type": "bool",
               "required": false,
               "help": "Send a copy to yourself (accepted for parity)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search sent and received messages live (no cache), across every page. Clicks through Brick Owl's paged message tables until --since is passed, then opens each match for its body, links, and attachments. Unread inbox messages are listed without opening them (opening marks them read) unless --include-unread-bodies.",
+          "examples": [
+            "brickowl messages search --user \"Timeless Bricks\" --since 2026-10-01",
+            "brickowl messages search --since 2026-10-27 --folder outbox --contains icloud.com"
+          ],
+          "arguments": [],
+          "options": [
+            {
+              "name": "--user",
+              "type": "TEXT",
+              "required": false,
+              "help": "Buyer username (repeatable; matches From or To, case-insensitive)",
+              "short": "-u"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start (YYYY-MM-DD or ISO datetime; naive = local time)"
+            },
+            {
+              "name": "--until",
+              "type": "TEXT",
+              "required": false,
+              "help": "End (YYYY-MM-DD = end of that day, or ISO datetime)"
+            },
+            {
+              "name": "--folder",
+              "type": "TEXT",
+              "required": false,
+              "help": "all, inbox, or outbox",
+              "default": "all"
+            },
+            {
+              "name": "--contains",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only messages whose subject/body/links/attachments contain this text"
+            },
+            {
+              "name": "--include-unread-bodies",
+              "type": "bool",
+              "required": false,
+              "help": "Also open unread inbox messages (opening marks them read)",
+              "takes_value": false
+            },
+            {
+              "name": "--max-pages",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Safety cap on pages scanned per folder",
+              "default": "100"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
               "takes_value": false
             },
             {

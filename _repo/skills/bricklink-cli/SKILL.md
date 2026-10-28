@@ -25,6 +25,7 @@ bricklink <command-group> <action> [arguments] [options]
 | Look up a part | `bricklink catalog part <item_no>` |
 | Get price guide | `bricklink catalog price <type> <item_no>` |
 | Send a message | `bricklink messages send <username> <subject> <body>` |
+| Find sent/received messages by buyer and date (live, all pages, bodies + links) | `bricklink messages search --user <buyer> --since YYYY-MM-DD [--until YYYY-MM-DD] [--folder outbox] [--contains <text>]` |
 | Issue a refund | `bricklink refund issue <order_id> <amount>` |
 | Check auth | `bricklink auth status` |
 
@@ -93,7 +94,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **member** -- Member info (ratings, note, set-note, delete-note)
 - **coupon** -- Store coupons (list, get, create, delete)
 - **store** -- Store settings via browser (vacation enable, vacation disable)
-- **messages** -- Messages via browser (list, get, send, reply, mark-read, mark-unread)
+- **messages** -- Messages via browser (list, get, search, send, reply, mark-read, mark-unread). Use `messages search` (never cached, pages until `--since`) to check what was sent or received; `messages list` reads one cached page. Sends/replies now succeed only after the new message appears in the live outbox and return `sent_message_id`.
 - **refund** -- Refunds via browser (info, issue, full)
 - **invoice** -- Invoices via browser (get, list, pay)
 - **notification** -- Notifications via browser (list, get, send-wanted-list)

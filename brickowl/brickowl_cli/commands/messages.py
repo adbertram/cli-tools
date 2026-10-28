@@ -11,6 +11,7 @@ COMMAND_CREDENTIALS = {
     "reply": ["browser_session"],
     "mark-read": ["browser_session"],
     "mark-unread": ["browser_session"],
+    "search": ["browser_session"],
 }
 
 import re as _re
@@ -370,6 +371,99 @@ def messages_reply(
             print_success(f"Reply sent for message {message_id}")
         print_json(result)
 
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("search")
+def messages_search(
+    user: Optional[List[str]] = typer.Option(None, "--user", "-u", help="Buyer username (repeatable; matches From or To, case-insensitive)"),
+    since: Optional[str] = typer.Option(None, "--since", help="Start (YYYY-MM-DD or ISO datetime; naive = local time)"),
+    until: Optional[str] = typer.Option(None, "--until", help="End (YYYY-MM-DD = end of that day, or ISO datetime)"),
+    folder: str = typer.Option("all", "--folder", help="all, inbox, or outbox"),
+    contains: Optional[str] = typer.Option(None, "--contains", help="Only messages whose subject/body/links/attachments contain this text"),
+    include_unread_bodies: bool = typer.Option(False, "--include-unread-bodies", help="Also open unread inbox messages (opening marks them read)"),
+    max_pages: int = typer.Option(100, "--max-pages", help="Safety cap on pages scanned per folder"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """
+    Search sent and received messages live (no cache), across every page.
+
+    Clicks through Brick Owl's paged message tables until --since is passed,
+    then opens each match for its body, links, and attachments. Unread inbox
+    messages are listed without opening them (opening marks them read)
+    unless --include-unread-bodies.
+
+    Examples:
+        brickowl messages search --user "Timeless Bricks" --since 2026-10-01
+        brickowl messages search --since 2026-10-27 --folder outbox --contains icloud.com
+    """
+    import os
+    from .. import message_search as ms
+
+    os.environ["CACHE_ENABLED"] = "false"  # message lookups must reflect Brick Owl right now
+    try:
+        since_dt = ms.parse_bound(since)
+        until_dt = ms.parse_bound(until, end=True)
+        f = (folder or "all").strip().lower()
+        folders = {"all": ["received", "sent"], "inbox": ["received"], "outbox": ["sent"]}.get(f)
+        if not folders:
+            raise typer.BadParameter(f"Unknown folder {folder!r}; use all, inbox, or outbox.")
+
+        from ..browser import get_browser
+        browser = get_browser()
+        results = []
+        try:
+            for bf in folders:
+                rows = browser.list_messages_paged(
+                    folder=bf, since_ts=int(since_dt.timestamp()) if since_dt else None, max_pages=max_pages,
+                )
+                for row in rows:
+                    if not ms.user_matches(row, user):
+                        continue
+                    sent_at = ms.from_timestamp(row.get("timestamp")) or ms.parse_display_utc(row.get("date"))
+                    if not ms.in_window(sent_at, since_dt, until_dt):
+                        continue
+                    entry = {
+                        "platform": "brickowl",
+                        "direction": "sent" if bf == "sent" else "received",
+                        "message_id": row.get("message_id"),
+                        "from": row.get("from"),
+                        "to": row.get("to"),
+                        "subject": row.get("subject"),
+                        "order_id": row.get("order_id"),
+                        "sent_at": sent_at.isoformat() if sent_at else None,
+                        "sent_at_local": sent_at.astimezone().isoformat() if sent_at else None,
+                        "is_unread": row.get("is_unread"),
+                        "url": row.get("url"),
+                    }
+                    if bf == "received" and row.get("is_unread") and not include_unread_bodies:
+                        entry["body_skipped"] = "unread inbox message; opening it marks it read (pass --include-unread-bodies)"
+                        results.append(entry)
+                        continue
+                    detail = browser.get_message(row["message_id"])
+                    attachments = detail.get("attachments") or []
+                    entry.update({
+                        "body": detail.get("body"),
+                        "attachments": attachments,
+                        "links": ms.extract_links(detail.get("body"), hrefs=[a.get("url") for a in attachments]),
+                    })
+                    if contains:
+                        hay = " ".join([entry.get("subject") or "", entry.get("body") or "", " ".join(entry["links"])]).lower()
+                        if contains.lower() not in hay:
+                            continue
+                    results.append(entry)
+        finally:
+            browser.close()
+
+        results.sort(key=lambda e: e.get("sent_at") or "", reverse=True)
+        if table:
+            print_table(results, ["direction", "message_id", "from", "to", "sent_at_local", "subject"],
+                        ["Dir", "ID", "From", "To", "Sent (local)", "Subject"])
+        else:
+            print_json(results)
+    except typer.BadParameter:
+        raise
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

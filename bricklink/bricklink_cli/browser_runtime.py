@@ -9,6 +9,7 @@ Handles operations not available via API:
 Uses BrowserAutomation base class with playwright CLI for session management.
 """
 import re
+from urllib.parse import unquote
 import time
 from typing import Optional
 
@@ -82,6 +83,82 @@ MESSAGE_LIST_SCRIPT = r"""() => {
     return results;
 }"""
 
+
+
+# Injected into a BrickLink message detail page (myMsg.asp?msgID=...).
+MESSAGE_DETAIL_SCRIPT = r"""() => {
+    const cells = document.querySelectorAll('td');
+    let subject = null, from_username = null, to_username = null, sentDate = null, body = null, orderId = null;
+
+    for (const cell of cells) {
+        const text = cell.textContent.trim();
+        if (text === 'Subject:') {
+            const next = cell.nextElementSibling;
+            if (next) {
+                subject = next.textContent.trim();
+                const orderMatch = subject.match(/Order #(\\d+)/);
+                if (orderMatch) orderId = orderMatch[1];
+            }
+        }
+        if (text === 'From:') {
+            const next = cell.nextElementSibling;
+            if (next) {
+                const div = next.querySelector('div') || next;
+                from_username = div.textContent.trim().split('(')[0].trim();
+            }
+        }
+        if (text === 'To:') {
+            const next = cell.nextElementSibling;
+            if (next) {
+                const div = next.querySelector('div') || next;
+                to_username = div.textContent.trim().split('(')[0].trim();
+            }
+        }
+        if (text === 'Sent:') {
+            const next = cell.nextElementSibling;
+            if (next) sentDate = next.textContent.trim();
+        }
+    }
+
+    // The message body lives in the cell that holds BrickLink's 60-dash
+    // separator line. Read it from that cell only: the old whole-page
+    // text approach cut the body at the first literal "BrickLink",
+    // truncating any message that mentions BrickLink mid-text.
+    const DASHES = '------------------------------------------------------------';
+    let bodyCell = null;
+    // Document order lists outer cells first, so the last match is the
+    // innermost cell that holds the separator.
+    for (const td of document.querySelectorAll('td')) {
+        if (td.closest('table[style*="border-left"]')) continue;  // quoted history
+        if ((td.textContent || '').includes(DASHES)) bodyCell = td;
+    }
+    let links = [];
+    if (bodyCell) {
+        const clone = bodyCell.cloneNode(true);
+        clone.querySelectorAll('table[style*="border-left"]').forEach(t => t.remove());
+        const text = clone.innerText || '';
+        const di = text.indexOf(DASHES);
+        body = (di !== -1 ? text.substring(di + DASHES.length) : text).trim();
+        links = Array.from(clone.querySelectorAll('a[href]')).map(a => a.href)
+            .filter(h => !/bricklink\.com\/(help|feedback|orderDetail)\.asp/i.test(h));
+    } else {
+        const pageClone = document.body.cloneNode(true);
+        pageClone.querySelectorAll('footer, #js-blp-footer, table[style*="border-left"]').forEach(t => t.remove());
+        const allText = pageClone.innerText;
+        const dashIndex = allText.indexOf(DASHES);
+        if (dashIndex !== -1) body = allText.substring(dashIndex + 60).trim();
+    }
+    const orderLink = document.querySelector('a[href*="orderDetail.asp?ID="]');
+    if (!orderId && orderLink) {
+        const m = orderLink.href.match(/ID=(\d+)/);
+        if (m) orderId = m[1];
+    }
+
+    const replyLink = document.querySelector('a[href*="/contact.asp?myMsgID="]');
+    let replyUrl = replyLink ? replyLink.href : null;
+
+    return { subject, from_username, to_username, sent_date: sentDate, body, links, order_id: orderId, reply_url: replyUrl };
+}"""
 
 
 class BricklinkRuntimeBrowser(BricklinkBrowser):
@@ -351,90 +428,69 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
         return messages
 
+    def list_messages_live(self, page_num: int = 1, folder: str = "i") -> list:
+        """List one message page straight from BrickLink, never from the cache.
+
+        Unlike ``list_messages`` this returns ``[]`` for a page with no rows
+        only after confirming the browser is still on the messages page.
+        """
+        url = f"{self.MESSAGES_URL}?pg={page_num}&a={folder}"
+        page = self._get_page_for(url)
+        try:
+            page.wait_for_selector('a[href*="myMsg.asp?msgID="]', timeout=15000)
+        except Exception:
+            current = getattr(page, "url", "") or ""
+            if "myMsg.asp" not in current:
+                raise RuntimeError(
+                    f"BrickLink message list did not render for {url!r} (landed at {current!r})."
+                )
+            return []
+        return page.evaluate(MESSAGE_LIST_SCRIPT) or []
+
+    def _outbox_ids_live(self) -> set:
+        """Message IDs on the first live outbox page (baseline for send verification)."""
+        return {str(r.get("message_id")) for r in self.list_messages_live(1, "o")}
+
     @cached
     def get_message(self, message_id: str, folder: str = "i") -> dict:
         """Get message details by ID."""
         url = f"{self.MESSAGES_URL}?msgID={message_id}&a={folder}"
         page = self._get_page_for(url)
 
-        info = page.evaluate("""() => {
-            const cells = document.querySelectorAll('td');
-            let subject = null, from_username = null, to_username = null, sentDate = null, body = null, orderId = null;
-
-            for (const cell of cells) {
-                const text = cell.textContent.trim();
-                if (text === 'Subject:') {
-                    const next = cell.nextElementSibling;
-                    if (next) {
-                        subject = next.textContent.trim();
-                        const orderMatch = subject.match(/Order #(\\d+)/);
-                        if (orderMatch) orderId = orderMatch[1];
-                    }
-                }
-                if (text === 'From:') {
-                    const next = cell.nextElementSibling;
-                    if (next) {
-                        const div = next.querySelector('div') || next;
-                        from_username = div.textContent.trim().split('(')[0].trim();
-                    }
-                }
-                if (text === 'To:') {
-                    const next = cell.nextElementSibling;
-                    if (next) {
-                        const div = next.querySelector('div') || next;
-                        to_username = div.textContent.trim().split('(')[0].trim();
-                    }
-                }
-                if (text === 'Sent:') {
-                    const next = cell.nextElementSibling;
-                    if (next) sentDate = next.textContent.trim();
-                }
-            }
-
-            // Clone page and remove quoted reply tables (dashed left border) before extracting body
-            const pageClone = document.body.cloneNode(true);
-            pageClone.querySelectorAll('table[style*="border-left"]').forEach(t => t.remove());
-            const allText = pageClone.innerText;
-            const dashIndex = allText.indexOf('------------------------------------------------------------');
-            if (dashIndex !== -1) {
-                body = allText.substring(dashIndex + 60).trim();
-                const footerIndex = body.indexOf('BrickLink');
-                if (footerIndex !== -1) body = body.substring(0, footerIndex).trim();
-            }
-
-            const replyLink = document.querySelector('a[href*="/contact.asp?myMsgID="]');
-            let replyUrl = replyLink ? replyLink.href : null;
-
-            return { subject, from_username, to_username, sent_date: sentDate, body, order_id: orderId, reply_url: replyUrl };
-        }""")
+        info = page.evaluate(MESSAGE_DETAIL_SCRIPT)
 
         return {"message_id": message_id, **info, "url": page.url}
 
     def send_message(self, order_id: str, body: str, subject: str = None,
                      high_priority: bool = False, send_copy: bool = False) -> dict:
         """Send a message linked to an order."""
+        baseline = self._outbox_ids_live()
         url = f"{self.CONTACT_URL}?orderID={order_id}"
         page = self._get_page_for(url)
 
         if "contact.asp" not in page.url:
             raise RuntimeError("Failed to navigate to contact form.")
 
-        return self._fill_and_send_message(page, body, subject, high_priority, send_copy, order_id=order_id)
+        return self._fill_and_send_message(page, body, subject, high_priority, send_copy,
+                                          baseline_ids=baseline, order_id=order_id)
 
     def contact_member(self, username: str, body: str, subject: str = None,
                        high_priority: bool = False, send_copy: bool = False) -> dict:
         """Send a message to a member via the contact form (no order required)."""
+        baseline = self._outbox_ids_live()
         url = f"{self.CONTACT_URL}?u={username}"
         page = self._get_page_for(url)
 
         if "contact.asp" not in page.url:
             raise RuntimeError("Failed to navigate to contact form.")
 
-        return self._fill_and_send_message(page, body, subject, high_priority, send_copy, member=username)
+        return self._fill_and_send_message(page, body, subject, high_priority, send_copy,
+                                          baseline_ids=baseline, recipient=username, member=username)
 
     def reply_to_message(self, message_id: str, body: str, subject: str = None,
                          high_priority: bool = False, send_copy: bool = False) -> dict:
         """Reply to a specific message."""
+        baseline = self._outbox_ids_live()
         url = f"{self.MESSAGES_URL}?msgID={message_id}&a=i"
         page = self._get_page_for(url)
 
@@ -452,7 +508,11 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         if "contact.asp" not in page.url:
             raise RuntimeError("Failed to navigate to reply form.")
 
-        return self._fill_and_send_message(page, body, subject, high_priority, send_copy, message_id=message_id)
+        recipient_match = re.search(r"[?&]u=([^&]+)", reply_href)
+        recipient = unquote(recipient_match.group(1)) if recipient_match else None
+        return self._fill_and_send_message(page, body, subject, high_priority, send_copy,
+                                          baseline_ids=baseline, recipient=recipient,
+                                          message_id=message_id)
 
     @staticmethod
     def _sanitize_message_body(body: str) -> str:
@@ -484,6 +544,8 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
 
     def _fill_and_send_message(self, page, body: str, subject: str = None,
                                 high_priority: bool = False, send_copy: bool = False,
+                                baseline_ids: Optional[set] = None,
+                                recipient: Optional[str] = None,
                                 **extra) -> dict:
         """Fill and submit the message form."""
         body = self._sanitize_message_body(body)
@@ -533,16 +595,41 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         send_button.click()
         page.wait_for_timeout(3000)
 
-        current_url = page.url
-        content = page.evaluate("document.documentElement.outerHTML") or ""
-        success = (
-            "myMsg.asp" in current_url
-            or "sent" in content.lower()
-            or "contact.asp" not in current_url
-        )
+        sent = self._verify_sent_in_outbox(page, baseline_ids, recipient)
+        return {"success": True, "body": body, "subject": subject or "(auto)", **extra,
+                "sent_message_id": sent.get("message_id"),
+                "recipient": sent.get("username"),
+                "message": "Message sent successfully (verified in BrickLink outbox)"}
 
-        return {"success": success, "body": body, "subject": subject or "(auto)", **extra,
-                "message": "Message sent successfully" if success else "Message may have failed. Verify on Bricklink."}
+    def _verify_sent_in_outbox(self, page, baseline_ids: Optional[set], recipient: Optional[str],
+                               attempts: int = 4) -> dict:
+        """Prove a send landed by finding a new row in the live outbox.
+
+        The old check called a send successful when the page HTML contained the
+        word "sent" or the URL left contact.asp — true for login, confirmation
+        code, and error pages too — so failed sends reported
+        "Message sent successfully". Now success requires a message ID that was
+        not on the outbox's first page before the send (addressed to
+        ``recipient`` when known); otherwise this raises.
+        """
+        landed_at = getattr(page, "url", "")
+        if baseline_ids is None:
+            raise RuntimeError("Send verification needs an outbox baseline captured before sending.")
+        for attempt in range(attempts):
+            if attempt:
+                page.wait_for_timeout(1500 * attempt)
+            rows = self.list_messages_live(1, "o")
+            new_rows = [r for r in rows if str(r.get("message_id")) not in baseline_ids]
+            if recipient:
+                new_rows = [r for r in new_rows
+                            if (r.get("username") or "").strip().lower() == recipient.strip().lower()]
+            if new_rows:
+                return new_rows[0]
+        raise RuntimeError(
+            "BrickLink did not record this message in the outbox, so it was NOT sent "
+            f"(page after submit: {landed_at!r}). Check `bricklink messages search` "
+            "before retrying to avoid a duplicate."
+        )
 
     def _message_unread_state(self, message_id: str, max_pages: int = 5) -> Optional[bool]:
         """Read a message's unread flag from a fresh inbox listing.

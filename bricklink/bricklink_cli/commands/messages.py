@@ -15,6 +15,9 @@ COMMAND_CREDENTIALS = {
     "reply": [
         "browser_session"
     ],
+    "search": [
+        "browser_session"
+    ],
     "send": [
         "browser_session"
     ]
@@ -56,6 +59,21 @@ def _parse_msg_date(date_str: str) -> datetime:
         except ValueError:
             continue
     return datetime.min
+
+
+def _folder_code(folder: str) -> str:
+    """Map a folder name to BrickLink's myMsg.asp ``a=`` code.
+
+    ``messages get --folder outbox`` used to pass "outbox" straight through as
+    ``a=outbox``; BrickLink then rendered no message and every field came back
+    null, which made sent messages look empty.
+    """
+    f = (folder or "i").strip().lower()
+    if f in ("o", "out", "outbox", "sent"):
+        return "o"
+    if f in ("i", "in", "inbox", "received"):
+        return "i"
+    raise typer.BadParameter(f"Unknown folder {folder!r}; use inbox or outbox.")
 
 
 def _extract_order_id(subject: str) -> Optional[str]:
@@ -279,7 +297,7 @@ def messages_list(
             raise typer.Exit(handle_error(e))
         return
 
-    folder_code = "o" if folder == "outbox" else "i"
+    folder_code = _folder_code(folder)
     try:
         from ..browser import normalize_subject
 
@@ -326,7 +344,7 @@ def messages_list(
 @command
 def messages_get(
     message_id: str = typer.Argument(..., help="Message ID"),
-    folder: str = typer.Option("i", "--folder", help="i=inbox, o=outbox"),
+    folder: str = typer.Option("i", "--folder", help="inbox|outbox (or i|o)"),
     include_history: bool = typer.Option(False, "--include-history", help="Include message history thread"),
     max_search_messages: int = typer.Option(50, "--max-search-messages", help="Max messages to scan when building history (default 50)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
@@ -340,6 +358,7 @@ def messages_get(
         bricklink messages get 12345678 --folder o
         bricklink messages get 12345678 --include-history
     """
+    folder = _folder_code(folder)
     try:
         def _load_message(browser):
             data = browser.get_message(message_id, folder=folder)
@@ -358,6 +377,102 @@ def messages_get(
         data = run_browser(_load_message)
         print_detail(data, table)
 
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("search")
+@command
+def messages_search(
+    user: Optional[List[str]] = typer.Option(None, "--user", "-u", help="Buyer username (repeatable, case-insensitive exact match)"),
+    since: Optional[str] = typer.Option(None, "--since", help="Start (YYYY-MM-DD or ISO datetime; naive = local time)"),
+    until: Optional[str] = typer.Option(None, "--until", help="End (YYYY-MM-DD = end of that day, or ISO datetime)"),
+    folder: str = typer.Option("all", "--folder", help="all, inbox, or outbox"),
+    contains: Optional[str] = typer.Option(None, "--contains", help="Only messages whose subject/body/links contain this text"),
+    include_unread_bodies: bool = typer.Option(False, "--include-unread-bodies", help="Also open unanswered inbox messages to read their bodies"),
+    max_pages: int = typer.Option(200, "--max-pages", help="Safety cap on pages scanned per folder"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+):
+    """
+    Search sent and received messages live (no cache), across every page.
+
+    Pages through the inbox and outbox until --since is passed, opens each
+    match for its exact send time, full body, and links. Unanswered inbox
+    messages are listed without opening them unless --include-unread-bodies.
+
+    Examples:
+        bricklink messages search --user buyalo --since 2026-10-20
+        bricklink messages search -u Blockus -u buyalo --since 2026-10-01 --folder outbox
+        bricklink messages search --since 2026-10-27 --contains icloud.com
+    """
+    import os
+    from .. import message_search as ms
+
+    os.environ["CACHE_ENABLED"] = "false"  # message lookups must reflect BrickLink right now
+    try:
+        since_dt = ms.parse_bound(since)
+        until_dt = ms.parse_bound(until, end=True)
+        f = (folder or "all").strip().lower()
+        codes = ["i", "o"] if f == "all" else [_folder_code(f)]
+        tz = ms.display_tz()
+
+        def _search(browser):
+            results = []
+            for code in codes:
+                rows = ms.iter_live_rows(
+                    lambda pg, code=code: browser.list_messages_live(pg, code),
+                    since_day=(since_dt.astimezone(tz).date() - timedelta(days=1)) if since_dt else None,
+                    max_pages=max_pages,
+                )
+                for row in rows:
+                    if not ms.user_matches(row.get("username"), user):
+                        continue
+                    if not ms.day_in_window(ms.parse_list_date(row.get("date", "")), since_dt, until_dt, tz):
+                        continue
+                    direction = "sent" if code == "o" else "received"
+                    entry = {
+                        "platform": "bricklink",
+                        "direction": direction,
+                        "message_id": row.get("message_id"),
+                        "username": row.get("username"),
+                        "subject": row.get("subject"),
+                        "list_date": row.get("date"),
+                        "unanswered": bool(row.get("is_unread")) if code == "i" else None,
+                        "url": f"https://www.bricklink.com/myMsg.asp?msgID={row.get('message_id')}&a={code}",
+                    }
+                    if code == "i" and row.get("is_unread") and not include_unread_bodies:
+                        entry["body_skipped"] = "unanswered inbox message; pass --include-unread-bodies to open it"
+                        results.append(entry)
+                        continue
+                    detail = browser.get_message(row["message_id"], folder=code)
+                    sent_at = ms.parse_sent(detail.get("sent_date") or "", tz)
+                    if not ms.in_window(sent_at, since_dt, until_dt):
+                        continue
+                    entry.update({
+                        "from": detail.get("from_username"),
+                        "to": detail.get("to_username"),
+                        "subject": detail.get("subject") or entry["subject"],
+                        "sent_date_raw": detail.get("sent_date"),
+                        "sent_at": sent_at.isoformat() if sent_at else None,
+                        "sent_at_local": sent_at.astimezone().isoformat() if sent_at else None,
+                        "order_id": detail.get("order_id"),
+                        "body": ms.normalize_body(detail.get("body")),
+                        "links": ms.extract_links(detail.get("body"), hrefs=detail.get("links") or []),
+                    })
+                    if contains:
+                        hay = " ".join([entry.get("subject") or "", entry.get("body") or "", " ".join(entry["links"])]).lower()
+                        if contains.lower() not in hay:
+                            continue
+                    results.append(entry)
+            results.sort(key=lambda e: e.get("sent_at") or "", reverse=True)
+            return results
+
+        data = run_browser(_search)
+        print_list(data, table, None,
+                   ["direction", "message_id", "username", "sent_at_local", "subject"],
+                   ["Dir", "ID", "User", "Sent (local)", "Subject"])
+    except typer.BadParameter:
+        raise
     except Exception as e:
         raise typer.Exit(handle_error(e))
 

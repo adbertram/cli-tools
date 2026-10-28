@@ -27,6 +27,7 @@ def test_browser_only_command_groups_require_only_browser_session():
         "mark-read": ["browser_session"],
         "mark-unread": ["browser_session"],
         "reply": ["browser_session"],
+        "search": ["browser_session"],
         "send": ["browser_session"],
     }
     assert refund.COMMAND_CREDENTIALS == {

@@ -24,6 +24,7 @@ brickowl <command-group> <action> [arguments] [options]
 | List inventory | `brickowl inventory list` |
 | Search catalog | `brickowl catalog search <query>` |
 | Send a message | `brickowl messages send <user_id> <subject> <body>` |
+| Find sent/received messages by buyer and date (live, all pages, bodies, links, attachments) | `brickowl messages search --user <buyer> --since YYYY-MM-DD [--until YYYY-MM-DD] [--folder outbox] [--contains <text>]` |
 | Issue a refund | `brickowl refund issue <order_id> <amount>` |
 | List quotes | `brickowl quotes list` |
 | Enable store vacation notice | `brickowl store vacation enable <ship_out_date> --yes` |
@@ -43,7 +44,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **inventory** -- Store inventory (list, get, search, stats, update, delete)
 - **catalog** -- Catalog browsing (lookup, search, id, availability, inventory, colors, conditions, categories, themes)
 - **user** -- User details
-- **messages** -- Message management (list, get, send, reply, mark-read, mark-unread)
+- **messages** -- Message management (list, get, search, send, reply, mark-read, mark-unread). `messages list` only sees the newest 20 rows (one site page, cached); use `messages search`, which clicks through every page live. Unread inbox messages are listed but not opened (opening marks them read).
 - **refund** -- Refund management (info, issue, full)
 - **coupon** -- Coupon management (list, get, create-user, create-code, delete)
 - **quotes** -- Quote management (list, get, submit)

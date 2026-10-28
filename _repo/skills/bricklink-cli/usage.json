@@ -1,8 +1,8 @@
 {
   "tool": "bricklink",
   "description": "CLI interface for Bricklink API",
-  "discovered_at": "2026-10-20T18:05:10Z",
-  "total_commands": 69,
+  "discovered_at": "2026-10-28T17:13:39Z",
+  "total_commands": 70,
   "global_options": [
     {
       "name": "--version",
@@ -2291,7 +2291,7 @@
               "name": "--folder",
               "type": "TEXT",
               "required": false,
-              "help": "i=inbox, o=outbox",
+              "help": "inbox|outbox (or i|o)",
               "default": "i"
             },
             {
@@ -2496,6 +2496,77 @@
               "type": "bool",
               "required": false,
               "help": "Send a copy to yourself",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "search": {
+          "help": "Search sent and received messages live (no cache), across every page. Pages through the inbox and outbox until --since is passed, opens each match for its exact send time, full body, and links. Unanswered inbox messages are listed without opening them unless --include-unread-bodies.",
+          "examples": [
+            "bricklink messages search --user buyalo --since 2026-10-20",
+            "bricklink messages search -u Blockus -u buyalo --since 2026-10-01 --folder outbox",
+            "bricklink messages search --since 2026-10-27 --contains icloud.com"
+          ],
+          "arguments": [],
+          "options": [
+            {
+              "name": "--user",
+              "type": "TEXT",
+              "required": false,
+              "help": "Buyer username (repeatable, case-insensitive exact match)",
+              "short": "-u"
+            },
+            {
+              "name": "--since",
+              "type": "TEXT",
+              "required": false,
+              "help": "Start (YYYY-MM-DD or ISO datetime; naive = local time)"
+            },
+            {
+              "name": "--until",
+              "type": "TEXT",
+              "required": false,
+              "help": "End (YYYY-MM-DD = end of that day, or ISO datetime)"
+            },
+            {
+              "name": "--folder",
+              "type": "TEXT",
+              "required": false,
+              "help": "all, inbox, or outbox",
+              "default": "all"
+            },
+            {
+              "name": "--contains",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only messages whose subject/body/links contain this text"
+            },
+            {
+              "name": "--include-unread-bodies",
+              "type": "bool",
+              "required": false,
+              "help": "Also open unanswered inbox messages to read their bodies",
+              "takes_value": false
+            },
+            {
+              "name": "--max-pages",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Safety cap on pages scanned per folder",
+              "default": "200"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
               "takes_value": false
             },
             {
