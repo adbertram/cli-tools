@@ -100,6 +100,19 @@ Do not use Homebrew/system `pip install -e .` or
 `--break-system-packages`. CLI tools are installed as uv tools, and
 `~/.local/bin/<tool>` should point into `~/.local/share/uv/tools/`.
 
+### Reinstall fails with `<dep> was not found in the package registry`
+
+A tool whose dependencies are sibling editable checkouts (coursecraft depends
+on `ronin`, `tether`, and `warden`) is installed with `--with-editable <path>`
+for each one, and uv records them under `[tool] requirements` in
+`~/.local/share/uv/tools/<pkg>/uv-receipt.toml`. `install-cli-tool.sh` reads
+that receipt and passes every extra editable requirement back as
+`--with-editable` on reinstall, and it resolves a symlinked tool directory
+(`<cli-tools-root>/coursecraft` -> the CourseCraft checkout) to its real path
+so the health check matches the receipt. If the error still appears, the uv
+venv has no receipt (first install): run the tool README's documented
+`uv tool install ... --with-editable ...` command once, then use the installer.
+
 ### Reinstall picks a Python that fails `test_cli_uses_system_python`
 
 A bare `uv tool install -e <dir> --force --refresh` lets uv choose its own
