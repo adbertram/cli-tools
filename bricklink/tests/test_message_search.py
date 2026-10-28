@@ -76,6 +76,8 @@ def test_folder_code_maps_names(value, code):
 
 
 class _FakeBrowser:
+    _submit_page_notice = staticmethod(lambda page: "Message contains a link that is not allowed.")
+
     def __init__(self, pages):
         self.pages = list(pages)
 
@@ -98,7 +100,7 @@ def test_send_verification_requires_new_outbox_row_for_recipient():
 
 def test_send_verification_raises_when_outbox_unchanged():
     browser = _FakeBrowser([[{"message_id": "1", "username": "buyalo"}]])
-    with pytest.raises(RuntimeError, match="NOT sent"):
+    with pytest.raises(RuntimeError, match="NOT sent.*BrickLink said: 'Message contains a link"):
         BricklinkRuntimeBrowser._verify_sent_in_outbox(browser, _Page(), {"1"}, "buyalo")
 
 

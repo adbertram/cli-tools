@@ -161,6 +161,24 @@ MESSAGE_DETAIL_SCRIPT = r"""() => {
 }"""
 
 
+# Pulls the visible notice from the page BrickLink shows after a message
+# submit (error/warning text in red fonts or alert boxes, else the main
+# content cell), so a rejected send reports BrickLink's reason.
+SUBMIT_NOTICE_SCRIPT = r"""() => {
+    const picks = [];
+    const sel = 'font[color="#FF0000" i], font[color="red" i], .error, .alert, [class*="error" i], [class*="warning" i], [role="alert"]';
+    for (const el of document.querySelectorAll(sel)) {
+        const t = (el.innerText || '').trim();
+        if (t && !picks.includes(t)) picks.push(t);
+    }
+    if (picks.length) return picks.join(' | ');
+    const main = document.querySelector('#id-main-legacy-table, center, #content') || document.body;
+    const clone = main.cloneNode(true);
+    clone.querySelectorAll('footer, #js-blp-footer, header, nav, script, style').forEach(n => n.remove());
+    return (clone.innerText || '').trim().slice(0, 600);
+}"""
+
+
 class BricklinkRuntimeBrowser(BricklinkBrowser):
     """Bricklink browser automation using shared BrowserAutomation base."""
 
@@ -613,6 +631,7 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
         ``recipient`` when known); otherwise this raises.
         """
         landed_at = getattr(page, "url", "")
+        page_notice = self._submit_page_notice(page)
         if baseline_ids is None:
             raise RuntimeError("Send verification needs an outbox baseline captured before sending.")
         for attempt in range(attempts):
@@ -627,9 +646,19 @@ class BricklinkRuntimeBrowser(BricklinkBrowser):
                 return new_rows[0]
         raise RuntimeError(
             "BrickLink did not record this message in the outbox, so it was NOT sent "
-            f"(page after submit: {landed_at!r}). Check `bricklink messages search` "
-            "before retrying to avoid a duplicate."
+            f"(page after submit: {landed_at!r}"
+            + (f"; BrickLink said: {page_notice!r}" if page_notice else "")
+            + "). Check `bricklink messages search` before retrying to avoid a duplicate."
         )
+
+    @staticmethod
+    def _submit_page_notice(page) -> str:
+        """Best-effort text of the notice BrickLink shows after a rejected submit."""
+        try:
+            text = page.evaluate(SUBMIT_NOTICE_SCRIPT) or ""
+        except Exception:
+            return ""
+        return " ".join(text.split())[:600]
 
     def _message_unread_state(self, message_id: str, max_pages: int = 5) -> Optional[bool]:
         """Read a message's unread flag from a fresh inbox listing.
