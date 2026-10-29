@@ -81,8 +81,8 @@ linkedin auth test
 linkedin auth readiness --table
 linkedin auth logout
 linkedin auth profiles list
-linkedin auth profiles create affiliate-magic-page
-linkedin auth login --profile affiliate-magic-page --force
+linkedin auth profiles create adam-bertram
+linkedin auth login --profile adam-bertram --force
 ```
 
 `linkedin auth status` and `linkedin auth test` validate the saved OAuth token
@@ -144,12 +144,12 @@ linkedin page lookup --vanity atalearning
 
 # Create a post using LINKEDIN_PAGE_URN from the active profile
 linkedin page posts create "Organization update"
-linkedin page posts create "Organization update" --profile affiliate-magic-page
+linkedin page posts create "Organization update" --profile adam-bertram
 
 # List posts for an organization or showcase page
 linkedin page posts list --page urn:li:organization:123456 --limit 20
 linkedin page posts list
-linkedin page posts list --profile affiliate-magic-page --limit 20
+linkedin page posts list --profile adam-bertram --limit 20
 
 # Filter and table output
 linkedin page posts list --page urn:li:organization:123456 --filter "visibility:eq:PUBLIC" --table

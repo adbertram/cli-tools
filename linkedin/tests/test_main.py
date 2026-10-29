@@ -313,11 +313,11 @@ def test_page_posts_create_passes_profile_to_client(monkeypatch):
 
     result = runner.invoke(
         app,
-        ["page", "posts", "create", "Page update", "--profile", "affiliate-magic-page"],
+        ["page", "posts", "create", "Page update", "--profile", "adam-bertram"],
     )
 
     assert result.exit_code == 0
-    assert requested_profiles == ["affiliate-magic-page"]
+    assert requested_profiles == ["adam-bertram"]
     assert client.calls[0][0] == "create_post"
     assert client.calls[0][1]["author"] == "urn:li:organization:555"
 
@@ -365,8 +365,8 @@ def test_auth_readiness_reports_oauth_scope_matrix(monkeypatch):
             name="default",
             scopes=["openid", "profile", "w_member_social"],
         ),
-        "affiliate-magic-page": FakeConfig(
-            name="affiliate-magic-page",
+        "adam-bertram": FakeConfig(
+            name="adam-bertram",
             scopes=[],
             authenticated=False,
             missing_credentials=["ACCESS_TOKEN"],
@@ -378,7 +378,7 @@ def test_auth_readiness_reports_oauth_scope_matrix(monkeypatch):
         "linkedin_cli.main.list_profiles",
         lambda config: [
             {"name": "default", "file": ".env", "auth_type": "default", "active": True},
-            {"name": "affiliate-magic-page", "file": ".env", "auth_type": "default", "active": False},
+            {"name": "adam-bertram", "file": ".env", "auth_type": "default", "active": False},
         ],
     )
     monkeypatch.setattr(

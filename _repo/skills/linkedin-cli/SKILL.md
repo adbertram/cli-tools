@@ -29,7 +29,7 @@ linkedin <surface-or-group> <command-group> <action> [arguments] [options]
 | Create a page video post | `linkedin page posts create "Text" --page <page_urn> --video clip.mp4 --video-title "T" --captions clip.srt` |
 | Create a member video post | `linkedin user posts create "Text" --video clip.mp4 --captions clip.srt` |
 | Resolve a company page URN from its vanity name | `linkedin page lookup --vanity atalearning` |
-| Use non-default app profile | `linkedin page posts list --profile affiliate-magic-page --limit 10` |
+| Use non-default app profile | `linkedin page posts list --profile adam-bertram --limit 10` |
 | List auth profiles | `linkedin auth profiles list` |
 | Check post readiness | `linkedin auth readiness --table` |
 | Clear cached responses | `linkedin cache clear` |
