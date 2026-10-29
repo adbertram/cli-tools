@@ -14,7 +14,7 @@ app = typer.Typer(help="Chat and content generation")
 def chat_new(
     prompt: str = typer.Argument(..., help="Prompt to start the conversation"),
     file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to attach to the conversation"),
-    model: str = typer.Option("gemini-3.1-pro-preview", "--model", "-m", help="Model to use"),
+    model: str = typer.Option("gemini-4-argon", "--model", "-m", help="Model to use"),
 ):
     """
     Start a new chat conversation with a prompt.
@@ -22,7 +22,7 @@ def chat_new(
     Example:
         gemini chat new "Explain quantum computing in simple terms"
         gemini chat new "What is in this image?" --file photo.jpg
-        gemini chat new "Summarize this document" -f report.pdf --model gemini-3.1-pro-preview
+        gemini chat new "Summarize this document" -f report.pdf --model gemini-4-argon
     """
     try:
         client = get_client()
