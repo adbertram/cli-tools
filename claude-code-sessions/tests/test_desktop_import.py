@@ -33,6 +33,33 @@ def test_import_graph_conflicts_and_idempotency(tmp_path, monkeypatch):
     assert all(r['status'] == 'identical' for r in json.loads(repeat.stdout)['sessions'])
     record(source, 'local_duplicate', 'duplicate', 'Target')
     assert runner.invoke(desktop.app, args + ['--dry-run']).exit_code != 0
+    selected = runner.invoke(desktop.app, args + ['--session-id', 'local_duplicate', '--yes'])
+    assert selected.exit_code == 0, selected.output
+    assert (dest / 'local_duplicate.json').exists()
+    assert runner.invoke(desktop.app, args + ['--session-id', 'local_existing', '--dry-run']).exit_code != 0
+    wrong_title = args.copy(); wrong_title[1] = 'Wrong title'
+    assert runner.invoke(desktop.app, wrong_title + ['--session-id', 'local_duplicate', '--dry-run']).exit_code != 0
+
+
+def test_desktop_archive_filter(tmp_path, monkeypatch):
+    store = tmp_path / 'store'; source = store / 'a' / 'o'
+    source.mkdir(parents=True)
+    monkeypatch.setattr(desktop, 'STORE', store)
+    for sid, archived in [('local_active', False), ('local_archive', True), ('local_unknown', None)]:
+        record = {'sessionId': sid, 'title': sid}
+        if archived is not None: record['isArchived'] = archived
+        (source / f'{sid}.json').write_text(json.dumps(record))
+    (source / 'local_child.json').write_text(json.dumps({'sessionId': 'local_child', 'isArchived': False, 'spawnedFrom': {'sessionId': 'local_active'}}))
+    runner = CliRunner()
+    all_rows = runner.invoke(desktop.app, ['list'])
+    assert next(row for row in json.loads(all_rows.stdout) if row['id'] == 'local_unknown')['is_archived'] is None
+    filtered = runner.invoke(desktop.app, ['list', '--filter', 'is_archived:eq:false'])
+    assert filtered.exit_code == 0, filtered.output
+    assert {r['id'] for r in json.loads(filtered.stdout)} == {'local_active', 'local_child'}
+    top = runner.invoke(desktop.app, ['list', '--filter', 'is_archived:eq:false,is_child:eq:false'])
+    assert [r['id'] for r in json.loads(top.stdout)] == ['local_active']
+    child = next(r for r in json.loads(all_rows.stdout) if r['id'] == 'local_child')
+    assert child['is_child'] is True and child['parent_session_id'] == 'local_active'
 
 
 def test_referenced_subagent_must_exist(tmp_path):
@@ -48,3 +75,19 @@ def test_referenced_subagent_must_exist(tmp_path):
     folder.mkdir(parents=True)
     (folder / 'agent-abcdef1234567890.jsonl').write_text('{}\n')
     assert len(desktop.associated(transcript, 'session', 'local_test')) == 1
+
+
+def test_duplicate_transcripts_are_inventoried_and_conflicts_rejected(tmp_path, monkeypatch):
+    projects = tmp_path / 'projects'
+    first = projects / 'one' / 'session.jsonl'; second = projects / 'two' / 'session.jsonl'
+    first.parent.mkdir(parents=True); second.parent.mkdir(parents=True)
+    first.write_text('{}\n'); second.write_text('{}\n')
+    monkeypatch.setattr(desktop, 'PROJECTS', projects)
+    assert desktop.transcript('session') == [first, second]
+    second.write_text('{"changed":true}\n')
+    try:
+        desktop.transcript('session')
+    except ValueError as exc:
+        assert 'Conflicting transcripts' in str(exc)
+    else:
+        raise AssertionError('divergent transcripts were accepted')

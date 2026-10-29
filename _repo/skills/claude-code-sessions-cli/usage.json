@@ -1,7 +1,7 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-10-29T15:47:37Z",
+  "discovered_at": "2026-10-29T15:56:33Z",
   "total_commands": 34,
   "global_options": [
     {
@@ -524,6 +524,12 @@
               "type": "TEXT",
               "required": true,
               "help": ""
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact Desktop session ID to disambiguate the title"
             },
             {
               "name": "--dry-run",

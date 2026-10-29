@@ -43,10 +43,12 @@ def pair_for(account, org):
 def transcript(cli_id):
     if not cli_id:
         raise ValueError('Missing cliSessionId')
-    matches = list(PROJECTS.glob(f'*/{cli_id}.jsonl'))
-    if len(matches) != 1:
-        raise ValueError(f'Expected one transcript for {cli_id}, found {len(matches)}')
-    return matches[0]
+    matches = sorted(PROJECTS.glob(f'*/{cli_id}.jsonl'))
+    if not matches:
+        raise ValueError(f'No transcript found for {cli_id}')
+    if len({sha(path) for path in matches}) != 1:
+        raise ValueError(f'Conflicting transcripts for {cli_id}')
+    return matches
 
 
 def closure(all_records, root):
@@ -128,7 +130,9 @@ def list_desktop(account: Optional[str] = typer.Option(None, '--account', help='
         for p in pairs():
             if account and account != p.parent.name or organization and organization != p.name: continue
             for _, d in records(p).values():
-                rows.append({'account_id': p.parent.name, 'organization_id': p.name, 'id': d['sessionId'], 'cli_session_id': d.get('cliSessionId'), 'title': d.get('title'), 'cwd': d.get('cwd'), 'last_activity': d.get('lastActivityAt')})
+                parent = d.get('spawnedFrom')
+                parent_id = parent.get('sessionId') if isinstance(parent, dict) else None
+                rows.append({'parent_session_id': parent_id, 'is_child': bool(parent_id), 'account_id': p.parent.name, 'organization_id': p.name, 'id': d['sessionId'], 'cli_session_id': d.get('cliSessionId'), 'title': d.get('title'), 'is_archived': d.get('isArchived'), 'cwd': d.get('cwd'), 'last_activity': d.get('lastActivityAt')})
         rows.sort(key=lambda r: r['last_activity'] or 0, reverse=True)
         if filter: rows = apply_filters(rows, filter)
         rows = rows[:limit]
@@ -159,14 +163,14 @@ def get_desktop(session_id: str = typer.Argument(...), account: str = typer.Opti
 
 @app.command('import')
 @command
-def import_desktop(title: str = typer.Argument(..., help='Exact, case-sensitive Desktop session title'), source_account: str = typer.Option(..., '--source-account'), source_organization: str = typer.Option(..., '--source-organization'), destination_account: str = typer.Option(..., '--destination-account'), destination_organization: str = typer.Option(..., '--destination-organization'), dry_run: bool = typer.Option(False, '--dry-run', help='Preview without copying records'), yes: bool = typer.Option(False, '--yes', help='Copy the selected session records')):
+def import_desktop(title: str = typer.Argument(..., help='Exact, case-sensitive Desktop session title'), source_account: str = typer.Option(..., '--source-account'), source_organization: str = typer.Option(..., '--source-organization'), destination_account: str = typer.Option(..., '--destination-account'), destination_organization: str = typer.Option(..., '--destination-organization'), session_id: Optional[str] = typer.Option(None, '--session-id', help='Exact Desktop session ID to disambiguate the title'), dry_run: bool = typer.Option(False, '--dry-run', help='Preview without copying records'), yes: bool = typer.Option(False, '--yes', help='Copy the selected session records')):
     """Copy a session and linked Desktop records into another local account."""
     try:
         source = pair_for(source_account, source_organization)
         destination = pair_for(destination_account, destination_organization)
         if source == destination: raise ValueError('Source and destination must differ')
         all_records = records(source)
-        matches = [sid for sid, (_, d) in all_records.items() if d.get('title') == title]
+        matches = [sid for sid, (_, d) in all_records.items() if d.get('title') == title and (session_id is None or sid == session_id)]
         if len(matches) != 1: raise ValueError(f'Exact title matched {len(matches)} sessions; expected one')
         ids = closure(all_records, matches[0])
         rows = []
@@ -177,9 +181,12 @@ def import_desktop(title: str = typer.Argument(..., help='Exact, case-sensitive 
             if hashlib.sha256(snapshots[sid]).hexdigest() != digest:
                 raise ValueError(f'Source changed during scan: {path}')
             status = 'copy' if not target.exists() else 'identical' if sha(target) == digest else 'conflict'
-            t = transcript(d.get('cliSessionId'))
-            files = associated(t, d['cliSessionId'], sid)
-            manifest = {str(p): sha(p) for p in [t] + files}
+            transcripts = transcript(d.get('cliSessionId'))
+            t = transcripts[0]
+            files = set(transcripts)
+            for transcript_path in transcripts:
+                files.update(associated(transcript_path, d['cliSessionId'], sid))
+            manifest = {str(p): sha(p) for p in sorted(files)}
             rows.append({'id': sid, 'title': d.get('title'), 'cli_session_id': d['cliSessionId'], 'record_sha256': digest, 'status': status, 'transcript': str(t), 'transcript_sha256': sha(t), 'associated_files': manifest, 'bridge_session_ids': d.get('bridgeSessionIds', [])})
         result = {'source': str(source), 'destination': str(destination), 'sessions': rows, 'dry_run': dry_run}
         if any(r['status'] == 'conflict' for r in rows): raise ValueError('Destination has conflicting session records; no files copied')
