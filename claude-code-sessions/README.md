@@ -365,3 +365,18 @@ MIT
 ```bash
 claude-code-sessions search --help
 ```
+
+### Claude Desktop accounts and sessions
+
+`desktop accounts` lists locally stored account and organization IDs and identifies the last account recorded in Desktop config when available. `desktop list` lists saved Desktop sessions with their account and organization; use `--account`, `--organization`, `--filter`, and `--limit` to narrow it. These records differ from the shared CLI transcripts shown by `sessions list`.
+
+```bash
+claude-code-sessions desktop accounts
+claude-code-sessions desktop list --account ACCOUNT_ID --organization ORG_ID
+claude-code-sessions desktop get SESSION_ID --account ACCOUNT_ID --organization ORG_ID
+claude-code-sessions desktop import 'Exact title' --source-account ACCOUNT_ID --source-organization ORG_ID --destination-account ACCOUNT_ID --destination-organization ORG_ID --dry-run
+```
+
+The import requires an exact unique title and follows saved child and peer links recursively. It checks that each shared CLI transcript exists, reports associated session files and source-account bridge IDs, refuses conflicting destination records, and copies records byte for byte with a backup and parity checks. Reruns accept identical records. Use `--yes` instead of `--dry-run` to copy. The Desktop app must reload the destination account's records to see them; the command does not start or resume sessions. Shared CLI transcripts and their associated files remain in place.
+
+The local storage behavior is also described by [restore-desktop-sessions](https://github.com/arunmauryaaa/restore-desktop-sessions) and [claude-transplant](https://github.com/vitaliyhayda/claude-transplant). Cloud bridge identifiers are retained as saved; remote-control continuity across accounts is not established. Quit and relaunch Claude Desktop to reload the destination account records.
