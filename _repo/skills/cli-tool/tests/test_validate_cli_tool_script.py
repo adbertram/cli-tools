@@ -416,7 +416,14 @@ def test_install_script_requires_launcher_symlink_for_success():
     assert '[ "$existing_python_matches_request" = "true" ]' in script_text
     assert '[ "$metadata_file" -nt "$LAUNCHER" ]' in script_text
     assert 'Existing editable install is healthy; skipped uv tool force refresh.' in script_text
-    assert 'uv tool install -e "$TOOL_DIR" --force --refresh' in script_text
+    # The install command is built from arrays: receipt extras are passed back
+    # as --with-editable, and the interpreter pin and overrides are arrays too.
+    assert (
+        'uv tool install -e "$TOOL_DIR" "${WITH_EDITABLE_FLAGS[@]}" --force --refresh '
+        '"${PY_FLAG[@]}" "${OVERRIDE_FLAG[@]}"'
+    ) in script_text
+    assert 'PY_FLAG=(--python "$PYTHON_REQUEST")' in script_text
+    assert 'WITH_EDITABLE_FLAGS+=(--with-editable "$extra_editable")' in script_text
     assert 'SYMLINK_EXISTS="false"' in script_text
     assert 'SYMLINK_EXISTS="true"' in script_text
     assert "did not create expected launcher" in script_text
