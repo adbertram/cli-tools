@@ -10,7 +10,10 @@ from .config import get_config
 # Pricing per 1M tokens (as of Dec 2025)
 # https://ai.google.dev/gemini-api/docs/pricing
 PRICING = {
-    # Gemini 3 models (latest)
+    # Gemini 4 models (rates through 2026-11-30; see PRICE_CHANGES)
+    "gemini-4-argon": {"input": 2.00, "output": 10.00},
+
+    # Gemini 3 models
     "gemini-3.1-pro-preview": {"input": 2.00, "output": 12.00},
     "gemini-3-flash-preview": {"input": 0.50, "output": 3.00},
     "gemini-3-pro-image-preview": {"input": 2.00, "output": 12.00},
@@ -55,6 +58,22 @@ PRICING = {
     "default": {"input": 0.30, "output": 2.50},
 }
 
+
+
+# Scheduled price changes: model -> list of (effective ISO date, pricing)
+PRICE_CHANGES = {
+    "gemini-4-argon": [("2026-12-01", {"input": 4.00, "output": 20.00})],
+}
+
+
+def get_pricing(model_key: str, on: Optional[date] = None) -> Dict[str, float]:
+    """Return per-1M-token pricing for a model on a given date."""
+    on = on or date.today()
+    pricing = PRICING.get(model_key, PRICING["default"])
+    for effective, changed in PRICE_CHANGES.get(model_key, []):
+        if on >= date.fromisoformat(effective):
+            pricing = changed
+    return pricing
 
 def get_usage_file(config=None) -> Path:
     """Get path to usage tracking file."""
@@ -107,7 +126,7 @@ def record_usage(
 
     # Get pricing for this model
     model_key = model.replace("models/", "")
-    pricing = PRICING.get(model_key, PRICING["default"])
+    pricing = get_pricing(model_key)
 
     # Calculate cost (per 1M tokens)
     input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
