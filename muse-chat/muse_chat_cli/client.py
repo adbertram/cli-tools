@@ -10,22 +10,29 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from cli_tools_shared.activity_log import get_activity_logger
-from cli_tools_shared.exceptions import ClientError
+from cli_tools_shared.exceptions import ClientError, CredentialError
 
-from .browser import MuseChatBrowser
+from .browser import (
+    AUTH_STATE_JS,
+    COMPOSER_SELECTOR,
+    LOGIN_PANE_STATE,
+    MuseChatSessionBrowser,
+)
 from .config import get_config
 from .parsers import normalize_chat, normalize_messages, normalize_threads
 
 
 MAIN_URL = "https://muse.ai/"
 NEW_SIDE_URL = "https://muse.ai/thread/new"
-COMPOSER_SELECTOR = 'textarea[aria-label="Message"]'
+SWITCHER_TRIGGER_SELECTOR = '[data-testid="hatch-chat-switcher-trigger"]'
 CHAT_ID_RE = re.compile(r"^/thread/([0-9a-fA-F-]{36})/?$")
 DEFAULT_TIMEOUT_SECONDS = 120
 SEND_ACK_TIMEOUT_SECONDS = 20
 SIDE_ID_TIMEOUT_SECONDS = 30
 RESPONSE_SETTLE_SECONDS = 1.0
 HISTORY_SETTLE_TIMEOUT_SECONDS = 5.0
+SWITCHER_OPEN_TIMEOUT_SECONDS = 10.0
+SWITCHER_SETTLE_SECONDS = 0.5
 
 activity = get_activity_logger("muse-chat")
 
@@ -103,8 +110,11 @@ CHAT_SNAPSHOT_JS = r"""
 """
 
 
+# null until the open switcher renders its thread rows (Main chat is always
+# one); then the Side chats rows, or [] when the account has none.
 SIDE_THREAD_ROWS_JS = r"""
 () => {
+  if (!document.querySelector('[data-testid="hatch-thread-row"]')) return null;
   const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
   const heading = Array.from(document.querySelectorAll('h3 > button'))
     .find(el => clean(el.innerText || el.textContent) === 'Side chats');
@@ -142,12 +152,27 @@ class MuseChatClient:
 
     def __init__(self, profile: Optional[str] = None):
         self.config = get_config(profile=profile)
-        self._browser: Optional[MuseChatBrowser] = None
+        self._browser: Optional[MuseChatSessionBrowser] = None
 
-    def _get_browser(self) -> MuseChatBrowser:
+    def _get_browser(self) -> MuseChatSessionBrowser:
         if self._browser is None:
-            self._browser = self.config.get_browser()
+            self._browser = MuseChatSessionBrowser(self.config)
         return self._browser
+
+    def _open_page(self, url: str):
+        """Open ``url``, resuming an expired Muse session headlessly first."""
+        browser = self._get_browser()
+        page = browser.get_page(url)
+        if page.evaluate(AUTH_STATE_JS) != LOGIN_PANE_STATE:
+            return page
+        activity.info("session expired; resuming saved account headlessly")
+        outcome = browser.ensure_fresh_session()
+        if not outcome.authenticated:
+            raise CredentialError(
+                f"Muse session expired and could not be resumed headlessly ({outcome.reason}). "
+                "Run 'muse-chat auth login', then retry."
+            )
+        return browser.get_page(url)
 
     def close(self) -> None:
         if self._browser is not None:
@@ -221,7 +246,7 @@ class MuseChatClient:
 
     def _open_chat(self, chat_id: str):
         validated = self._validate_chat_id(chat_id)
-        page = self._get_browser().get_page(self._url_for_chat(validated))
+        page = self._open_page(self._url_for_chat(validated))
         self._require_target(page, validated)
         self._require_composer(page)
         try:
@@ -486,7 +511,7 @@ class MuseChatClient:
         monitor: bool = False,
         timeout: int = DEFAULT_TIMEOUT_SECONDS,
     ) -> dict:
-        page = self._get_browser().get_page(NEW_SIDE_URL)
+        page = self._open_page(NEW_SIDE_URL)
         parsed = urlparse(page.url)
         if (
             parsed.scheme != "https"
@@ -535,22 +560,35 @@ class MuseChatClient:
             turn["message_id"],
         )
 
-    def list_chats(self, limit: int = 100) -> list[dict]:
-        page = self._open_chat("main")
-        trigger = page.locator('[data-testid="hatch-chat-switcher-trigger"]')
+    @staticmethod
+    def _open_switcher(page) -> list:
+        """Open the chat switcher and return its settled Side chats rows."""
         try:
-            page.wait_for_selector(
-                '[data-testid="hatch-chat-switcher-trigger"]', timeout=15000
-            )
+            page.wait_for_selector(SWITCHER_TRIGGER_SELECTOR, timeout=15000)
         except Exception as exc:
             raise ClientError("Muse side-chat switcher did not finish loading.") from exc
-        if trigger.count() == 0:
-            raise ClientError("Muse side-chat switcher was not found.")
-        trigger.click()
-        page.wait_for_timeout(300)
-        initial = page.evaluate(SIDE_THREAD_ROWS_JS)
-        if not isinstance(initial, list):
-            raise ClientError("Muse side-chat switcher returned invalid rows.")
+        page.locator(SWITCHER_TRIGGER_SELECTOR).click()
+        deadline = time.monotonic() + SWITCHER_OPEN_TIMEOUT_SECONDS
+        rows, stable_since = None, None
+        while True:
+            current = page.evaluate(SIDE_THREAD_ROWS_JS)
+            now = time.monotonic()
+            if current is not None and not isinstance(current, list):
+                raise ClientError("Muse side-chat switcher returned invalid rows.")
+            if current is not None and current == rows:
+                if now - stable_since >= SWITCHER_SETTLE_SECONDS:
+                    return rows
+            else:
+                rows, stable_since = current, now
+            if now >= deadline:
+                if rows is None:
+                    raise ClientError("Muse side-chat switcher did not open.")
+                raise ClientError("Muse side-chat switcher rows did not settle.")
+            page.wait_for_timeout(100)
+
+    def list_chats(self, limit: int = 100) -> list[dict]:
+        page = self._open_chat("main")
+        initial = self._open_switcher(page)
         discovered = []
         side_limit = max(0, limit - 1)
         for index, row in enumerate(initial[:side_limit]):
@@ -558,14 +596,7 @@ class MuseChatClient:
                 page.goto(MAIN_URL)
                 self._require_target(page, "main")
                 self._require_composer(page)
-                try:
-                    page.wait_for_selector(
-                        '[data-testid="hatch-chat-switcher-trigger"]', timeout=15000
-                    )
-                except Exception as exc:
-                    raise ClientError("Muse side-chat switcher did not finish loading.") from exc
-                page.locator('[data-testid="hatch-chat-switcher-trigger"]').click()
-                page.wait_for_timeout(300)
+                self._open_switcher(page)
             clicked = page.evaluate(SIDE_THREAD_CLICK_JS, index)
             if not clicked:
                 raise ClientError(f"Muse side-chat row {index} disappeared while listing chats.")

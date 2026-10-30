@@ -743,9 +743,10 @@ class BrowserAutomation:
 
         1. ``is_authenticated()`` (TTL-cached) reports the session fresh →
            return ``AuthResult(authenticated=True, refreshed=False)``.
-        2. Stale session + fully declared credential login (see
-           :attr:`declarative_login_configured`) → run the login HEADLESS:
-           ``get_page(LOGIN_URL)`` then ``_complete_noninteractive_login``,
+        2. Stale session + ``AUTH_LOGIN_HANDLER`` or a fully declared
+           credential login (see :attr:`declarative_login_configured`) → run
+           the login HEADLESS: ``get_page(LOGIN_URL)`` then the handler (when
+           set) or ``_complete_noninteractive_login``,
            verify exactly like ``_authenticate_noninteractive`` (AUTH_CHECK_URL
            + ``_check_auth_settled``), then confirm persistence with a fresh
            ``is_authenticated()`` restart probe. Success →
@@ -788,7 +789,8 @@ class BrowserAutomation:
             )
             return self._auth_last_refresh_result
 
-        if not self.declarative_login_configured:
+        handler = type(self).AUTH_LOGIN_HANDLER
+        if handler is None and not self.declarative_login_configured:
             outcome = AuthResult(
                 authenticated=False,
                 live_check=result.live_check,
@@ -796,7 +798,8 @@ class BrowserAutomation:
                 needs_human=False,
                 reason=(
                     "declarative non-interactive login is not configured "
-                    "(username/password/submit selectors and both secret names required)"
+                    "(AUTH_LOGIN_HANDLER, or username/password/submit selectors "
+                    "and both secret names required)"
                 ),
             )
             return self._record_refresh_outcome(outcome)
@@ -820,7 +823,10 @@ class BrowserAutomation:
             challenge = self._detect_login_challenge(page)
             if challenge is not None:
                 return self._challenge_outcome(challenge, "login")
-            self._complete_noninteractive_login(page)
+            if handler is not None:
+                handler(self, page)
+            else:
+                self._complete_noninteractive_login(page)
             if self.AUTH_CHECK_URL:
                 # Verify against the same ground truth ``is_authenticated()``
                 # uses; the flow can land on any post-login page.

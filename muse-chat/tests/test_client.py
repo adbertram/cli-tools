@@ -4,6 +4,7 @@ import pytest
 
 from cli_tools_shared.exceptions import ClientError
 from muse_chat_cli import client as client_module
+from muse_chat_cli.browser import AUTH_STATE_JS
 from muse_chat_cli.client import CHAT_SNAPSHOT_JS, MuseChatClient
 from muse_chat_cli.parsers import normalize_threads
 
@@ -26,7 +27,9 @@ class SequencePage:
         self.url = url
         self.composer = FakeComposer()
 
-    def evaluate(self, _script):
+    def evaluate(self, script):
+        if script == AUTH_STATE_JS:
+            return ""
         if len(self.snapshots) > 1:
             return self.snapshots.pop(0)
         return self.snapshots[0]

@@ -179,6 +179,38 @@ def test_ensure_fresh_session_challenge_returns_needs_human_without_browser_or_s
     assert input_calls == [], "challenge path must never read stdin"
 
 
+def test_ensure_fresh_session_runs_login_handler_headlessly(tmp_path, monkeypatch):
+    handled = []
+
+    class _HandlerBrowser(_PlainBrowser):
+        AUTH_LOGIN_HANDLER = staticmethod(lambda browser, page: handled.append(page))
+
+    browser = _HandlerBrowser(_ConfigDouble(tmp_path))
+    monkeypatch.setattr(
+        browser, "is_authenticated", _Probe([
+            AuthResult(authenticated=False, live_check=True),
+            AuthResult(authenticated=True, live_check=True),
+        ])
+    )
+    page = _PageStub()
+    monkeypatch.setattr(browser, "get_page", lambda url=None: page)
+    monkeypatch.setattr(
+        browser, "_complete_noninteractive_login",
+        lambda p: pytest.fail("the handler replaces the credential fill"),
+    )
+    monkeypatch.setattr(browser, "_check_auth_settled", lambda p: True)
+    monkeypatch.setattr(browser, "_detect_login_challenge", lambda p: None)
+    monkeypatch.setattr(browser, "_detect_account_block", lambda p: None)
+    monkeypatch.setattr(browser, "close", lambda: None)
+
+    result = browser.ensure_fresh_session()
+
+    assert result.authenticated is True
+    assert result.refreshed is True
+    assert handled == [page]
+    assert page.url == "https://example.com/dashboard"
+
+
 def test_ensure_fresh_session_incomplete_config_is_a_clean_failure(tmp_path, monkeypatch):
     browser = _IncompleteBrowser(_ConfigDouble(tmp_path))
     monkeypatch.setattr(browser, "is_authenticated", _stale_session_probe)
