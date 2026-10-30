@@ -760,6 +760,40 @@ a TCC grant gap, not a CLI bug — do not "fix" it in code.
 
 ---
 
+## CLI Help/Error Tests Pass in a Terminal but Fail Only in Agent Sessions
+
+### Symptom
+
+Tests that assert on `--help` or error output pass in a normal terminal but fail
+inside an agent session. A substring check such as `"--clip " in result.output`
+misses because the option name comes back in pieces.
+
+### Cause
+
+The agent harness exports `FORCE_COLOR=0`. Typer/Rich treat ANY `FORCE_COLOR`
+value, including `0`, as "force terminal", so Rich emits styling codes and splits
+option names (e.g. `--clip` rendered as separate styled pieces).
+
+### Fix
+
+In the CLI's `tests/conftest.py`, set this BEFORE Typer is imported:
+
+```python
+import os
+os.environ["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
+```
+
+(Done in CourseCraft's `coursecraft` CLI, commit `34147e37`.) Alternative: strip
+ANSI codes from the output before matching.
+
+### Related Trap: Cached Config/Client Singleton
+
+A test that points `HOME` at a temp folder and invokes the app can leave a cached
+config/client singleton behind that later tests reuse, pointing at the wrong
+profile. Reset those caches in an autouse fixture so every test starts clean.
+
+---
+
 ## Quick Reference: Test After Fixes
 
 Always verify fixes work:
