@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from facebook_cli.client import FacebookClient
+from facebook_cli.client import FacebookClient, MessengerLocked
 from facebook_cli.messenger_parsers import (
     extract_conversations_from_snapshot,
     messenger_thread_url,
@@ -62,3 +62,36 @@ def test_get_conversation_navigates_to_cid_g_url(monkeypatch):
     assert visited == [f"https://www.facebook.com/messages/t/{CID_G}/"]
     assert result["conversation_id"] == CID_G
     assert result["messages"] == [{"text": "hello there"}]
+
+
+PIN_SNAPSHOT = '- dialog "Restore your chats":\n-   - heading "Enter your PIN to restore your chats"\n'
+
+
+def _offline_client(monkeypatch, snapshot):
+    client = FacebookClient.__new__(FacebookClient)
+
+    class Page:
+        def wait_for_timeout(self, ms):
+            pass
+
+    monkeypatch.setattr(client, "_get_page", lambda url, *a, **k: Page())
+    monkeypatch.setattr(client, "_assert_authenticated_page", lambda *a, **k: None)
+    monkeypatch.setattr(client, "_snapshot", lambda page: snapshot)
+    return client
+
+
+def test_list_conversations_returns_cid_g_threads(monkeypatch):
+    client = _offline_client(monkeypatch, FIXTURE.read_text())
+    assert CID_G in [c["id"] for c in client.list_conversations(limit=50)]
+
+
+def test_list_conversations_fails_when_pin_locked(monkeypatch):
+    client = _offline_client(monkeypatch, PIN_SNAPSHOT)
+    with pytest.raises(MessengerLocked, match="^MESSENGER_LOCKED:"):
+        client.list_conversations()
+
+
+def test_get_conversation_fails_when_pin_locked(monkeypatch):
+    client = _offline_client(monkeypatch, PIN_SNAPSHOT)
+    with pytest.raises(MessengerLocked, match="^MESSENGER_LOCKED:"):
+        client.get_conversation(CID_G)

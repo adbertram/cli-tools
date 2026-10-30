@@ -448,6 +448,18 @@ Facebook's own filter button on both rejected pages still read `Location: Evansv
 
 **Recurrence Prevention:** Never put a rotating service identifier — a GraphQL doc/query ID, a build hash, a bundle name, a revision string — in a stop marker, a cache key, or any other predicate whose failure mode is silence. Prefer a string the code already fails loudly on when it changes (here: the friendly name, which is also a request header). When a parser needs a REGION around a marker rather than the marker itself, express that as a bounded tail on the read, not as a second marker further down the document: every extra marker is another string that can stop matching without anyone noticing. And when an optimization's only symptom of failure is that it stopped optimizing, it needs a test that asserts the bound, not just the answer.
 
+### 11. Messenger dropped end-to-end-encrypted threads, then hid a PIN-locked inbox as `[]`
+
+**Symptom (2026-10-30):** `facebook messenger list` never returned end-to-end-encrypted threads (ids like `cid.g.1910025477072852`), and `messenger get` could not read them. With Messenger's "Enter your PIN to restore your chats" prompt up, `messenger list` returned `[]` at exit 0, indistinguishable from an empty inbox.
+
+**Cause:** The thread-link regex only matched numeric `/messages/t/<digits>/` links. While the PIN prompt is showing, Messenger renders no thread links at all, so the parser found nothing and reported success.
+
+**Fix (`facebook/facebook_cli/messenger_parsers.py`, `facebook/facebook_cli/client.py`):** One `THREAD_ID_PATTERN` (`(?:cid\.g\.)?\d+`) drives link parsing (`/messages/t/` and `/messages/e2ee/t/`), id validation, and `messenger_thread_url()`. `messenger list` and `messenger get` raise `MessengerLocked` (`MESSENGER_LOCKED:` prefix) when the PIN prompt is in the snapshot.
+
+**Verification:** Fixture tests in `facebook/tests/test_messenger_cid_g_threads.py`. Live 2026-10-30: `messenger list` now fails with `MESSENGER_LOCKED:` on the PIN-locked profile; cid.g listing against an unlocked inbox is not yet observed live.
+
+**Recovery:** Run `facebook auth login --force` (manual login mode keeps the profile), open `https://www.facebook.com/messages/` in that window, enter the Messenger PIN, press Enter in the terminal, then rerun `facebook messenger list`.
+
 ## Raw Browser Fallback Notes
 
 The `facebook` CLI extracts Marketplace data structurally, from Facebook's own embedded GraphQL/Relay payloads (see the principles above and Known Issues #3–#7) — not from rendered DOM text. That is more reliable than DOM scraping and is always the first choice; load this skill and use the CLI before ever touching a raw browser tool. The notes below were captured 2026-08-14 during a one-off LegoScout sourcing exercise that deliberately used Claude's raw browser-pane tools (`navigate`, `read_page`, `get_page_text`, `javascript_tool`, screenshots) instead of this CLI, to test a browser-pane-only workflow. Keep them for two cases only: (1) a genuine CLI-unavailable fallback, and (2) extending the CLI's own scraper. Where a note duplicates existing CLI behavior, it says so instead of repeating the derivation.
