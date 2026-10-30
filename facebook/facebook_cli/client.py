@@ -21,13 +21,13 @@ from cli_tools_shared.output import print_info, print_warning
 from cli_tools_shared._debug_logging import get_debug_logger
 
 from .config import get_config
+from .messenger_parsers import messenger_thread_url
 from .models import FACEBOOK_BASE_URL, MarketplaceListing, Group, GroupPost, Comment
 
 logger = get_debug_logger("cli_tools.facebook.client")
 
 
 MARKETPLACE_BASE = f"{FACEBOOK_BASE_URL}/marketplace"
-MESSENGER_BASE = f"{FACEBOOK_BASE_URL}/messages/t"
 GROUPS_BASE = f"{FACEBOOK_BASE_URL}/groups"
 DEFAULT_LOCATION = "evansville"
 FACEBOOK_DESKTOP_HEADERS = {
@@ -2195,7 +2195,7 @@ class FacebookClient:
         from .messenger_parsers import extract_messages_from_snapshot
 
         print_info(f"Loading conversation {conversation_id}...")
-        requested_url = f"{MESSENGER_BASE}/{conversation_id}/"
+        requested_url = messenger_thread_url(conversation_id)
         page = self._get_page(requested_url)
         self._assert_authenticated_page(page, requested_url, f"Messenger conversation {conversation_id}")
         page.wait_for_timeout(1000)  # extra wait for messenger
@@ -2219,7 +2219,7 @@ class FacebookClient:
             Dict with send status.
         """
         print_info(f"Sending message to conversation {conversation_id}...")
-        requested_url = f"{MESSENGER_BASE}/{conversation_id}/"
+        requested_url = messenger_thread_url(conversation_id)
         page = self._get_page(requested_url)
         self._assert_authenticated_page(page, requested_url, f"Messenger conversation {conversation_id}")
 

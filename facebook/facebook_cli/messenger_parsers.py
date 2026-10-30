@@ -7,12 +7,33 @@ from the accessibility tree snapshot format used by the playwright CLI.
 import re
 from typing import Dict, List
 
+from .models import FACEBOOK_BASE_URL
+
+# Messenger thread ids: numeric for standard threads, ``cid.g.<digits>`` for
+# end-to-end-encrypted threads. Single source of truth for parsing links,
+# validating ids, and building read URLs.
+THREAD_ID_PATTERN = r'(?:cid\.g\.)?\d+'
+THREAD_ID_RE = re.compile(rf'^{THREAD_ID_PATTERN}$')
+# Matches /messages/t/<id>/ and /messages/e2ee/t/<id>/ (trailing slash or end of token).
+THREAD_LINK_RE = re.compile(rf'/messages/(?:e2ee/)?t/({THREAD_ID_PATTERN})(?=[/"\'\s?#]|$)')
+MESSENGER_THREAD_BASE = f"{FACEBOOK_BASE_URL}/messages/t"
+
+
+def messenger_thread_url(thread_id: str) -> str:
+    """Return the read URL for a Messenger thread id (numeric or cid.g.<digits>)."""
+    if not THREAD_ID_RE.match(thread_id):
+        raise ValueError(
+            f"Invalid Messenger thread id {thread_id!r}: expected digits or cid.g.<digits>"
+        )
+    return f"{MESSENGER_THREAD_BASE}/{thread_id}/"
+
 
 def extract_conversations_from_snapshot(snapshot_text: str) -> List[Dict]:
     """Extract Messenger conversations from a playwright page snapshot.
 
     Looks for conversation list items in the sidebar, each containing:
-    - A link to /messages/t/<id>/
+    - A link to /messages/t/<id>/ or /messages/e2ee/t/<id>/, where <id> is
+      numeric or cid.g.<digits> (end-to-end-encrypted threads)
     - Contact name text
     - Message snippet/preview text
 
@@ -27,8 +48,8 @@ def extract_conversations_from_snapshot(snapshot_text: str) -> List[Dict]:
     while i < len(lines):
         line = lines[i]
 
-        # Look for links to message threads: /messages/t/<id>/
-        thread_match = re.search(r'/messages/t/(\d+)/', line)
+        # Look for links to message threads (numeric or cid.g.<digits> ids)
+        thread_match = THREAD_LINK_RE.search(line)
         if thread_match:
             thread_id = thread_match.group(1)
             if thread_id not in seen_ids:

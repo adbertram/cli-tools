@@ -1,0 +1,22 @@
+- navigation "Facebook":
+  - link "Home":
+  -   - /url: "/"
+- list:
+  - listitem:
+    - link "Synthetic Person One":
+    -   - /url: "/messages/t/100000000000001/"
+  - listitem:
+    - link "Synthetic Encrypted Group":
+    -   - /url: "/messages/e2ee/t/cid.g.1910025477072852/"
+  - listitem:
+    - link "Synthetic Person Two":
+    -   - /url: "/messages/t/100000000000002/"
+  - listitem:
+    - link "Synthetic Encrypted Group Two":
+    -   - /url: "/messages/t/cid.g.2020025477072853/"
+  - listitem:
+    - link "Duplicate of encrypted group":
+    -   - /url: "/messages/e2ee/t/cid.g.1910025477072852/"
+  - listitem:
+    - link "Synthetic Person Three":
+    -   - /url: "/messages/e2ee/t/100000000000003/"
