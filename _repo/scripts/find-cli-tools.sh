@@ -9,13 +9,15 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 usage() {
     cat <<EOF
-Usage: $(basename "$0") [--json|--markdown] [--summary] [tool-name ...]
+Usage: $(basename "$0") [--json|--markdown|--names] [--summary] [tool-name ...]
 
 Print the available CLI tools with their README DESCRIPTION text.
 
   (default), --json
                JSON array of {name, readme, description} (full description)
-  --markdown   Markdown list "- name: <full description>" for context injection
+  --markdown   Markdown list "- name: <full description>"
+  --names      Tool names only, comma-separated on one line (used by the
+               session-start inventory hook)
   --summary    Trim each tool's description to its first sentence. Applies to
                both --json (drops the readme field too, to stay compact) and
                --markdown. Use this for a full discovery pass across every
@@ -42,6 +44,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --markdown|--md)
             MODE="markdown"
+            shift
+            ;;
+        --names)
+            MODE="names"
             shift
             ;;
         --summary)
@@ -124,7 +130,9 @@ if summary:
     for record in records:
         record["description"] = first_sentence(record["description"])
 
-if mode == "markdown":
+if mode == "names":
+    print(", ".join(sorted(record["name"] for record in records)))
+elif mode == "markdown":
     out = ["Available CLI tools. Before running one, load the `cli-tool` skill to learn its command structure — do not guess syntax:"]
     for record in records:
         description = record["description"]

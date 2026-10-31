@@ -613,6 +613,28 @@ def test_find_cli_tools_summary_flag_compacts_json_and_markdown():
     assert all(line.count(". ") == 0 for line in markdown_lines)
 
 
+def test_find_cli_tools_names_mode_and_session_start_hook_stay_compact():
+    script = REPO_ROOT / "_repo/scripts/find-cli-tools.sh"
+    json_result = subprocess.run([str(script), "--json"], capture_output=True, text=True, check=False)
+    assert json_result.returncode == 0, json_result.stderr
+    expected = ", ".join(sorted(record["name"] for record in json.loads(json_result.stdout)))
+
+    names_result = subprocess.run([str(script), "--names"], capture_output=True, text=True, check=False)
+    assert names_result.returncode == 0, names_result.stderr
+    assert names_result.stdout == expected + "\n"
+
+    # The session-start hook injects stdout into every session: one header line
+    # pointing at the cli-tool skill, then the names line, and nothing else
+    # (the finder's "Log:" line must stay on stderr).
+    hook = REPO_ROOT / "_repo/scripts/session-start-cli-inventory.sh"
+    hook_result = subprocess.run(["bash", str(hook)], capture_output=True, text=True, check=False)
+    assert hook_result.returncode == 0, hook_result.stderr
+    header, names_line = hook_result.stdout.splitlines()
+    assert "load the `cli-tool` skill" in header
+    assert "find-cli-tools.sh" in header
+    assert names_line == expected
+
+
 def test_find_cli_tools_accepts_exact_tool_name_filter():
     script = REPO_ROOT / "_repo/scripts/find-cli-tools.sh"
 

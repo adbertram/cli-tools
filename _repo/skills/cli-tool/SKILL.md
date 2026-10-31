@@ -63,11 +63,13 @@ heredoc parser inside a single-quoted `bash -lc '...'` command; that quote layer
 can strip Python string literals such as `Path('/tmp/cli-tools.json')` before
 Python starts. Instead invoke the parser as a standalone multiline command and
 pass the JSON file path as argv, for example `python3 - "$json_file" <<'PY'`,
-then read `sys.argv[1]` inside Python. Pass `--markdown` for a compact
-`- name: <first sentence>` list (~2K tokens) suitable for context injection;
-the Claude (`SessionStart` in `~/.claude/settings.json`) and Codex
-(`SessionStart` in `~/.codex/hooks.json`) session-start hooks call it this way
-to preload the CLI-tool roster every session.
+then read `sys.argv[1]` inside Python. Pass `--markdown` for a
+`- name: <description>` list. Pass `--names` for the tool names only,
+comma-separated on one line. The Claude Code `SessionStart` hook
+(`_repo/scripts/session-start-cli-inventory.sh`, wired in
+`~/.claude/settings.json`) injects one header line plus that `--names` list
+(about 1.6K characters) every session; per-tool details come from this script
+through this skill, not from the session-start roster.
 
 Prefer this script over ad hoc `find`/`ls` scans when a task asks which CLI
 tools exist, what they do, or which README describes them.
