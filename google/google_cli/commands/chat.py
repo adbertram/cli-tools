@@ -9,6 +9,7 @@ import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client, retry_with_exponential_backoff
+from ..properties import parse_properties
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error, print_info
 from cli_tools_shared.activity_log import get_activity_logger
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
@@ -54,6 +55,7 @@ def spaces_list(
 ):
     """List Chat spaces the user belongs to."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_chat_service()
         logger.info("chat spaces list (limit=%d)", limit)
@@ -189,6 +191,7 @@ def messages_list(
 ):
     """List messages in a Chat space."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_chat_service()
         logger.info("chat messages list (space=%s, limit=%d)", space, limit)

@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
+from ..properties import parse_properties
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
 from ..filter_translator import translate_calendar_filters
@@ -29,6 +30,7 @@ def calendar_list(
 ):
     """List upcoming calendar events."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_calendar_service()
 
@@ -144,6 +146,7 @@ def calendar_search(
 ):
     """Search calendar events."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_calendar_service()
 
