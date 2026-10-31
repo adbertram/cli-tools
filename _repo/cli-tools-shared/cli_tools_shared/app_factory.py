@@ -2,6 +2,7 @@
 
 import io
 import os
+import re
 import sys
 from typing import Optional
 
@@ -9,6 +10,38 @@ import typer
 
 
 HELP_OUTPUT_MIN_WIDTH = 200
+
+# Piped help keeps Rich's 200-column layout, but every panel row is padded to
+# that width. These patterns collapse the padding (spaces before a row's right
+# border, the rule run before a panel corner, trailing spaces) while keeping
+# every border character the help parsers anchor on. ANSI SGR codes may sit
+# between the characters when colour is forced, so each pattern skips over them.
+_SGR = r"\x1b\[[0-9;]*m"
+_SGR_RE = re.compile(_SGR)
+_PAD = rf"(?:[ \t]|{_SGR})+"
+_ROW_PAD_BEFORE_BORDER = re.compile(rf"{_PAD}(?=(?:{_SGR})*│(?:{_SGR})*\n)")
+_RULE_BEFORE_CORNER = re.compile(rf"─(?:─|{_SGR})*(?=[╮╯](?:{_SGR})*\n)")
+_TRAILING_PAD = re.compile(rf"{_PAD}(?=\n)")
+
+
+def _compact_help_text(text: str) -> str:
+    """Drop the width padding from rendered Rich help, keeping all content."""
+    text = _RULE_BEFORE_CORNER.sub(lambda m: "─" + "".join(_SGR_RE.findall(m.group())), text)
+    text = _ROW_PAD_BEFORE_BORDER.sub(lambda m: " " + "".join(_SGR_RE.findall(m.group())), text)
+    return _TRAILING_PAD.sub(lambda m: "".join(_SGR_RE.findall(m.group())), text)
+
+
+class _CompactHelpStream:
+    """Stream proxy that removes Rich's width padding from each written chunk."""
+
+    def __init__(self, stream):
+        self._stream = stream
+
+    def write(self, text: str):
+        return self._stream.write(_compact_help_text(text))
+
+    def __getattr__(self, name):
+        return getattr(self._stream, name)
 
 
 def _reconfigure_stream(stream, stream_name: str):
@@ -116,11 +149,13 @@ def _stdout_is_interactive() -> bool:
 
 
 def _ensure_piped_help_width() -> None:
-    """Keep piped Rich help wide enough for long option names.
+    """Keep piped Rich help wide enough for long option names, without padding.
 
     Rich/Typer truncates option columns at the detected console width. When help
     is captured by a pipe or file, the default width can be 80 columns, which
     turns long flags into ellipsized labels and breaks exact help/usage probes.
+    The 200-column layout then pads every panel row to full width, so Typer's
+    console writes through :class:`_CompactHelpStream` to drop that padding.
     """
     if not _argv_requests_help() or _stdout_is_interactive():
         return
@@ -138,6 +173,18 @@ def _ensure_piped_help_width() -> None:
     max_width = getattr(typer_rich_utils, "MAX_WIDTH", None)
     if max_width is None or max_width < HELP_OUTPUT_MIN_WIDTH:
         typer_rich_utils.MAX_WIDTH = HELP_OUTPUT_MIN_WIDTH
+
+    make_console = typer_rich_utils._get_rich_console
+    if getattr(make_console, "compacts_help", False):
+        return
+
+    def compact_console(stderr: bool = False):
+        console = make_console(stderr=stderr)
+        console.file = _CompactHelpStream(console.file)
+        return console
+
+    compact_console.compacts_help = True
+    typer_rich_utils._get_rich_console = compact_console
 
 
 def create_app(
