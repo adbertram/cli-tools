@@ -73,6 +73,8 @@ CLI_TOOLS_KEYCHAIN=/path/to/custom.keychain-db \
 
 Use the explicit unlock option instead of running `security unlock-keychain` in a separate SSH command. macOS Keychain access can be session-scoped, so a separate SSH unlock does not reliably apply to the later secret-manager command.
 
+Multi-line values (for example a PEM private key) come back from `get` hex-encoded, not as the stored text, so `read_cli_tool_secret` returns hex for them. Store such a value as one line of base64 (`base64 -i key.pem | tr -d '\n' | secrets.sh set ...`) and decode it in the CLI, as `kalshi` does for its private key.
+
 ## Required Workflow
 
 Before asking Adam for any CLI-tool credential:

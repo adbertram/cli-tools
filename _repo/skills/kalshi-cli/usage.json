@@ -1,0 +1,1248 @@
+{
+  "tool": "kalshi",
+  "description": "CLI interface for kalshi",
+  "discovered_at": "2026-11-01T22:14:07Z",
+  "total_commands": 26,
+  "global_options": [],
+  "commands": {
+    "auth": {
+      "help": "Manage kalshi authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "balance": {
+      "help": "Account balance and portfolio value",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get the available balance and portfolio value.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "markets": {
+      "help": "Read markets and the current open market of a series",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "current": {
+          "help": "Show the open market of a series: target, time left, YES/NO quotes, live reference price when streaming.",
+          "arguments": [
+            {
+              "name": "target",
+              "type": "TEXT",
+              "required": true,
+              "help": "Preset name or series ticker (for example btc15m)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--max-stream-age",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[x>=0.0]  Use a running `stream watch` reference price if newer than this many seconds",
+              "default": "5.0"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one market by ticker.",
+          "arguments": [
+            {
+              "name": "ticker",
+              "type": "TEXT",
+              "required": true,
+              "help": "Market ticker (for example KXBTC15M-26NOV011615-15)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List markets, optionally for one series.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--series",
+              "type": "TEXT",
+              "required": false,
+              "help": "Preset name or series ticker (for example btc15m or KXBTC15M)",
+              "short": "-s"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "API status filter: unopened, open, paused, closed, settled"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=10000]  Maximum number of results (1-10000)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "metrics": {
+      "help": "Measure request latency",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Measure cold and warm REST latency, signing cost, and optionally the demo order round trip.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--series",
+              "type": "TEXT",
+              "required": false,
+              "help": "Preset name or series ticker used for the market request",
+              "short": "-s",
+              "default": "btc15m"
+            },
+            {
+              "name": "--samples",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=2]  Warm requests to time on the reused connection",
+              "default": "20"
+            },
+            {
+              "name": "--orders",
+              "type": "bool",
+              "required": false,
+              "help": "Also time a demo order place and cancel round trip (demo credentials required)",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Confirm placing the demo benchmark order",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the benchmark order without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "orders": {
+      "help": "List, place and cancel orders",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "cancel": {
+          "help": "Cancel an order.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--ticker",
+              "type": "TEXT",
+              "required": false,
+              "help": "Market ticker (lets Kalshi route the cancel to the right shard)"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Confirm cancelling the order",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--allow-production",
+              "type": "bool",
+              "required": false,
+              "help": "Allow cancelling on the production exchange",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get one order.",
+          "arguments": [
+            {
+              "name": "order_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Order ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List orders.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--ticker",
+              "type": "TEXT",
+              "required": false,
+              "help": "Only orders in this market"
+            },
+            {
+              "name": "--status",
+              "type": "TEXT",
+              "required": false,
+              "help": "resting, canceled or executed"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=10000]  Maximum number of results (1-10000)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "place": {
+          "help": "Place a limit order.",
+          "arguments": [
+            {
+              "name": "ticker",
+              "type": "TEXT",
+              "required": true,
+              "help": "Market ticker"
+            }
+          ],
+          "options": [
+            {
+              "name": "--outcome",
+              "type": "TEXT",
+              "required": true,
+              "help": "yes or no (BTC 15m: yes = up, no = down)",
+              "short": "-o"
+            },
+            {
+              "name": "--count",
+              "type": "TEXT",
+              "required": true,
+              "help": "Contracts, up to 2 decimals",
+              "short": "-c"
+            },
+            {
+              "name": "--price",
+              "type": "TEXT",
+              "required": true,
+              "help": "Price of the chosen outcome in dollars, for example 0.55"
+            },
+            {
+              "name": "--tif",
+              "type": "TEXT",
+              "required": false,
+              "help": "Time in force: gtc, ioc, fok",
+              "default": "gtc"
+            },
+            {
+              "name": "--post-only",
+              "type": "bool",
+              "required": false,
+              "help": "Reject instead of crossing the book",
+              "takes_value": false
+            },
+            {
+              "name": "--reduce-only",
+              "type": "bool",
+              "required": false,
+              "help": "Only reduce an existing position (requires --tif ioc)",
+              "takes_value": false
+            },
+            {
+              "name": "--expiration-ts",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Unix seconds when the order expires (requires --tif gtc)"
+            },
+            {
+              "name": "--client-order-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Client order ID (default: generated UUID)"
+            },
+            {
+              "name": "--stp",
+              "type": "TEXT",
+              "required": false,
+              "help": "Self-trade prevention: taker_at_cross or maker",
+              "default": "taker_at_cross"
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Confirm placing the order",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Print the request without sending it",
+              "takes_value": false
+            },
+            {
+              "name": "--allow-production",
+              "type": "bool",
+              "required": false,
+              "help": "Allow a real-money order on the production exchange",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "positions": {
+      "help": "List and inspect positions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get the position in one market.",
+          "arguments": [
+            {
+              "name": "ticker",
+              "type": "TEXT",
+              "required": true,
+              "help": "Market ticker"
+            }
+          ],
+          "options": [
+            {
+              "name": "--settlement-status",
+              "type": "TEXT",
+              "required": false,
+              "help": "unsettled, settled or all",
+              "default": "unsettled"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List market positions (position_fp: positive = YES contracts, negative = NO contracts).",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--settlement-status",
+              "type": "TEXT",
+              "required": false,
+              "help": "unsettled, settled or all",
+              "default": "unsettled"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=10000]  Maximum number of results (1-10000)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "presets": {
+      "help": "Market presets (name to series ticker)",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "get": {
+          "help": "Get one market preset.",
+          "arguments": [
+            {
+              "name": "name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Preset name (for example btc15m)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List market presets from presets.json.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[1<=x<=10000]  Maximum number of results (1-10000)",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter results (field:op:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "stream": {
+      "help": "Stream live market data over WebSocket",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "watch": {
+          "help": "Stream the open market of a series as one JSON line per update, rolling to each new market.",
+          "arguments": [
+            {
+              "name": "target",
+              "type": "TEXT",
+              "required": true,
+              "help": "Preset name or series ticker (for example btc15m)"
+            }
+          ],
+          "options": [
+            {
+              "name": "--duration",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[x>=0.001]  Stop after this many seconds (default: run until interrupted)"
+            },
+            {
+              "name": "--count",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]        Stop after this many updates"
+            },
+            {
+              "name": "--interval",
+              "type": "FLOAT",
+              "required": false,
+              "help": "[x>=0.0]    Print at most one update per this many seconds (state still updates on every message)",
+              "default": "0.0"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `kalshi` CLI. Run `kalshi --help` to discover command groups and `--help` on any subcommand for its options."
+}

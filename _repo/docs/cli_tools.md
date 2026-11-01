@@ -67,6 +67,7 @@
 | `instacart` | The `instacart` CLI provides a command-line interface for Instacart API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `invoicedesk` | InvoiceDesk customers, invoices, payments, attachments and archive exports |
 | `jira` | The `jira` CLI provides a command-line interface for Jira API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
+| `kalshi` | The `kalshi` CLI watches and trades Kalshi prediction markets, starting with the Bitcoin 15 minute market. Use it when you need fast market data, WebSocket streaming, and orders with demo and production safeguards for agents, automation, or terminal workflows. |
 | `keywords` | The `keywords` CLI provides a command-line interface for Keywords API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `kick` | The `kick` CLI provides a command-line interface for Kick API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `lastpass` | The `lastpass` CLI wraps lpass with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |

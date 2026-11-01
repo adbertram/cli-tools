@@ -130,6 +130,17 @@ max_nested_depth = 4
 # and getVideo only, so there is no endpoint that could back a `videos list`.
 excluded_from_list_required = ["listings", "time-away", "videos"]
 
+[cli_specific.kalshi]
+# The generic list/get execution tests need a live credential for every list
+# command they run. `orders list` and `positions list` are signed account
+# endpoints (Kalshi has no unauthenticated way to read them), so they stay out of
+# the generic live run and are exercised by the kalshi unit tests with mocked
+# transport. The public market and preset lists run live against the exchange.
+list_commands = ["markets list", "presets list"]
+# `balance` is one account-wide aggregate (cash and portfolio value), with no ID
+# space a list command could enumerate.
+excluded_from_list_required = ["balance"]
+
 [cli_specific.vinted]
 # `listings` is marketplace-wide search: Vinted's catalog endpoint answers a
 # query, and it exposes no way to enumerate listings without one.
