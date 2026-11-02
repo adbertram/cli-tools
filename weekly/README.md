@@ -17,6 +17,9 @@ weekly auth status
 weekly auth refresh
 weekly cache --help
 weekly budget current
+weekly weeks list
+weekly weeks get WEEK_ID
+weekly weeks create --start-date 2026-10-09 --end-date 2026-10-15 --spending-limit 100.00 --dry-run
 weekly balances list
 weekly categories list
 weekly categories create --name Christmas --color red --emoji '🎄'
@@ -33,6 +36,10 @@ weekly transactions split TRANSACTION_ID --part '6.00:Groceries' --part '4.00:Ot
 Transaction list/get output preserves the CSV export's columns. Supported range values are `all` and `month_to_date`; `all` is the default. The captured export's exclusion flags and timezone offset remain in effect. `--timezone-offset` overrides the captured offset. The full CSV is fetched before local filtering and limits; there is no default row limit. `--properties` selects output fields; `get` searches only that selected export range.
 
 `transactions list --unreviewed` lists the current-week review queue (CSV `Target=INITIAL`) using the saved account timezone and current week. The full all-range export is fetched, then the queue filter is applied before any requested filter and limit. It requires `--range all` and cannot be combined with `--timezone-offset`.
+
+`weeks list` and `weeks get` return saved week records with inclusive `startDate` and `endDate`. `allowanceAmount` is the recorded limit on historical weeks; it can be absent on the initial current week, and the CLI does not invent a replacement.
+
+`weeks create` fills in a completed past week using explicit dates and `--spending-limit` (exact cents, including zero). It refuses dates overlapping any saved week and does not impose a seven-day duration. `--dry-run` returns the proposed record without writing; omit it to create the week. The observed historical flow uses no rollover, reads `currentPlan` from the unique current saved week, sums positive signed bank expenses into the historical summary, and leaves transactions, funds, recurring items and user preferences unchanged. Ranges containing reviewed, manual or transfer entries are refused because their historical creation semantics have not been established. Current and upcoming week creation is unsupported; it is rejected explicitly rather than creating a local future plan. If an outcome is uncertain, inspect a fresh `weekly --no-cache weeks list` before retrying.
 
 `budget current` returns the current week, recurring items, funds, and named budget preferences. It does not calculate the app’s safe-to-spend total; `initialWeeklySpendingLimit` is an initial preference. `balances list` returns saved linked-account records, not a bank refresh. Without a filter, an explicit balance limit is applied using Firestore pagination; filtered balance limits apply after local filtering.
 

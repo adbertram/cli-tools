@@ -17,6 +17,7 @@ from .session import import_capture, import_export, refresh, delete_profile_secr
 from .transactions import list_transactions
 from .firestore import list_documents, user_preferences, current_week, create_category
 from .spending import create, update, split
+from .weeks import create as create_week
 
 
 def login_handler(config, force):
@@ -195,6 +196,37 @@ def budget_current(table: bool = typer.Option(False, '--table', '-t'), profile: 
 
 
 app.add_typer(budget, name='budget')
+weeks = typer.Typer(help='Read weeks and create completed historical weeks', no_args_is_help=True)
+
+
+@weeks.command('create')
+@command
+def weeks_create(
+    start_date: str = typer.Option(..., '--start-date', help='Inclusive start date YYYY-MM-DD'),
+    end_date: str = typer.Option(..., '--end-date', help='Inclusive end date YYYY-MM-DD'),
+    spending_limit: str = typer.Option(..., '--spending-limit', help='Explicit weekly spending limit in exact cents'),
+    dry_run: bool = typer.Option(False, '--dry-run', help='Return the proposed week without creating it'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile'),
+):
+    """Create a completed past week with no rollover; current/future weeks are unsupported."""
+    print_output(create_week(get_config(profile), start_date, end_date, spending_limit, dry_run), table=table)
+
+
+@weeks.command('list')
+@command
+def weeks_list(
+    limit: Optional[int] = typer.Option(None, '--limit', '-l', min=1),
+    filter: Optional[List[str]] = typer.Option(None, '--filter', '-f', help='Filter: field:op:value (e.g., startDate:eq:2026-10-16)'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile'),
+):
+    """List saved weeks with their inclusive dates and recorded limits."""
+    rows = list_documents(get_config(profile), 'weekInstances', limit=limit, filters=filter)
+    render_rows(rows, properties, table, ['id', 'startDate', 'endDate', 'allowanceAmount'])
+
+
 categories = typer.Typer(help='Manage spending categories', no_args_is_help=True)
 
 
@@ -232,6 +264,13 @@ def collection_get(collection, item_id, properties, table, profile):
     render_rows(rows, properties, table, single=True)
 
 
+@weeks.command('get')
+@command
+def week_get(item_id: str = typer.Argument(...), properties: Optional[str] = typer.Option(None, '--properties', '-p'), table: bool = typer.Option(False, '--table', '-t'), profile: Optional[str] = typer.Option(None, '--profile')):
+    """Get a saved week, including its dates and recorded spending limit."""
+    collection_get('weekInstances', item_id, properties, table, profile)
+
+
 @categories.command('get')
 @command
 def category_get(item_id: str = typer.Argument(...), properties: Optional[str] = typer.Option(None, '--properties', '-p'), table: bool = typer.Option(False, '--table', '-t'), profile: Optional[str] = typer.Option(None, '--profile')):
@@ -247,6 +286,7 @@ def balance_get(item_id: str = typer.Argument(...), properties: Optional[str] = 
 
 
 app.add_typer(categories, name='categories')
+app.add_typer(weeks, name='weeks')
 app.add_typer(balances, name='balances')
 app.add_typer(transactions, name='transactions')
 app.add_typer(auth, name='auth')

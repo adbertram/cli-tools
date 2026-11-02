@@ -35,7 +35,7 @@ def decode_value(value):
 
 
 def list_documents(config, collection, limit=None, filters=None):
-    if collection not in ('accounts', 'weekInstances', 'items', 'funds', 'tags'):
+    if collection not in ('accounts', 'weekInstances', 'items', 'funds', 'tags', 'transactions'):
         raise ClientError('Unsupported Weekly collection')
     client, user_url, headers, data = firestore_context(config)
     url = user_url + '/' + collection
@@ -80,22 +80,39 @@ def create_category(config, name, color, emoji):
         raise ClientError('Category name, color and emoji must not be empty')
     if any(tag.get('name', '').casefold() == values['name'].casefold() for tag in list_documents(config, 'tags')):
         raise ClientError('A category with this name already exists')
+    return create_document(config, 'tags', values)
+
+
+def encode_value(value):
+    if isinstance(value, bool): return {'booleanValue': value}
+    if isinstance(value, str): return {'stringValue': value}
+    if isinstance(value, int): return {'integerValue': str(value)}
+    if isinstance(value, float): return {'doubleValue': value}
+    if isinstance(value, dict): return {'mapValue': {'fields': {key: encode_value(item) for key, item in value.items()}}}
+    raise ClientError('Unsupported Weekly document value')
+
+
+def create_document(config, collection, values):
+    resources = {'tags': ('category', 'categories'), 'weekInstances': ('week', 'weeks')}
+    if collection not in resources:
+        raise ClientError('Unsupported Weekly creation collection')
+    noun, plural = resources[collection]
     client, user_url, headers, data = firestore_context(config)
-    fields = {key: {'stringValue': value} for key, value in values.items()}
+    fields = {key: encode_value(value) for key, value in values.items()}
     try:
-        response = client.post(user_url + '/tags', headers=headers, json={'fields': fields}, timeout=30, allow_redirects=False)
+        response = client.post(user_url + '/' + collection, headers=headers, json={'fields': fields}, timeout=30, allow_redirects=False)
         if not 200 <= response.status_code < 300:
-            raise ClientError(f'Weekly category creation failed (HTTP {response.status_code})')
+            raise ClientError(f'Weekly {noun} creation failed (HTTP {response.status_code})')
         doc = response.json()
-        prefix = USER_DOCUMENT_ROOT + data['user_id'] + '/tags/'
+        prefix = USER_DOCUMENT_ROOT + data['user_id'] + '/' + collection + '/'
         if not isinstance(doc, dict):
-            raise ClientError('Weekly category creation returned an unexpected response; check categories before retrying')
+            raise ClientError(f'Weekly {noun} creation returned an unexpected response; check {plural} before retrying')
         path = doc.get('name', '')
-        if not path.startswith(prefix) or not path[len(prefix):] or '/' in path[len(prefix):] or doc.get('fields') != fields:
-            raise ClientError('Weekly category creation returned an unexpected identity or fields; check categories before retrying')
+        if not isinstance(path, str) or not path.startswith(prefix) or not path[len(prefix):] or '/' in path[len(prefix):] or doc.get('fields') != fields:
+            raise ClientError(f'Weekly {noun} creation returned an unexpected identity or fields; check {plural} before retrying')
         return {'id': path[len(prefix):], **{key: decode_value(value) for key, value in doc['fields'].items()}}
     except (requests.RequestException, ValueError):
-        raise ClientError('Weekly category creation outcome uncertain; check categories before retrying') from None
+        raise ClientError(f'Weekly {noun} creation outcome uncertain; check {plural} before retrying') from None
 
 
 def user_preferences(config):
@@ -114,9 +131,9 @@ def user_preferences(config):
         raise ClientError('Weekly user settings request failed') from None
 
 
-def current_week(config, preferences=None):
+def current_week(config, preferences=None, weeks=None):
     preferences = user_preferences(config) if preferences is None else preferences
-    weeks = list_documents(config, 'weekInstances')
+    weeks = list_documents(config, 'weekInstances') if weeks is None else weeks
     try:
         today = datetime.now(ZoneInfo(preferences['timezone'])).date()
         current = [week for week in weeks if datetime.fromisoformat(week['startDate'].replace('Z', '+00:00')).date() <= today <= datetime.fromisoformat(week['endDate'].replace('Z', '+00:00')).date()]
