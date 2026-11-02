@@ -19,6 +19,8 @@ weekly cache --help
 weekly budget current
 weekly weeks list
 weekly weeks get WEEK_ID
+weekly weeks delete WEEK_ID --dry-run
+weekly weeks delete WEEK_ID --yes
 weekly weeks create --start-date 2026-10-09 --end-date 2026-10-15 --spending-limit 100.00 --dry-run
 weekly balances list
 weekly categories list
@@ -38,6 +40,8 @@ Transaction list/get output preserves the CSV export's columns. Supported range 
 `transactions list --unreviewed` lists the current-week review queue (CSV `Target=INITIAL`) using the saved account timezone and current week. The full all-range export is fetched, then the queue filter is applied before any requested filter and limit. It requires `--range all` and cannot be combined with `--timezone-offset`.
 
 `weeks list` and `weeks get` return saved week records with inclusive `startDate` and `endDate`. `allowanceAmount` is the recorded limit on historical weeks; it can be absent on the initial current week, and the CLI does not invent a replacement.
+
+`weeks delete WEEK_ID --dry-run` previews the selected week's dates, recorded limit and current-week impact. `--yes` deletes that one budget record with its server update-time precondition and confirms it is absent. The CLI does not delete transactions or fund contributions, or recalculate later rollover balances. Deleting a current week leaves current-budget and unreviewed-transaction commands without a current week until one covering today exists. An uncertain result must be checked with a fresh `weekly --no-cache weeks list` before retrying. This is a single-document backend operation, not a claim about any native app deletion workflow.
 
 `weeks create` fills in a completed past week using explicit dates and `--spending-limit` (exact cents, including zero). It refuses dates overlapping any saved week and does not impose a seven-day duration. `--dry-run` returns the proposed record without writing; omit it to create the week. The observed historical flow uses no rollover, reads `currentPlan` from the unique current saved week, sums positive signed bank expenses into the historical summary, and leaves transactions, funds, recurring items and user preferences unchanged. Ranges containing reviewed, manual or transfer entries are refused because their historical creation semantics have not been established. Current and upcoming week creation is unsupported; it is rejected explicitly rather than creating a local future plan. If an outcome is uncertain, inspect a fresh `weekly --no-cache weeks list` before retrying.
 

@@ -17,7 +17,7 @@ from .session import import_capture, import_export, refresh, delete_profile_secr
 from .transactions import list_transactions
 from .firestore import list_documents, user_preferences, current_week, create_category
 from .spending import create, update, split
-from .weeks import create as create_week
+from .weeks import create as create_week, delete as delete_week
 
 
 def login_handler(config, force):
@@ -196,7 +196,20 @@ def budget_current(table: bool = typer.Option(False, '--table', '-t'), profile: 
 
 
 app.add_typer(budget, name='budget')
-weeks = typer.Typer(help='Read weeks and create completed historical weeks', no_args_is_help=True)
+weeks = typer.Typer(help='Read and delete weeks; create completed historical weeks', no_args_is_help=True)
+
+
+@weeks.command('delete')
+@command
+def weeks_delete(
+    week_id: str = typer.Argument(..., help='Saved week ID'),
+    dry_run: bool = typer.Option(False, '--dry-run', help='Preview the selected week and deletion effects without deleting'),
+    yes: bool = typer.Option(False, '--yes', '-y', help='Delete the selected week budget record'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile'),
+):
+    """Delete one week budget record; retain transactions and funds."""
+    print_output(delete_week(get_config(profile), week_id, dry_run=dry_run, yes=yes), table=table)
 
 
 @weeks.command('create')

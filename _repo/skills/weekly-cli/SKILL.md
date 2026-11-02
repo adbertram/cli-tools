@@ -51,6 +51,8 @@ weekly <command-group> <action> [arguments] [options]
 | Read current week, recurring items, funds and budget preferences | `weekly budget current` |
 | List saved budget weeks | `weekly weeks list` |
 | Get a saved budget week | `weekly weeks get <ITEM_ID>` |
+| Preview deletion of a saved week | `weekly weeks delete <ITEM_ID> --dry-run` |
+| Delete the selected week budget record | `weekly weeks delete <ITEM_ID> --yes` |
 | Preview a completed past week | `weekly weeks create --start-date YYYY-MM-DD --end-date YYYY-MM-DD --spending-limit AMOUNT --dry-run` |
 | Remove all cached responses | `weekly cache clear` |
 | Get a saved spending category by ID | `weekly categories get <ITEM_ID>` |
@@ -65,6 +67,7 @@ weekly <command-group> <action> [arguments] [options]
 </quick_start>
 
 <service_boundaries>
+- `weeks delete` requires `--dry-run` to preview or `--yes` to execute. It targets one own-user week document with its update-time precondition and confirms absence. The CLI does not delete transactions/fund contributions or recalculate later rollover. Current weeks can be deleted; the preview explains that current-budget/review commands then lack a current week. Check fresh saved weeks before retrying an uncertain outcome. This uses documented backend document deletion, not a verified native app deletion workflow.
 - `weeks create` supports completed past weeks only, using explicit inclusive dates and an exact-cent spending limit (zero allowed). Overlapping saved weeks, current/upcoming dates and ranges containing reviewed/manual/transfer entries fail explicitly. The verified flow has no rollover, derives `currentPlan` from the unique current saved week, and writes only the historical week. `--dry-run` previews without writing; omit it to create. Check fresh saved weeks before retrying an uncertain creation. `weeks list/get` preserve missing allowance fields rather than guessing a limit.
 - `categories create` requires explicit name, color and emoji; it refuses duplicate names ignoring case and creates a spending category, not a savings fund. Check a fresh categories list before retrying an uncertain creation.
 - `budget current` returns raw current-week, recurring-item, fund, and preference records. It does not calculate the dashboard's safe-to-spend total; initialWeeklySpendingLimit is an initial preference.
@@ -88,7 +91,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **auth** -- Manage weekly authentication (subcommands: import-capture, import-export, login, logout, profiles, refresh, status, test)
 - **balances** -- Read linked account balances (subcommands: get, list)
 - **budget** -- Read Weekly budget records (subcommands: current)
-- **weeks** -- Read saved weeks and create completed historical weeks (subcommands: create, get, list)
+- **weeks** -- Read/delete saved weeks and create completed historical weeks (subcommands: create, delete, get, list)
 - **cache** -- Manage response cache (subcommands: clear)
 - **categories** -- Manage spending categories (subcommands: create, get, list)
 - **transactions** -- Read transactions and manage spending (subcommands: create, get, list, split, update)

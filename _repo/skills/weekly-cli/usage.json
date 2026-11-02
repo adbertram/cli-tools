@@ -1,8 +1,8 @@
 {
   "tool": "weekly",
   "description": "CLI interface for weekly",
-  "discovered_at": "2026-11-02T22:51:17Z",
-  "total_commands": 29,
+  "discovered_at": "2026-11-02T23:00:16Z",
+  "total_commands": 30,
   "global_options": [],
   "commands": {
     "auth": {
@@ -819,7 +819,7 @@
       }
     },
     "weeks": {
-      "help": "Read weeks and create completed historical weeks",
+      "help": "Read and delete weeks; create completed historical weeks",
       "arguments": [],
       "options": [],
       "commands": {
@@ -850,6 +850,49 @@
               "type": "bool",
               "required": false,
               "help": "Return the proposed week without creating it",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete one week budget record; retain transactions and funds.",
+          "arguments": [
+            {
+              "name": "week_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Saved week ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Preview the selected week and deletion effects without deleting",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Delete the selected week budget record",
+              "short": "-y",
               "takes_value": false
             },
             {
