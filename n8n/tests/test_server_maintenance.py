@@ -60,18 +60,18 @@ def test_repair_rejects_unexpected_source_and_symlinks(tmp_path):
 
 def test_repair_rolls_back_on_failure(tmp_path, monkeypatch):
     import pytest
-    from pathlib import Path
-    from n8n_cli.sync_install_prefix import sync
+    from n8n_cli import sync_install_prefix as repair
+    sync = repair.sync
     content = 'N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"\nN8N_INSTALL_PREFIX = "/usr/local"\n'
     paths = [tmp_path / "a.py", tmp_path / "b.py"]
     for path in paths:
         path.write_text(content)
-    write = Path.write_bytes
-    def fail_second(path, data):
+    write = repair.atomic_write
+    def fail_second(path, data, mode):
         if path == paths[1] and data != content.encode():
             raise OSError("simulated failure")
-        return write(path, data)
-    monkeypatch.setattr(Path, "write_bytes", fail_second)
+        return write(path, data, mode)
+    monkeypatch.setattr(repair, "atomic_write", fail_second)
     with pytest.raises(OSError):
         sync(paths, server.N8N_INSTALL_PREFIX)
     assert all(path.read_text() == content for path in paths)
@@ -97,3 +97,41 @@ def test_main_refuses_unexpected_import_path(monkeypatch):
     monkeypatch.setattr(subprocess, 'run', lambda *a, **kw: subprocess.CompletedProcess(a, 0, '["/unexpected/server.py", "x", "y"]', ''))
     with pytest.raises(ValueError, match='Unexpected installed'):
         repair.main(server.N8N_INSTALL_PREFIX)
+
+
+def test_repair_attempts_every_rollback_and_reports_backups(tmp_path, monkeypatch):
+    import pytest
+    from n8n_cli import sync_install_prefix as repair
+    original = b'N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"\nN8N_INSTALL_PREFIX = "/usr/local"\n'
+    paths = [tmp_path / "a.py", tmp_path / "b.py"]
+    for path in paths:
+        path.write_bytes(original)
+    write = repair.atomic_write
+    restored = []
+    def failing_rollback(path, data, mode):
+        if data == original:
+            restored.append(path)
+            if path == paths[0]:
+                raise OSError("rollback error")
+        return write(path, data, mode)
+    monkeypatch.setattr(repair, "atomic_write", failing_rollback)
+    def fail_verification():
+        raise ValueError("verification error")
+    with pytest.raises(RuntimeError, match="verification error.*rollback failures.*backups"):
+        repair.sync(paths, server.N8N_INSTALL_PREFIX, fail_verification)
+    assert restored == paths
+    assert paths[1].read_bytes() == original
+
+
+def test_failed_atomic_replacement_leaves_original_intact(tmp_path, monkeypatch):
+    import pytest
+    from n8n_cli import sync_install_prefix as repair
+    path = tmp_path / "server.py"
+    path.write_bytes(b"original")
+    def fail(*args):
+        raise OSError("replacement failed")
+    monkeypatch.setattr(repair.os, "replace", fail)
+    with pytest.raises(OSError, match="replacement failed"):
+        repair.atomic_write(path, b"new", 0o644)
+    assert path.read_bytes() == b"original"
+    assert list(tmp_path.iterdir()) == [path]

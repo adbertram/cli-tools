@@ -47,6 +47,18 @@ def replacement(source, prefix):
     return result
 
 
+def atomic_write(path, data, mode):
+    fd, temporary = tempfile.mkstemp(prefix=path.name + ".prefix-tmp-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+        os.chmod(temporary, mode)
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
 def sync(paths, prefix, verify=None):
     originals = {}
     for path in paths:
@@ -67,16 +79,22 @@ def sync(paths, prefix, verify=None):
                 handle.write(original)
             os.chmod(backup, mode)
             backups.append(backup)
+            atomic_write(path, updated, mode)
             changed.append(path)
-            path.write_bytes(updated)
         for path, (_, updated, _) in originals.items():
             if path.read_bytes() != updated or replacement(path.read_text(), prefix).encode() != updated:
                 raise ValueError(f"Verification failed: {path}")
         if verify:
             verify()
-    except Exception:
+    except Exception as error:
+        failures = []
         for path in changed:
-            path.write_bytes(originals[path][0])
+            try:
+                atomic_write(path, originals[path][0], originals[path][2])
+            except Exception as rollback_error:
+                failures.append(f"{path}: {rollback_error}")
+        if failures:
+            raise RuntimeError(f"Repair failed: {error}; rollback failures: {failures}; backups: {backups}") from error
         raise
     return {"changed": [str(p) for p in changed], "backups": backups}
 
