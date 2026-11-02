@@ -28,3 +28,72 @@ def test_version_and_upgrade_use_services_installation(monkeypatch):
         "sudo npm install -g --prefix /Users/adam/Services/n8n n8n@2.0.0",
         "/Users/adam/Services/n8n/lib/node_modules/n8n/bin/n8n --version",
     ]
+
+
+def test_repair_preserves_other_bytes_and_both_orders(tmp_path):
+    from n8n_cli.sync_install_prefix import sync
+    paths = [tmp_path / "a.py", tmp_path / "b.py"]
+    assignments = ['N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"  # old\n', 'N8N_INSTALL_PREFIX = "/usr/local"\n']
+    for path, lines in zip(paths, (assignments, assignments[::-1])):
+        path.write_text("# unrelated\n" + "".join(lines) + "def older_code():\n    return 42\n")
+    result = sync(paths, server.N8N_INSTALL_PREFIX)
+    assert len(result["backups"]) == 2
+    for path in paths:
+        source = path.read_text()
+        assert source.startswith("# unrelated\n") and source.endswith("def older_code():\n    return 42\n")
+        assert '# old' in source and '/usr/local' not in source
+    assert not sync(paths, server.N8N_INSTALL_PREFIX)["changed"]
+
+
+def test_repair_rejects_unexpected_source_and_symlinks(tmp_path):
+    import pytest
+    from n8n_cli.sync_install_prefix import sync
+    target = tmp_path / "source.py"
+    target.write_text('N8N_BIN = get_bin()\nN8N_INSTALL_PREFIX = "/usr/local"\n')
+    with pytest.raises(ValueError):
+        sync([target], server.N8N_INSTALL_PREFIX)
+    alias = tmp_path / "alias.py"
+    alias.symlink_to(target)
+    with pytest.raises(ValueError):
+        sync([alias], server.N8N_INSTALL_PREFIX)
+
+
+def test_repair_rolls_back_on_failure(tmp_path, monkeypatch):
+    import pytest
+    from pathlib import Path
+    from n8n_cli.sync_install_prefix import sync
+    content = 'N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"\nN8N_INSTALL_PREFIX = "/usr/local"\n'
+    paths = [tmp_path / "a.py", tmp_path / "b.py"]
+    for path in paths:
+        path.write_text(content)
+    write = Path.write_bytes
+    def fail_second(path, data):
+        if path == paths[1] and data != content.encode():
+            raise OSError("simulated failure")
+        return write(path, data)
+    monkeypatch.setattr(Path, "write_bytes", fail_second)
+    with pytest.raises(OSError):
+        sync(paths, server.N8N_INSTALL_PREFIX)
+    assert all(path.read_text() == content for path in paths)
+
+
+def test_repair_rolls_back_failed_import_verification(tmp_path):
+    import pytest
+    from n8n_cli.sync_install_prefix import sync
+    path = tmp_path / 'server.py'
+    original = 'N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"\nN8N_INSTALL_PREFIX = "/usr/local"\n'
+    path.write_text(original)
+    def reject():
+        raise ValueError('wrong import')
+    with pytest.raises(ValueError, match='wrong import'):
+        sync([path], server.N8N_INSTALL_PREFIX, reject)
+    assert path.read_text() == original
+
+
+def test_main_refuses_unexpected_import_path(monkeypatch):
+    import pytest
+    import subprocess
+    from n8n_cli import sync_install_prefix as repair
+    monkeypatch.setattr(subprocess, 'run', lambda *a, **kw: subprocess.CompletedProcess(a, 0, '["/unexpected/server.py", "x", "y"]', ''))
+    with pytest.raises(ValueError, match='Unexpected installed'):
+        repair.main(server.N8N_INSTALL_PREFIX)
