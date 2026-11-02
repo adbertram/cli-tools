@@ -1,0 +1,31 @@
+# Weekly CLI
+
+## DESCRIPTION
+
+Read Weekly budgets, saved balances, and transaction exports, and manage manual spending entries. Use it for scriptable access using a privately captured native session.
+
+## Usage
+
+Weekly's native Firebase session and transaction export settings can be imported from authorized iOS captures. Keep the capture directories private and remove them after import. Select the captured segment with `--flow-file`; the default is `wg-export.flows`. The renewable session and observed export settings are stored in the CLI-tools secret manager. The proxy is not needed after import.
+
+```bash
+weekly auth import-capture /private/tmp/ios-cli-LOGIN
+weekly auth import-export /private/tmp/ios-cli-EXPORT --flow-file wireguard-1.flows
+weekly auth status
+weekly auth refresh
+weekly cache --help
+weekly budget current
+weekly balances list
+weekly categories list
+weekly transactions list --range all
+weekly transactions list --range month_to_date --table
+weekly transactions get TRANSACTION_ID --range all
+weekly transactions create --title "Coffee" --amount 4.50 --category Other
+weekly transactions update TRANSACTION_ID --amount 5.00 --title "Coffee and tip"
+```
+
+Transaction output preserves the CSV export's columns. Supported range values are `all` and `month_to_date`; `all` is the default. The captured export's exclusion flags and timezone offset remain in effect. `--timezone-offset` overrides the captured offset. The full CSV is fetched before local filtering and limits; there is no default row limit. `--properties` selects output fields; `get` searches only that selected export range.
+
+`budget current` returns the current week, recurring items, funds, and named budget preferences. It does not calculate the app’s safe-to-spend total; `initialWeeklySpendingLimit` is an initial preference. `balances list` returns saved linked-account records, not a bank refresh. Without a filter, an explicit balance limit is applied using Firestore pagination; filtered balance limits apply after local filtering.
+
+`transactions create` requires an existing category name and creates a manual safe-to-spend entry. Positive amounts represent spending. The optional `--date YYYY-MM-DD` defaults to today in the account timezone. New entries use the observed native color `warning`. `transactions update` changes only the title and/or amount of manual safe-to-spend entries, with a server-side update-time precondition. Bank-linked entries and transfers are not eligible.
