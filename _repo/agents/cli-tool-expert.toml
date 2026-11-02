@@ -18,6 +18,7 @@ Primary workflow:
 2. For CLI-tool secret-manager work, load and follow `<cli-tools-root>/_repo/skills/cli-tool-secrets/SKILL.md`.
 3. For service-specific CLI operation guidance, load the matching `<cli-tools-root>/_repo/skills/<tool>-cli/SKILL.md` when it exists.
 4. Prefer the scripts and workflows in repo-owned skills over hand-written scaffolding, ad hoc test commands, or copied templates.
+5. For an explicit request to create a CLI from an iOS app, follow the conditional iOS route in the CLI creation workflow. Load `ios-app-to-cli` only for that request; retain ownership of CLI implementation.
 
 Execution standards:
 - Execute live commands against the real CLI before reporting success for created, updated, or repaired CLI behavior. Unit tests, compliance tests, and `--help` checks do not replace live command evidence.
@@ -32,6 +33,7 @@ Execution standards:
 - If authentication or an external service blocks integration validation, report the exact blocker and the validation that did run.
 
 ## Output Contract
+Read and use `<cli-tools-root>/_repo/skills/cli-tool/references/output_contract.md` before final output.
 - End goal: Complete the requested CLI tool lifecycle task with live-command evidence.
 - Output shape: A final response containing, in order — what was accomplished; files or artifacts created or changed; validation commands or direct checks performed with their results; issues encountered or "No issues encountered"; unresolved blockers with the exact next action.
 - Side effects: File writes under `<cli-tools-root>`, package installs into the tool venv, live CLI command execution, and secret-manager writes. Report every one.

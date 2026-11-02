@@ -17,18 +17,40 @@ Before starting, read these references as needed:
 Ask the user (if not already provided):
 
 1. **Service/API**: What service or API will this CLI interact with?
-2. **CLI Type**:
+2. **Creation source**: Is this an explicit request to create a CLI from an iOS app? If so, use Step 2.0.
+3. **CLI Type** (scaffold template):
    - `api` - REST API client
    - `browser` - Web automation (only if no API exists)
    - `wrapper` - Wrapping an existing CLI tool
-3. **Base URL** (for api/browser): What is the API base URL or website URL?
-4. **CLI Command** (for wrapper): What is the underlying CLI command name?
-5. **Authentication**: How does authentication work? (API key, OAuth, etc.)
-6. **Key Resources**: What are the main resources/commands needed?
+4. **Base URL** (for api/browser): What is the API base URL or website URL?
+5. **CLI Command** (for wrapper): What is the underlying CLI command name?
+6. **Authentication**: How does authentication work? (API key, OAuth, etc.)
+7. **Key Resources**: What are the main resources/commands needed?
 
 ## Step 2: Investigate Communication Methods (MANDATORY)
 
-**BEFORE asking the user about CLI type, you MUST investigate in this order:**
+**BEFORE asking the user about CLI type, investigate as follows:**
+
+### 2.0 Explicit iOS App Source
+
+When the user explicitly requests a CLI for an iOS app, that request authorizes
+loading `~/.agents/skills/ios-app-to-cli/SKILL.md` on demand. Read and follow
+that file and its capture workflow for preflight, phone handoff, real app login,
+observed requests and authentication/renewal evidence, and teardown. If the skill
+is unavailable or this is not the capture laptop, report the exact missing
+prerequisite or host; do not switch to web discovery. Do not load or run it for
+unrelated CLI requests. The CLI expert remains responsible for implementation;
+the capture workflow supplies evidence without delegating back to itself.
+
+Use the existing `api` scaffold for captured HTTP APIs, with authentication
+implemented from observed evidence. There is no `ios` scaffold type. Feed the
+capture results into Step 2.5 and continue through the normal scaffold, secret
+manager, contracts, live validation, and cleanup. Do not force the web-only
+Steps 2.1–2.3 or their browser/LastPass login discovery on a native capture.
+If capture cannot establish a usable API or authentication, report the evidenced
+blocker instead of inventing a web or authentication path.
+
+For other sources, investigate in this order:
 
 ### 2.1 Search for Public API
 
@@ -125,6 +147,10 @@ Use **`browser` type** only after explicit approval.
 ### 2.4 Decision Tree
 
 ```
+Is this an explicit iOS app-to-CLI request?
+├── YES → Follow Step 2.0; use the api template for captured HTTP APIs
+└── NO → Continue with the web/wrapper decision below
+
 Is there an existing CLI tool for this service?
 ├── YES → Use "wrapper" type
 └── NO → Did you find a public REST/JSON API that is currently usable by Adam? (Step 2.1)
@@ -362,7 +388,7 @@ def list_items(self, limit: int = 100) -> list[dict]:
    - Implement `--limit`/`-l` option on list commands
    - Split into `commands/<group>.py` only when multiple groups justify it
 
-**For API type with `browser_session` auth:**
+**For API type with `browser_session` auth (web sessions only):**
 If you scaffolded an `api` type but used `--auth-type browser_session` (e.g., internal APIs requiring browser cookies), the API template does NOT provide `BrowserAutomation` by default. You MUST manually:
 1. `<name>_cli/browser.py`: Create this file and define a `BrowserAutomation` subclass.
 2. `<name>_cli/config.py`: Import your `BrowserAutomation` subclass and implement `def get_browser(self):`.
@@ -439,14 +465,20 @@ Invoke the `debloat` skill on the CLI directory.
 
 ### 7.2 Verify authentication (BLOCKING GATE)
 
-**Browser-session CLIs (`--auth-type browser_session` / `MANUAL_LOGIN=True`):**
+**Captured native-app sessions:** Import the observed credentials privately using
+the `ios-app-to-cli` workflow and the CLI's supported auth/profile contract.
+Verify authenticated status and a fresh live request with the proxy stopped;
+verify renewal where supported or document the evidenced reauthentication path.
+Do not require a browser login unless the observed auth flow requires one.
+
+**Web browser-session CLIs (`--auth-type browser_session` / `MANUAL_LOGIN=True`):**
 The agent CANNOT run `auth login` automatically — it opens a GUI browser window. Do NOT attempt to run it. Instead:
 1. Tell the user: "Please run `<name> auth login` in your terminal and complete the sign-in. Let me know when done."
 2. Wait for explicit confirmation before continuing.
 3. Run `<name> auth status` and check that `authenticated: true` before proceeding.
 4. If not authenticated, repeat — do not proceed to Step 7.3 or Step 8 until confirmed.
 
-**All other CLIs:**
+**All other CLIs (excluding captured native sessions above):**
 ```bash
 <name> auth status
 ```
@@ -600,6 +632,14 @@ not a completion blocker to report and move past. Prompt Adam to authenticate
 once, save the auth profile through the CLI, and continue only after the saved
 profile is authenticated and live CLI tests pass.
 
+For an iOS captured native session, follow `ios-app-to-cli` for private import,
+live authentication, renewal evidence, and cleanup. Store reusable credentials
+through `references/secrets.md`. Verify the CLI-owned profile, live smoke, and
+compliance test in Steps 9.7.4–9.7.5 using the observed native auth flow. Replace
+Steps 9.7.2–9.7.3 LastPass discovery and transfer with private native import using
+`references/secrets.md` for reusable credential storage. Do not force browser or
+password login unless actual auth evidence requires it. Never expose captured secrets.
+
 ### 9.7.1 Classify The Auth Boundary
 
 - API and browser service CLIs with any auth type other than `none`: this step
@@ -667,6 +707,9 @@ runtime auth state belongs in `~/.local/share/cli-tools/<name>/authentication_pr
 ### 9.7.4 Create Or Verify The CLI Auth Profile
 
 Use the new CLI's own auth/profile commands. Do not create profile files by hand.
+For captured native sessions, use the supported private import path instead of
+`auth login` when that is the observed authentication contract; verify the
+resulting profile with `auth status` and continue to the live smoke.
 
 ```bash
 <name> auth profiles list --properties name,active,auth_type
@@ -839,11 +882,11 @@ CLI creation is complete when:
   - [ ] Exponential retry correctly implemented
   - [ ] Internal representation is minimal and tied to the command contract
 - [ ] `/debloat` final pass completed (Step 9.5) — tests still pass after fixes
-- [ ] Step 9.7 LastPass/profile/live-smoke completed for non-wrapper API/browser service CLIs:
-  - [ ] `lastpass auth status` passed and `lastpass items list` searched the service credential entry without printing secrets
+- [ ] Step 9.7 auth/profile/live-smoke completed for non-wrapper API/browser service CLIs (for captured native sessions, use the iOS exception above):
+  - [ ] For non-iOS credential discovery, `lastpass auth status` passed and `lastpass items list` searched the service credential entry without printing secrets; for native capture, private import and renewal were verified as described above
   - [ ] Needed reusable credential values were transferred to `<cli-tools-root>/_repo/_secret-manager/secrets.sh`
   - [ ] CLI auth profile was created or verified through the CLI's own `auth` commands
-  - [ ] Adam completed any required one-time browser/MFA/consent authentication
+  - [ ] Adam completed any authentication required by the observed flow
   - [ ] `<name> auth status --profile <profile-name>` confirmed authenticated profile JSON
   - [ ] At least one live read-only service smoke command succeeded
   - [ ] `test-cli-tool.sh --cli-name <name>` passed with the saved authenticated profile

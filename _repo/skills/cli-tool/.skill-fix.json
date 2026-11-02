@@ -44,6 +44,11 @@
       "file": ".skill-fix.json",
       "reference": "*",
       "reason": "illustrative-example: this ledger is not skill instructions; scan_references.py walks it as a text file and re-reports the very reference strings recorded here, so every row whose file is .skill-fix.json is an artifact of the scanner reading its own exclusions file"
+    },
+    {
+      "file": "tests/test_install_cli_tool_symlinked_tool_dir.py",
+      "reference": "tools/coursecraft",
+      "reason": "resolves-elsewhere: the test docstring names the CourseCraft repository; this existing checkout is /Users/adam/Dropbox/GitRepos/Agents/CourseCraft/tools/coursecraft, not a file inside the CLI skill. The tests construct their own symlink fixture."
     }
   ]
 }
