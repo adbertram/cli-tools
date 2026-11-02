@@ -3,12 +3,12 @@ name: weekly-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   MANDATORY: Execute Weekly operations using the `weekly` CLI tool.
-  Read Weekly budgets, account balances and transaction exports; create manual entries and update safe-to-spend categories.
+  Read Weekly budgets, account balances and transaction exports; create manual entries, update categories and split eligible bank-linked expenses.
   Triggers: weekly budgeting app, weekly budget cli, weekly transactions cli
 ---
 
 <objective>
-Use the `weekly` CLI for supported Weekly budgeting reads and manual spending operations.
+Use the `weekly` CLI for supported Weekly budgeting reads and spending operations.
 </objective>
 
 <project_overrides>
@@ -55,6 +55,7 @@ weekly <command-group> <action> [arguments] [options]
 | Create a manual safe-to-spend entry | `weekly transactions create` |
 | Find one transaction in the selected export range | `weekly transactions get <TRANSACTION_ID>` |
 | List transactions in the selected export range | `weekly transactions list` |
+| Split an eligible 10.00 bank-linked expense | `weekly transactions split <TRANSACTION_ID> --part '6.00:Groceries' --part '4.00:Other'` |
 | Update a safe-to-spend category, or a manual entry amount and title | `weekly transactions update <TRANSACTION_ID>` |
 </quick_start>
 
@@ -64,6 +65,8 @@ weekly <command-group> <action> [arguments] [options]
 - Transaction list/get use the app's captured CSV export range and captured exclusion settings. The full CSV is downloaded before local filters and limits; there is no default limit. `get` searches within the selected range, not every historical record.
 - Create requires an existing unique category name (`weekly categories list`). Positive amounts represent spending; date defaults to the user's account timezone and can be specified with `--date YYYY-MM-DD`. New entries use the observed native color `warning`.
 - Update supports category changes on manual and bank-linked non-transfer safe-to-spend entries. Title and amount changes remain limited to manual entries. It checks the server update-time precondition; transfers are not updated.
+- Split accepts only positive, unsplit, bank-linked, non-transfer Safe-to-Spend expenses; manual entries, refunds, transfers and already-split entries are rejected. Supply at least two positive exact-cent `--part AMOUNT:CATEGORY` values totaling the original amount exactly. Each category must uniquely match a current account category, case-insensitively. Use `--table` or `--profile NAME` as needed.
+- Split preserves title, date, color and the complete bank link. The first part retains the original ID; later parts get new IDs. The commit is atomic. If an outcome is uncertain, reconcile the reported transaction IDs before proceeding; never blindly retry.
 - Capture import uses the capture's temporary decoder; choose a segment with `--flow-file` (for example, `wireguard-1.flows`). Live operations do not depend on the proxy. Reusable session credentials are stored through the CLI-tools secret manager. Never print captures or secrets.
 </service_boundaries>
 
@@ -79,7 +82,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **budget** -- Read Weekly budget records (subcommands: current)
 - **cache** -- Manage response cache (subcommands: clear)
 - **categories** -- Read spending categories (subcommands: get, list)
-- **transactions** -- Read transactions from the app export (subcommands: create, get, list, update)
+- **transactions** -- Read transactions and manage spending (subcommands: create, get, list, split, update)
 </principle>
 </essential_principles>
 

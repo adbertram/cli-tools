@@ -295,6 +295,181 @@ class CategoryUpdateTests(unittest.TestCase):
         with self.assertRaises(ClientError): self.spending.update(object(),'t',category='Other')
         self.http.patch.assert_called_once()
 
+class SplitTests(unittest.TestCase):
+    def setUp(self):
+        from weekly_cli import spending
+        self.spending = spending
+        self.root = 'projects/weekly-6f36c/databases/(default)/documents/users/u/transactions/'
+        self.fields = {'target':{'stringValue':'SAFE_TO_SPEND'}, 'amount':{'doubleValue':0.3}, 'title':{'stringValue':'Synthetic'}, 'date':{'stringValue':'2000-01-02'}, 'color':{'stringValue':'warning'}, '__plaidTx':{'mapValue':{'fields':{'id':{'stringValue':'synthetic-bank'},'extra':{'stringValue':'preserved'}}}}, 'unknown':{'stringValue':'preserved'}}
+        self.original = {'name':self.root+'source','updateTime':'2026-01-01T00:00:00Z','fields':self.fields}
+        self.http=unittest.mock.Mock()
+        self.http.get.return_value=Response(self.original)
+        self.http.post.return_value=Response({'writeResults':[{},{}]})
+        self.tags=[{'id':'a','name':'Food'}, {'id':'b','name':'Other: stuff'}]
+        self.patches=[patch('weekly_cli.firestore.refresh',return_value='token'),patch('weekly_cli.firestore.secret',return_value={'user_id':'u'}),patch('weekly_cli.firestore.requests.Session',return_value=self.http),patch('weekly_cli.spending.list_documents',return_value=self.tags)]
+        for p in self.patches: p.start(); self.addCleanup(p.stop)
+
+    def configure_reads(self):
+        count=[0]
+        def by_url(url,**kwargs):
+            count[0]+=1
+            if count[0]==1: return Response(self.original)
+            ident=url.rsplit('/',1)[-1]
+            writes=self.http.post.call_args.kwargs['json']['writes']
+            write=next(w for w in writes if w['update']['name'].endswith('/'+ident))
+            fields={**self.fields, **write['update']['fields']}
+            return Response({'name':self.root+ident,'updateTime':'2026-01-01T00:00:01Z','fields':fields})
+        self.http.get.side_effect=by_url
+
+    def test_atomic_split_preserves_fields_and_guards(self):
+        import copy
+        before=copy.deepcopy(self.original)
+        self.configure_reads()
+        result=self.spending.split(object(),'source',['0.10: FOOD ','0.20:Other: stuff'])
+        self.assertEqual(len(result),2)
+        self.assertEqual(self.original,before)
+        self.http.post.assert_called_once()
+        args,kw=self.http.post.call_args
+        self.assertEqual(args[0],'https://firestore.googleapis.com/v1/projects/weekly-6f36c/databases/(default)/documents:commit')
+        self.assertEqual(kw['timeout'],30); self.assertFalse(kw['allow_redirects'])
+        writes=kw['json']['writes']; self.assertEqual(len(writes),2)
+        self.assertEqual(writes[0]['currentDocument'],{'updateTime':self.original['updateTime']})
+        self.assertEqual(set(writes[0]['updateMask']['fieldPaths']),{'amount','tagId','isSplit'})
+        self.assertEqual(writes[1]['currentDocument'],{'exists':False})
+        self.assertEqual(writes[1]['update']['fields']['__plaidTx'],self.fields['__plaidTx'])
+        self.assertEqual(writes[1]['update']['fields']['unknown'],self.fields['unknown'])
+
+    def test_invalid_parts_and_sources_do_not_write(self):
+        for parts in ([],['0.3:Food'],['0.1:Food','0.19:Food'],['nan:Food','0.2:Food'],['0.001:Food','0.299:Food'],['0.1','0.2:Food'],['0.1:  ','0.2:Food'],['0.1:missing','0.2:Food']):
+            with self.subTest(parts=parts),self.assertRaises(ClientError): self.spending.split(object(),'source',parts)
+        self.assertEqual(self.http.post.call_count,0)
+        for mutate in ({'isSplit':{'booleanValue':True}}, {'target':{'stringValue':'FUND'}}, {'transferDirection':{'stringValue':'out'}}, {'__plaidTx':{'mapValue':{'fields':{}}}}, {'amount':{'doubleValue':-1}}):
+            fields=self.original['fields']; old=fields.copy(); fields.update(mutate)
+            with self.assertRaises(ClientError): self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+            fields.clear(); fields.update(old)
+        for ident in ('','..','a/b'):
+            with self.assertRaises(ClientError): self.spending.split(object(),ident,['0.10:Food','0.20:Food'])
+        self.http.post.assert_not_called()
+
+    def test_ambiguous_commit_is_not_retried_and_identifies_parts(self):
+        self.http.post.return_value=Response({'writeResults':[]})
+        with self.assertRaises(ClientError) as e: self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        names=[w['update']['name'].rsplit('/',1)[-1] for w in self.http.post.call_args.kwargs['json']['writes']]
+        self.assertTrue(all(name in str(e.exception) for name in names))
+        self.http.post.assert_called_once()
+
+    def test_three_parts_one_tag_fetch_and_decimal_original(self):
+        self.original['fields']['amount']={'integerValue':'1'}
+        self.http.post.return_value=Response({'writeResults':[{}, {}, {}]})
+        self.configure_reads()
+        with patch('weekly_cli.spending.list_documents',return_value=self.tags) as tags:
+            out=self.spending.split(object(),'source',['0.10:Food','0.20:Food','0.70:Other: stuff'])
+        tags.assert_called_once()
+        self.assertEqual(len(out),3)
+        writes=self.http.post.call_args.kwargs['json']['writes']
+        self.assertEqual([w['update']['fields']['amount']['doubleValue'] for w in writes],[0.1,0.2,0.7])
+        self.assertNotEqual(writes[1]['update']['name'],writes[2]['update']['name'])
+
+    def test_bad_source_identity_amount_and_categories_are_rejected(self):
+        for value in ({},{'stringValue':'0.30'},{'doubleValue':float('nan')},{'doubleValue':0.001}):
+            with self.subTest(value=value):
+                self.original['fields']['amount']=value
+                with self.assertRaises(ClientError): self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        self.original['fields']['amount']={'doubleValue':0.3}
+        self.original['name']=self.root.replace('/u/','/other/')+'source'
+        with self.assertRaises(ClientError): self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        self.original['name']=self.root+'source'
+        with patch('weekly_cli.spending.list_documents',return_value=[{'id':'a','name':'Food'},{'id':'b','name':'FOOD'}]):
+            with self.assertRaises(ClientError): self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        self.http.post.assert_not_called()
+
+    def test_failed_and_ambiguous_response_handling(self):
+        import requests
+        for body in ({},{'writeResults':None},{'writeResults':[{}]},{'writeResults':[{}, {}, {}]},{'writeResults':[{}, None]}):
+            self.http.post.return_value=Response(body)
+            with self.assertRaises(ClientError) as e: self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+            self.assertIn('source',str(e.exception))
+            self.http.post.reset_mock()
+        self.http.post.side_effect=requests.Timeout('secret')
+        with self.assertRaises(ClientError) as e: self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        self.assertNotIn('secret',str(e.exception)); self.http.post.assert_called_once()
+        self.http.post.side_effect=None; self.http.post.reset_mock()
+        self.http.post.return_value=Response({}); self.http.post.return_value.status_code=412
+        with self.assertRaises(ClientError) as e: self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        self.assertIn('412',str(e.exception)); self.http.post.assert_called_once()
+
+    def test_stale_or_incomplete_committed_fields_are_uncertain(self):
+        import copy
+        for changes in ({}, {'amount':{'doubleValue':9}}, {'tagId':{'stringValue':'wrong'}}, {'isSplit':{'booleanValue':False}}, {'__plaidTx':{'mapValue':{'fields':{}}}}):
+            fields=copy.deepcopy(self.fields)
+            fields.update({'amount':{'doubleValue':0.1},'tagId':{'stringValue':'a'},'isSplit':{'booleanValue':True}})
+            if changes: fields.update(changes)
+            else: fields={}
+            self.http.get.side_effect=[Response(self.original),Response({'name':self.root+'source','updateTime':'2026-01-01T00:00:01Z','fields':fields})]
+            with self.subTest(changes=changes),self.assertRaises(ClientError) as e:
+                self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+            self.assertIn('uncertain',str(e.exception))
+            self.http.post.reset_mock()
+
+    def test_invalid_version_and_http_timeout_are_uncertain(self):
+        self.http.post.return_value=Response({}); self.http.post.return_value.status_code=408
+        with self.assertRaises(ClientError) as e: self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        self.assertIn('uncertain',str(e.exception))
+        self.http.post.return_value=Response({'writeResults':[{},{}]})
+        self.http.get.side_effect=[Response(self.original),Response({'name':self.root+'source','updateTime':'t','fields':self.fields})]
+        with self.assertRaises(ClientError) as e: self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        self.assertIn('uncertain',str(e.exception))
+
+    def test_bad_post_commit_readback_is_uncertain(self):
+        self.http.get.side_effect=[Response(self.original),Response({'name':self.root+'wrong','fields':{},'updateTime':'t'})]
+        with self.assertRaises(ClientError) as e: self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        ids=[w['update']['name'].rsplit('/',1)[-1] for w in self.http.post.call_args.kwargs['json']['writes']]
+        self.assertTrue(all(ident in str(e.exception) for ident in ids)); self.http.post.assert_called_once()
+
+    def test_cli_invokes_real_split_and_renders(self):
+        from typer.testing import CliRunner
+        from weekly_cli.main import app
+        self.configure_reads()
+        with patch('weekly_cli.main.get_config',return_value=object()):
+            result=CliRunner().invoke(app,['transactions','split','source','--part','0.10:Food','--part','0.20:Food','--profile','sample'])
+        self.assertEqual(result.exit_code,0,result.output)
+        self.assertEqual(len(json.loads(result.stdout)),2)
+        self.http.post.assert_called_once()
+
+    def test_cli_table_and_rejected_single_part(self):
+        from typer.testing import CliRunner
+        from weekly_cli.main import app
+        self.configure_reads()
+        with patch('weekly_cli.main.get_config',return_value=object()) as config:
+            result=CliRunner().invoke(app,['transactions','split','source','--part','0.10:Food','--part','0.20:Food','--table','--profile','sample'])
+        self.assertEqual(result.exit_code,0,result.output)
+        config.assert_called_once_with('sample')
+        self.assertIn('Synthetic',result.stdout)
+        self.http.post.reset_mock()
+        with patch('weekly_cli.main.get_config',return_value=object()):
+            result=CliRunner().invoke(app,['transactions','split','source','--part','0.30:Food'])
+        self.assertNotEqual(result.exit_code,0)
+        self.assertNotIn('Synthetic',result.stdout)
+        self.http.post.assert_not_called()
+
+    def test_bad_part_values_and_readback_version_fail_closed(self):
+        for first in ('0:Food','-0.10:Food','Infinity:Food','0.10:',':Food','0.10:Food'):
+            second='0.21:Food' if first == '0.10:Food' else '0.20:Food'
+            with self.subTest(first=first), self.assertRaises(ClientError):
+                self.spending.split(object(),'source',[first,second])
+        self.http.post.assert_not_called()
+        self.http.get.side_effect=[Response(self.original),Response({'name':self.root+'source','fields':{}})]
+        with self.assertRaises(ClientError) as e:
+            self.spending.split(object(),'source',['0.10:Food','0.20:Food'])
+        self.assertIn('uncertain',str(e.exception))
+
+    def test_split_cli_missing_parts_rejected(self):
+        from typer.testing import CliRunner
+        from weekly_cli.main import app
+        r=CliRunner().invoke(app,['transactions','split','source'])
+        self.assertNotEqual(r.exit_code,0)
+
+
 
 if __name__ == '__main__':
     unittest.main()

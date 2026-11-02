@@ -18,7 +18,7 @@ from .config import get_config
 from .session import import_capture, import_export, refresh, delete_profile_secret
 from .transactions import list_transactions
 from .firestore import list_documents, user_preferences
-from .spending import create, update
+from .spending import create, update, split
 
 
 def login_handler(config, force):
@@ -73,7 +73,7 @@ def auth_refresh(profile: Optional[str] = typer.Option(None, '--profile')):
     print_success('Weekly session refreshed')
 
 
-transactions = typer.Typer(help='Read transactions from the app export', no_args_is_help=True)
+transactions = typer.Typer(help='Read transactions and manage spending', no_args_is_help=True)
 
 
 
@@ -151,6 +151,18 @@ def spending_update(
 ):
     """Update a safe-to-spend category, or manual entry amount and title."""
     print_output(update(get_config(profile), transaction_id, amount, title, category), table=table)
+
+
+@transactions.command('split')
+@command
+def spending_split(
+    transaction_id: str = typer.Argument(...),
+    parts: List[str] = typer.Option(..., '--part', help='Split part as AMOUNT:CATEGORY; repeat for each part'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile name'),
+):
+    """Split a bank-linked expense into safe-to-spend categories."""
+    print_output(split(get_config(profile), transaction_id, parts), table=table)
 
 
 balances = typer.Typer(help='Read linked account balances', no_args_is_help=True)
