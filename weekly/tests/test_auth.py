@@ -245,5 +245,56 @@ class ConsolidationTests(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs['timeout'],60)
 
 
+class CategoryUpdateTests(unittest.TestCase):
+    def setUp(self):
+        from weekly_cli import spending
+        self.spending=spending
+        self.original={'name':'projects/weekly-6f36c/databases/(default)/documents/users/u/transactions/t','updateTime':'2026-01-01T00:00:00Z','fields':{'target':{'stringValue':'SAFE_TO_SPEND'},'__plaidTx':{'mapValue':{}},'amount':{'doubleValue':5},'title':{'stringValue':'synthetic'},'color':{'stringValue':'warning'},'tagId':{'stringValue':'old'}}}
+        self.http=unittest.mock.Mock()
+        self.context=patch('weekly_cli.spending.client_context',return_value=(self.http,'https://example.invalid',{}, {'user_id':'u'}))
+        self.get=patch('weekly_cli.spending.get_document',return_value=self.original)
+        self.tags=patch('weekly_cli.spending.list_documents',return_value=[{'id':'new','name':'Other'}])
+        self.context.start();self.get.start();self.tags_mock=self.tags.start()
+        self.addCleanup(self.context.stop);self.addCleanup(self.get.stop);self.addCleanup(self.tags.stop)
+        self.http.patch.return_value=Response({'name':self.original['name'],'fields':{**self.original['fields'],'tagId':{'stringValue':'new'}}})
+
+    def test_bank_category_only_patches_tag_and_precondition(self):
+        out=self.spending.update(object(),'t',category='other')
+        self.assertEqual(out['tagId'],'new')
+        kw=self.http.patch.call_args.kwargs
+        self.assertEqual(kw['json'],{'fields':{'tagId':{'stringValue':'new'}}})
+        self.assertEqual(kw['params'],[('currentDocument.updateTime',self.original['updateTime']),('updateMask.fieldPaths','tagId')])
+        self.assertEqual(out['amount'],5)
+        self.assertEqual(out['color'],'warning')
+
+    def test_manual_category_only_succeeds(self):
+        del self.original['fields']['__plaidTx']
+        self.original['fields']['isCash']={'booleanValue':True}
+        self.spending.update(object(),'t',category='Other')
+        self.http.patch.assert_called_once()
+
+    def test_bank_combined_amount_or_title_rejected_before_patch(self):
+        for kwargs in ({'amount':'0.01','category':'Other'}, {'title':'changed','category':'Other'}):
+            with self.assertRaises(ClientError): self.spending.update(object(),'t',**kwargs)
+        self.http.patch.assert_not_called()
+        self.tags_mock.assert_not_called()
+
+    def test_unknown_ambiguous_wrong_target_and_transfer_never_patch(self):
+        for tags in ([],[{'id':'a','name':'Other'},{'id':'b','name':'OTHER'}]):
+            self.tags_mock.return_value=tags
+            with self.assertRaises(ClientError): self.spending.update(object(),'t',category='Other')
+        self.original['fields']['target']={'stringValue':'FUND'}
+        with self.assertRaises(ClientError): self.spending.update(object(),'t',category='Other')
+        self.original['fields']['target']={'stringValue':'SAFE_TO_SPEND'}
+        self.original['fields']['transferDirection']={'stringValue':'out'}
+        with self.assertRaises(ClientError): self.spending.update(object(),'t',category='Other')
+        self.http.patch.assert_not_called()
+
+    def test_stale_precondition_failure_is_surfaced(self):
+        self.http.patch.return_value.status_code=412
+        with self.assertRaises(ClientError): self.spending.update(object(),'t',category='Other')
+        self.http.patch.assert_called_once()
+
+
 if __name__ == '__main__':
     unittest.main()

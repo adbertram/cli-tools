@@ -1,7 +1,7 @@
 {
   "tool": "weekly",
   "description": "CLI interface for weekly",
-  "discovered_at": "2026-11-02T20:27:36Z",
+  "discovered_at": "2026-11-02T21:14:24Z",
   "total_commands": 24,
   "global_options": [],
   "commands": {
@@ -692,7 +692,7 @@
           ]
         },
         "update": {
-          "help": "Update the amount or title of a manual safe-to-spend entry.",
+          "help": "Update a safe-to-spend category, or manual entry amount and title.",
           "arguments": [
             {
               "name": "transaction_id",
@@ -704,17 +704,21 @@
           "options": [
             {
               "name": "--amount",
-              "type": "bool",
+              "type": "TEXT",
               "required": false,
-              "help": "<str>",
-              "takes_value": false
+              "help": "Positive spending amount"
             },
             {
               "name": "--title",
-              "type": "bool",
+              "type": "TEXT",
               "required": false,
-              "help": "<str>",
-              "takes_value": false
+              "help": "Spending description"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved category name"
             },
             {
               "name": "--table",

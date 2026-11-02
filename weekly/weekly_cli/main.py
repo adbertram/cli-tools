@@ -143,13 +143,14 @@ def spending_create(
 @command
 def spending_update(
     transaction_id: str = typer.Argument(...),
-    amount: Optional[str] = typer.Option(None, '--amount'),
-    title: Optional[str] = typer.Option(None, '--title'),
+    amount: Optional[str] = typer.Option(None, '--amount', help='Positive spending amount'),
+    title: Optional[str] = typer.Option(None, '--title', help='Spending description'),
+    category: Optional[str] = typer.Option(None, '--category', help='Saved category name'),
     table: bool = typer.Option(False, '--table', '-t'),
     profile: Optional[str] = typer.Option(None, '--profile'),
 ):
-    """Update the amount or title of a manual safe-to-spend entry."""
-    print_output(update(get_config(profile), transaction_id, amount, title), table=table)
+    """Update a safe-to-spend category, or manual entry amount and title."""
+    print_output(update(get_config(profile), transaction_id, amount, title, category), table=table)
 
 
 balances = typer.Typer(help='Read linked account balances', no_args_is_help=True)

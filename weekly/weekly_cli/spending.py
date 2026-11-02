@@ -49,9 +49,16 @@ def export_doc(doc):
     return {'id':doc['name'].rsplit('/',1)[-1], **{k:decode_value(v) for k,v in doc['fields'].items()}}
 
 
-def update(config, transaction_id, amount=None, title=None):
-    if amount is None and title is None:
-        raise ClientError('Provide --amount or --title')
+def category_id(config, category):
+    matches = [tag for tag in list_documents(config, 'tags') if isinstance(tag.get('name'), str) and tag['name'].casefold() == category.casefold()]
+    if len(matches) != 1:
+        raise ClientError('Category must match exactly one saved category')
+    return matches[0]['id']
+
+
+def update(config, transaction_id, amount=None, title=None, category=None):
+    if amount is None and title is None and category is None:
+        raise ClientError('Provide --amount, --title or --category')
     fields = {}
     if amount is not None: fields['amount'] = {'doubleValue': amount_value(amount)}
     if title is not None:
@@ -60,8 +67,13 @@ def update(config, transaction_id, amount=None, title=None):
     try:
         http, url, headers, data = client_context(config)
         original = get_document(http, url, headers, data['user_id'], transaction_id)
-        if original['fields'].get('target', {}).get('stringValue') != 'SAFE_TO_SPEND' or original['fields'].get('isCash', {}).get('booleanValue') is not True or '__plaidTx' in original['fields'] or 'transferDirection' in original['fields']:
-            raise ClientError('Only manual safe-to-spend entries can be edited')
+        existing = original['fields']
+        if existing.get('target', {}).get('stringValue') != 'SAFE_TO_SPEND' or 'transferDirection' in existing:
+            raise ClientError('Only non-transfer safe-to-spend entries can be edited')
+        if (amount is not None or title is not None) and (existing.get('isCash', {}).get('booleanValue') is not True or '__plaidTx' in existing):
+            raise ClientError('Amount and title can only be edited on manual entries')
+        if category is not None:
+            fields['tagId'] = {'stringValue': category_id(config, category)}
         params = [('currentDocument.updateTime', original['updateTime'])] + [('updateMask.fieldPaths', key) for key in fields]
         result = check_response(http.patch(url + '/' + quote(transaction_id, safe=''), headers=headers, params=params, json={'fields': fields}, timeout=30, allow_redirects=False))
         if result.get('name') != original['name'] or not isinstance(result.get('fields'),dict):
@@ -81,10 +93,7 @@ def create(config, title, amount, spending_date=None, category=None):
         raise ClientError('Provide a valid YYYY-MM-DD date and account timezone') from None
     try:
         http, url, headers, data = client_context(config)
-        matches = [tag for tag in list_documents(config, 'tags') if isinstance(tag.get('name'), str) and tag['name'].casefold() == category.casefold()]
-        if len(matches) != 1:
-            raise ClientError('Category must match exactly one saved category')
-        defaults = {'tagId': matches[0]['id'], 'color': 'warning'}
+        defaults = {'tagId': category_id(config, category), 'color': 'warning'}
         now = datetime.now(timezone.utc)
         fields = {'isCash':{'booleanValue':True}, 'amount':{'doubleValue':numeric}, 'title':{'stringValue':title}, 'target':{'stringValue':'SAFE_TO_SPEND'}, 'date':{'stringValue':day.isoformat()}, 'tagId':{'stringValue':defaults['tagId']}, 'color':{'stringValue':defaults['color']}, 'created':{'integerValue':str(int(now.timestamp()))}, 'createdTime':{'stringValue':now.strftime('%Y-%m-%dT%H:%M:%SZ')}}
         result = check_response(http.post(url, headers=headers, json={'fields':fields}, timeout=30, allow_redirects=False))

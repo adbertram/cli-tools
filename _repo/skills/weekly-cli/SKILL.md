@@ -3,7 +3,7 @@ name: weekly-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   MANDATORY: Execute Weekly operations using the `weekly` CLI tool.
-  Read Weekly budgets, account balances and transaction exports; create or update manual safe-to-spend entries.
+  Read Weekly budgets, account balances and transaction exports; create manual entries and update safe-to-spend categories.
   Triggers: weekly budgeting app, weekly budget cli, weekly transactions cli
 ---
 
@@ -55,7 +55,7 @@ weekly <command-group> <action> [arguments] [options]
 | Create a manual safe-to-spend entry | `weekly transactions create` |
 | Find one transaction in the selected export range | `weekly transactions get <TRANSACTION_ID>` |
 | List transactions in the selected export range | `weekly transactions list` |
-| Update the amount or title of a manual safe-to-spend entry | `weekly transactions update <TRANSACTION_ID>` |
+| Update a safe-to-spend category, or a manual entry amount and title | `weekly transactions update <TRANSACTION_ID>` |
 </quick_start>
 
 <service_boundaries>
@@ -63,7 +63,7 @@ weekly <command-group> <action> [arguments] [options]
 - Balance records are saved Weekly snapshots; reading them does not refresh bank connections.
 - Transaction list/get use the app's captured CSV export range and captured exclusion settings. The full CSV is downloaded before local filters and limits; there is no default limit. `get` searches within the selected range, not every historical record.
 - Create requires an existing unique category name (`weekly categories list`). Positive amounts represent spending; date defaults to the user's account timezone and can be specified with `--date YYYY-MM-DD`. New entries use the observed native color `warning`.
-- Update supports title and amount on manual safe-to-spend entries only. It checks the server update-time precondition; linked-bank transactions and transfers are not updated.
+- Update supports category changes on manual and bank-linked non-transfer safe-to-spend entries. Title and amount changes remain limited to manual entries. It checks the server update-time precondition; transfers are not updated.
 - Capture import uses the capture's temporary decoder; choose a segment with `--flow-file` (for example, `wireguard-1.flows`). Live operations do not depend on the proxy. Reusable session credentials are stored through the CLI-tools secret manager. Never print captures or secrets.
 </service_boundaries>
 
