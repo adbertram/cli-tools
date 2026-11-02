@@ -52,6 +52,7 @@ weekly <command-group> <action> [arguments] [options]
 | Remove all cached responses | `weekly cache clear` |
 | Get a saved spending category by ID | `weekly categories get <ITEM_ID>` |
 | List saved categories available for manual spending | `weekly categories list` |
+| Create a Safe-to-Spend category | `weekly categories create --name Christmas --color red --emoji '🎄'` |
 | Create a manual safe-to-spend entry | `weekly transactions create` |
 | Find one transaction in the selected export range | `weekly transactions get <TRANSACTION_ID>` |
 | List transactions in the selected export range | `weekly transactions list` |
@@ -61,6 +62,7 @@ weekly <command-group> <action> [arguments] [options]
 </quick_start>
 
 <service_boundaries>
+- `categories create` requires explicit name, color and emoji; it refuses duplicate names ignoring case and creates a spending category, not a savings fund. Check a fresh categories list before retrying an uncertain creation.
 - `budget current` returns raw current-week, recurring-item, fund, and preference records. It does not calculate the dashboard's safe-to-spend total; initialWeeklySpendingLimit is an initial preference.
 - Balance records are saved Weekly snapshots; reading them does not refresh bank connections.
 - Transaction list/get use the app's captured CSV export range and captured exclusion settings. The full CSV is downloaded before local filters and limits; there is no default limit. `get` searches within the selected range, not every historical record.
@@ -83,7 +85,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **balances** -- Read linked account balances (subcommands: get, list)
 - **budget** -- Read Weekly budget records (subcommands: current)
 - **cache** -- Manage response cache (subcommands: clear)
-- **categories** -- Read spending categories (subcommands: get, list)
+- **categories** -- Manage spending categories (subcommands: create, get, list)
 - **transactions** -- Read transactions and manage spending (subcommands: create, get, list, split, update)
 </principle>
 </essential_principles>

@@ -15,7 +15,7 @@ from . import __version__
 from .config import get_config
 from .session import import_capture, import_export, refresh, delete_profile_secret
 from .transactions import list_transactions
-from .firestore import list_documents, user_preferences, current_week
+from .firestore import list_documents, user_preferences, current_week, create_category
 from .spending import create, update, split
 
 
@@ -195,7 +195,20 @@ def budget_current(table: bool = typer.Option(False, '--table', '-t'), profile: 
 
 
 app.add_typer(budget, name='budget')
-categories = typer.Typer(help='Read spending categories', no_args_is_help=True)
+categories = typer.Typer(help='Manage spending categories', no_args_is_help=True)
+
+
+@categories.command('create')
+@command
+def categories_create(
+    name: str = typer.Option(..., '--name', help='Unique spending category name'),
+    color: str = typer.Option(..., '--color', help='Category color, for example red'),
+    emoji: str = typer.Option(..., '--emoji', help='Category emoji'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile'),
+):
+    """Create a Safe-to-Spend category, not a savings fund."""
+    print_output(create_category(get_config(profile), name, color, emoji), table=table)
 
 
 @categories.command('list')

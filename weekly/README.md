@@ -6,6 +6,8 @@ Read Weekly budgets, saved balances, and transaction exports, manage manual spen
 
 ## Usage
 
+`categories create` creates a Safe-to-Spend category (not a savings fund). It requires explicit `--name`, `--color` and `--emoji` values and refuses an existing name, ignoring case. It leaves all existing categories unchanged. If creation reports an uncertain outcome, check `weekly --no-cache categories list` before retrying.
+
 Weekly's native Firebase session and transaction export settings can be imported from authorized iOS captures. Keep the capture directories private and remove them after import. Select the captured segment with `--flow-file`; the default is `wg-export.flows`. The renewable session and observed export settings are stored in the CLI-tools secret manager. The proxy is not needed after import.
 
 ```bash
@@ -17,6 +19,7 @@ weekly cache --help
 weekly budget current
 weekly balances list
 weekly categories list
+weekly categories create --name Christmas --color red --emoji '🎄'
 weekly transactions list --range all
 weekly transactions list --unreviewed
 weekly transactions list --range month_to_date --table

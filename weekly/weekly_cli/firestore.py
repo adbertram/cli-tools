@@ -74,6 +74,30 @@ def list_documents(config, collection, limit=None, filters=None):
         raise ClientError('Weekly data request failed') from None
 
 
+def create_category(config, name, color, emoji):
+    values = {'name': name.strip(), 'color': color.strip(), 'emoji': emoji.strip()}
+    if not all(values.values()):
+        raise ClientError('Category name, color and emoji must not be empty')
+    if any(tag.get('name', '').casefold() == values['name'].casefold() for tag in list_documents(config, 'tags')):
+        raise ClientError('A category with this name already exists')
+    client, user_url, headers, data = firestore_context(config)
+    fields = {key: {'stringValue': value} for key, value in values.items()}
+    try:
+        response = client.post(user_url + '/tags', headers=headers, json={'fields': fields}, timeout=30, allow_redirects=False)
+        if not 200 <= response.status_code < 300:
+            raise ClientError(f'Weekly category creation failed (HTTP {response.status_code})')
+        doc = response.json()
+        prefix = USER_DOCUMENT_ROOT + data['user_id'] + '/tags/'
+        if not isinstance(doc, dict):
+            raise ClientError('Weekly category creation returned an unexpected response; check categories before retrying')
+        path = doc.get('name', '')
+        if not path.startswith(prefix) or not path[len(prefix):] or '/' in path[len(prefix):] or doc.get('fields') != fields:
+            raise ClientError('Weekly category creation returned an unexpected identity or fields; check categories before retrying')
+        return {'id': path[len(prefix):], **{key: decode_value(value) for key, value in doc['fields'].items()}}
+    except (requests.RequestException, ValueError):
+        raise ClientError('Weekly category creation outcome uncertain; check categories before retrying') from None
+
+
 def user_preferences(config):
     client, user_url, headers, data = firestore_context(config)
     uid = data['user_id']

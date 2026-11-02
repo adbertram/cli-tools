@@ -1,8 +1,8 @@
 {
   "tool": "weekly",
   "description": "CLI interface for weekly",
-  "discovered_at": "2026-11-02T21:49:03Z",
-  "total_commands": 25,
+  "discovered_at": "2026-11-02T22:13:08Z",
+  "total_commands": 26,
   "global_options": [],
   "commands": {
     "auth": {
@@ -452,10 +452,49 @@
       }
     },
     "categories": {
-      "help": "Read spending categories",
+      "help": "Manage spending categories",
       "arguments": [],
       "options": [],
       "commands": {
+        "create": {
+          "help": "Create a Safe-to-Spend category, not a savings fund.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Unique spending category name"
+            },
+            {
+              "name": "--color",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category color, for example red"
+            },
+            {
+              "name": "--emoji",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category emoji"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
         "get": {
           "help": "Get a saved spending category by ID.",
           "arguments": [
