@@ -1,7 +1,7 @@
 {
   "tool": "weekly",
   "description": "CLI interface for weekly",
-  "discovered_at": "2026-11-02T21:38:56Z",
+  "discovered_at": "2026-11-02T21:49:03Z",
   "total_commands": 25,
   "global_options": [],
   "commands": {
@@ -646,6 +646,13 @@
               "required": false,
               "help": "Export range: all or month_to_date",
               "default": "all"
+            },
+            {
+              "name": "--unreviewed",
+              "type": "bool",
+              "required": false,
+              "help": "List the current-week review queue (requires all range)",
+              "takes_value": false
             },
             {
               "name": "--timezone-offset",

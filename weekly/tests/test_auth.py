@@ -471,5 +471,84 @@ class SplitTests(unittest.TestCase):
 
 
 
+class UnreviewedTests(unittest.TestCase):
+    def setUp(self):
+        self.settings = {'rangekey':'all','timezoneoffset':'0','summaryonly':'false','excludefundcontributions':'true','excludeignoredtransactions':'true','excludereportexcludeditems':'true'}
+        self.week={'startDate':'2000-01-02T00:00:00Z','endDate':'2000-01-08T00:00:00Z'}
+        self.rows=['Id,Title,Date,Target,Amount,Extra']
+        self.rows += [f'{i},Match,2000-01-0{2+i%7},INITIAL,-1.00,keep' for i in range(12)]
+        self.rows += ['other,Match,2000-01-09,INITIAL,-1.00,keep','reviewed,Match,2000-01-04,SAFE_TO_SPEND,-1.00,keep','different,Other,2000-01-04,INITIAL,-1.00,keep']
+        self.response=types.SimpleNamespace(status_code=200,headers={'content-type':'text/csv'},content=('\n'.join(self.rows)+'\n').encode())
+        self.patches=[patch('weekly_cli.transactions.refresh',return_value='token'),patch('weekly_cli.transactions.secret',return_value={'user_id':'synthetic','export_settings':self.settings}),patch('weekly_cli.transactions.requests.Session'),patch('weekly_cli.transactions.current_week',return_value=self.week)]
+        for p in self.patches: p.start(); self.addCleanup(p.stop)
+        self.client=self.patches[2].target.Session.return_value
+        self.client.get.return_value=self.response
+
+    def test_all_matches_boundaries_and_local_filter_before_limit(self):
+        from weekly_cli.transactions import list_transactions
+        all_rows=list_transactions(object(),'all',unreviewed=True)
+        self.assertEqual(len(all_rows),13)
+        self.assertIn('keep',[r['Extra'] for r in all_rows])
+        filtered=list_transactions(object(),'all',limit=1,filters=['Title:eq:Other'],unreviewed=True)
+        self.assertEqual([r['Id'] for r in filtered],['different'])
+        self.assertEqual(len(list_transactions(object(),'all')),15)
+
+    def test_unreviewed_overrides_saved_range_and_keeps_cross_month_week(self):
+        from weekly_cli.transactions import list_transactions
+        self.settings['rangekey']='month_to_date'
+        self.response.content=(b'Id,Title,Date,Target\n'
+            b'a,Before month,1999-12-31,INITIAL\n'
+            b'b,This month,2000-01-01,INITIAL\n'
+            b'c,Reviewed,not-a-date,SAFE_TO_SPEND\n')
+        self.patches[3].target.current_week.return_value={'startDate':'1999-12-29T00:00:00Z','endDate':'2000-01-04T00:00:00Z'}
+        result=list_transactions(object(),unreviewed=True)
+        self.assertEqual([r['Id'] for r in result],['a','b'])
+        self.assertEqual(self.client.get.call_args.kwargs['headers']['rangekey'],'all')
+
+    def test_malformed_dates_missing_columns_and_conflicts_fail(self):
+        from weekly_cli.transactions import list_transactions
+        for bad in (b'Id,Title,Target,Date\na,Example,INITIAL,not-a-date\n',b'Id,Title\na,Example\n',b'Id,Title\n'):
+            self.response.content=bad
+            with self.assertRaises(ClientError): list_transactions(object(),'all',unreviewed=True)
+        for range_key,offset in [('month_to_date',None),('all',0)]:
+            with self.assertRaises(ClientError): list_transactions(object(),range_key,offset,unreviewed=True)
+
+    def test_current_week_timezone_unique_and_invalid(self):
+        from weekly_cli.firestore import current_week
+        from datetime import datetime, timezone
+        fixed=unittest.mock.Mock();fixed.now.return_value=datetime(2000,1,2,1,tzinfo=timezone.utc)
+        weeks=[{'startDate':'1999-12-26T00:00:00Z','endDate':'2000-01-01T00:00:00Z'},self.week]
+        with patch('weekly_cli.firestore.list_documents',return_value=weeks),patch('weekly_cli.firestore.datetime',wraps=datetime) as dt:
+            dt.now.return_value=fixed.now.return_value.astimezone(__import__('zoneinfo').ZoneInfo('America/Chicago'))
+            self.assertEqual(current_week(object(),{'timezone':'America/Chicago'}),weeks[0])
+        with patch('weekly_cli.firestore.list_documents',return_value=[self.week,self.week]),patch('weekly_cli.firestore.datetime',wraps=datetime) as dt:
+            dt.now.return_value=datetime(2000,1,3,tzinfo=timezone.utc)
+            with self.assertRaises(ClientError): current_week(object(),{'timezone':'UTC'})
+        with patch('weekly_cli.firestore.list_documents',return_value=[{'startDate':'bad','endDate':'bad'}]):
+            with self.assertRaises(ClientError): current_week(object(),{'timezone':'UTC'})
+            with self.assertRaises(ClientError): current_week(object(),{'timezone':'not/a-zone'})
+
+    def test_budget_current_retains_original_output(self):
+        from typer.testing import CliRunner
+        from weekly_cli.main import app
+        preferences={'timezone':'UTC','savingsAmount':1}
+        with patch('weekly_cli.main.get_config',return_value=object()), patch('weekly_cli.main.user_preferences',return_value=preferences), patch('weekly_cli.main.current_week',return_value=self.week) as current, patch('weekly_cli.main.list_documents',side_effect=[[], []]):
+            result=CliRunner().invoke(app,['budget','current'])
+        self.assertEqual(result.exit_code,0,result.output)
+        self.assertEqual(json.loads(result.stdout),{'week':self.week,'recurring_items':[],'funds':[],'preferences':preferences})
+        self.assertEqual(current.call_args.args[1],preferences)
+
+    def test_cli_conflicts_and_unreviewed_projection(self):
+        from typer.testing import CliRunner
+        from weekly_cli.main import app
+        with patch('weekly_cli.main.get_config',return_value=object()):
+            for opts in (['--range','month_to_date'],['--timezone-offset','0']):
+                result=CliRunner().invoke(app,['transactions','list','--unreviewed',*opts])
+                self.assertNotEqual(result.exit_code,0)
+            result=CliRunner().invoke(app,['transactions','list','--unreviewed','--filter','Title:eq:Other','--limit','1','--properties','Id,Extra'])
+        self.assertEqual(result.exit_code,0,result.output)
+        self.assertEqual(json.loads(result.stdout),[{'Id':'different','Extra':'keep'}])
+
+
 if __name__ == '__main__':
     unittest.main()

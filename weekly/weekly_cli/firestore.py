@@ -1,5 +1,7 @@
 """Read confirmed Weekly-owned Firestore documents via the user-token API."""
+from datetime import datetime
 from urllib.parse import quote
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 from cli_tools_shared.exceptions import ClientError
 from cli_tools_shared.filters import apply_filters, apply_limit, validate_filters
@@ -86,3 +88,16 @@ def user_preferences(config):
         return {key: decode_value(doc['fields'][key]) for key in names if key in doc['fields']}
     except (requests.RequestException, ValueError, TypeError, AttributeError):
         raise ClientError('Weekly user settings request failed') from None
+
+
+def current_week(config, preferences=None):
+    preferences = user_preferences(config) if preferences is None else preferences
+    weeks = list_documents(config, 'weekInstances')
+    try:
+        today = datetime.now(ZoneInfo(preferences['timezone'])).date()
+        current = [week for week in weeks if datetime.fromisoformat(week['startDate'].replace('Z', '+00:00')).date() <= today <= datetime.fromisoformat(week['endDate'].replace('Z', '+00:00')).date()]
+    except (ValueError, KeyError, AttributeError, TypeError, ZoneInfoNotFoundError):
+        raise ClientError('Weekly week dates or timezone are missing or invalid') from None
+    if len(current) != 1:
+        raise ClientError('No unique current week found')
+    return current[0]

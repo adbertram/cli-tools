@@ -1,8 +1,6 @@
 """Weekly CLI entry point."""
 from pathlib import Path
 from functools import wraps
-from datetime import datetime
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Optional, List
 import typer
 from cli_tools_shared import create_app, run_app
@@ -17,7 +15,7 @@ from . import __version__
 from .config import get_config
 from .session import import_capture, import_export, refresh, delete_profile_secret
 from .transactions import list_transactions
-from .firestore import list_documents, user_preferences
+from .firestore import list_documents, user_preferences, current_week
 from .spending import create, update, split
 
 
@@ -92,6 +90,7 @@ def render_rows(rows, properties, table, default_columns=None, single=False):
 @command
 def transactions_list(
     range_key: str = typer.Option('all', '--range', help='Export range: all or month_to_date'),
+    unreviewed: bool = typer.Option(False, '--unreviewed', help='List the current-week review queue (requires all range)'),
     timezone_offset: Optional[int] = typer.Option(None, '--timezone-offset', help='Override the captured timezone offset'),
     limit: Optional[int] = typer.Option(None, '--limit', '-l', min=1, help='Maximum results (no limit by default)'),
     filter: Optional[List[str]] = typer.Option(None, '--filter', '-f', help='Filter: field:op:value (e.g., name:eq:value)'),
@@ -102,7 +101,7 @@ def transactions_list(
     """List transactions in the selected export range."""
     if range_key not in ('all', 'month_to_date'):
         raise ClientError('Range must be all or month_to_date')
-    rows = list_transactions(get_config(profile), range_key, timezone_offset, limit, filter)
+    rows = list_transactions(get_config(profile), range_key, timezone_offset, limit, filter, unreviewed=unreviewed)
     render_rows(rows, properties, table, ['Id', 'Title', 'Date', 'Amount'])
 
 
@@ -191,15 +190,8 @@ def budget_current(table: bool = typer.Option(False, '--table', '-t'), profile: 
     """Read current week, recurring items, funds and budget preferences."""
     config = get_config(profile)
     preferences = user_preferences(config)
-    weeks = list_documents(config, 'weekInstances')
-    try:
-        today = datetime.now(ZoneInfo(preferences['timezone'])).date()
-        current = [week for week in weeks if datetime.fromisoformat(week['startDate'].replace('Z', '+00:00')).date() <= today <= datetime.fromisoformat(week['endDate'].replace('Z', '+00:00')).date()]
-    except (ValueError, KeyError, AttributeError, ZoneInfoNotFoundError):
-        raise ClientError('Weekly week dates are missing or invalid') from None
-    if len(current) != 1:
-        raise ClientError('No unique current week found')
-    print_output({'week': current[0], 'recurring_items': list_documents(config, 'items'), 'funds': list_documents(config, 'funds'), 'preferences': preferences}, table=table)
+    week = current_week(config, preferences)
+    print_output({'week': week, 'recurring_items': list_documents(config, 'items'), 'funds': list_documents(config, 'funds'), 'preferences': preferences}, table=table)
 
 
 app.add_typer(budget, name='budget')

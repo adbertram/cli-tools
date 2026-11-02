@@ -18,6 +18,7 @@ weekly budget current
 weekly balances list
 weekly categories list
 weekly transactions list --range all
+weekly transactions list --unreviewed
 weekly transactions list --range month_to_date --table
 weekly transactions get TRANSACTION_ID --range all
 weekly transactions create --title "Coffee" --amount 4.50 --category Other
@@ -27,6 +28,8 @@ weekly transactions split TRANSACTION_ID --part '6.00:Groceries' --part '4.00:Ot
 ```
 
 Transaction list/get output preserves the CSV export's columns. Supported range values are `all` and `month_to_date`; `all` is the default. The captured export's exclusion flags and timezone offset remain in effect. `--timezone-offset` overrides the captured offset. The full CSV is fetched before local filtering and limits; there is no default row limit. `--properties` selects output fields; `get` searches only that selected export range.
+
+`transactions list --unreviewed` lists the current-week review queue (CSV `Target=INITIAL`) using the saved account timezone and current week. The full all-range export is fetched, then the queue filter is applied before any requested filter and limit. It requires `--range all` and cannot be combined with `--timezone-offset`.
 
 `budget current` returns the current week, recurring items, funds, and named budget preferences. It does not calculate the app’s safe-to-spend total; `initialWeeklySpendingLimit` is an initial preference. `balances list` returns saved linked-account records, not a bank refresh. Without a filter, an explicit balance limit is applied using Firestore pagination; filtered balance limits apply after local filtering.
 

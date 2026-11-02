@@ -55,6 +55,7 @@ weekly <command-group> <action> [arguments] [options]
 | Create a manual safe-to-spend entry | `weekly transactions create` |
 | Find one transaction in the selected export range | `weekly transactions get <TRANSACTION_ID>` |
 | List transactions in the selected export range | `weekly transactions list` |
+| List the current-week review queue | `weekly transactions list --unreviewed` |
 | Split an eligible 10.00 bank-linked expense | `weekly transactions split <TRANSACTION_ID> --part '6.00:Groceries' --part '4.00:Other'` |
 | Update a safe-to-spend category, or a manual entry amount and title | `weekly transactions update <TRANSACTION_ID>` |
 </quick_start>
@@ -63,6 +64,7 @@ weekly <command-group> <action> [arguments] [options]
 - `budget current` returns raw current-week, recurring-item, fund, and preference records. It does not calculate the dashboard's safe-to-spend total; initialWeeklySpendingLimit is an initial preference.
 - Balance records are saved Weekly snapshots; reading them does not refresh bank connections.
 - Transaction list/get use the app's captured CSV export range and captured exclusion settings. The full CSV is downloaded before local filters and limits; there is no default limit. `get` searches within the selected range, not every historical record.
+- `transactions list --unreviewed` filters the all-range CSV export to `Target=INITIAL` in the current saved week using the account timezone, before user filters and limits. It requires `--range all` and cannot be combined with `--timezone-offset`.
 - Create requires an existing unique category name (`weekly categories list`). Positive amounts represent spending; date defaults to the user's account timezone and can be specified with `--date YYYY-MM-DD`. New entries use the observed native color `warning`.
 - Update supports category changes on manual and bank-linked non-transfer safe-to-spend entries. Title and amount changes remain limited to manual entries. It checks the server update-time precondition; transfers are not updated.
 - Split accepts only positive, unsplit, bank-linked, non-transfer Safe-to-Spend expenses; manual entries, refunds, transfers and already-split entries are rejected. Supply at least two positive exact-cent `--part AMOUNT:CATEGORY` values totaling the original amount exactly. Each category must uniquely match a current account category, case-insensitively. Use `--table` or `--profile NAME` as needed.
