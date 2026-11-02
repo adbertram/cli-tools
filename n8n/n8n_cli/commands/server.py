@@ -32,8 +32,8 @@ COMMAND_CREDENTIALS = {
 app.add_typer(logs.app, name="logs", help="Query n8n server logs and configuration")
 app.add_typer(server_config.app, name="config", help="Manage n8n server configuration")
 
-N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"
-N8N_INSTALL_PREFIX = "/usr/local"
+N8N_INSTALL_PREFIX = "/Users/adam/Services/n8n"
+N8N_BIN = f"{N8N_INSTALL_PREFIX}/lib/node_modules/n8n/bin/n8n"
 
 
 @app.command("deploy-browser-session")
