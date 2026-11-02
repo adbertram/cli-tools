@@ -81,11 +81,16 @@ kalshi markets list --series btc15m --filter "ticker:startswith:KXBTC15M-26NOV01
 # One market
 kalshi markets get KXBTC15M-26NOV011630-30
 
+# Full order book, including every YES and NO bid price level
+kalshi markets orderbook KXBTC15M-26NOV011630-30
+
 # The market open right now: target price, seconds left, YES(up) and NO(down) bid/ask and sizes
 kalshi markets current btc15m --table
 ```
 
 `markets current` adds the live CF Benchmarks BRTI price and the delta to the target when a `kalshi stream watch` for the same series is running and its state is fresher than `--max-stream-age` seconds. Otherwise `reference_price` is `null`. NO quotes are derived from YES: NO bid is `1 - YES ask` and NO ask is `1 - YES bid`.
+
+`markets orderbook` returns the native `orderbook_fp` object, with `yes_dollars` and `no_dollars` arrays of `[price, count]` string pairs. Both sides are bids; the opposite side's asks are `1 - bid` with the same count. It requests all levels.
 
 ### Streaming (`kalshi stream`)
 

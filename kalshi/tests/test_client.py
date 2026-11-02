@@ -94,6 +94,17 @@ class TestOrderBody:
 
 
 class TestRequests:
+    def test_orderbook_requests_all_levels_and_preserves_native_values(self):
+        book = {"orderbook_fp": {"yes_dollars": [["0.1500", "100.00"]], "no_dollars": []}}
+        seen = []
+
+        def handler(request):
+            seen.append(str(request.url))
+            return httpx.Response(200, json=book)
+
+        assert make_client(handler).get_orderbook("T-1") == book
+        assert seen == ["https://external-api.demo.kalshi.co/trade-api/v2/markets/T-1/orderbook?depth=0"]
+
     def test_signed_request_signs_full_path_without_query(self, ed_key, ed_pem):
         seen = {}
 

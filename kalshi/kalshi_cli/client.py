@@ -314,6 +314,12 @@ class KalshiClient:
         path = f"/markets/{identifier(ticker, 'ticker')}"
         return field(self.request("GET", path), "market", path)
 
+    def get_orderbook(self, ticker: str) -> dict:
+        path = f"/markets/{identifier(ticker, 'ticker')}/orderbook"
+        response = self.request("GET", path, {"depth": 0})
+        field(response, "orderbook_fp", path)
+        return response
+
     def current_market(self, series: str) -> dict:
         """Return the market of a series that is open right now (earliest close time)."""
         now = time.time()

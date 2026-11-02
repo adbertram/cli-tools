@@ -10,6 +10,28 @@ runner = CliRunner()
 TICKER = "KXBTC15M-26NOV011630-30"
 
 
+def test_orderbook_emits_native_envelope(monkeypatch):
+    from kalshi_cli.commands import markets
+
+    book = {"orderbook_fp": {"yes_dollars": [["0.1500", "100.00"]], "no_dollars": []}}
+
+    class Client:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def get_orderbook(self, ticker):
+            assert ticker == TICKER
+            return book
+
+    monkeypatch.setattr(markets, "open_client", lambda env, demo: Client())
+    result = runner.invoke(app, ["markets", "orderbook", TICKER])
+    assert result.exit_code == 0
+    assert json.loads(result.output) == book
+
+
 def place(*args):
     return runner.invoke(app, ["orders", "place", TICKER, "--outcome", "yes", "--count", "1", "--price", "0.40", *args])
 

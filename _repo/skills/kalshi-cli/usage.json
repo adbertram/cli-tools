@@ -1,8 +1,8 @@
 {
   "tool": "kalshi",
   "description": "CLI interface for kalshi",
-  "discovered_at": "2026-11-01T22:14:07Z",
-  "total_commands": 26,
+  "discovered_at": "2026-11-02T12:29:12Z",
+  "total_commands": 27,
   "global_options": [],
   "commands": {
     "auth": {
@@ -480,6 +480,54 @@
               "help": "Filter results (field:op:value)",
               "short": "-f"
             },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--env",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exchange environment: prod (default) or demo",
+              "short": "-e"
+            },
+            {
+              "name": "--demo",
+              "type": "bool",
+              "required": false,
+              "help": "Use the demo exchange (same as --env demo)",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "orderbook": {
+          "help": "Get all order book price levels for a market.",
+          "arguments": [
+            {
+              "name": "ticker",
+              "type": "TEXT",
+              "required": true,
+              "help": "Market ticker"
+            }
+          ],
+          "options": [
             {
               "name": "--table",
               "type": "bool",

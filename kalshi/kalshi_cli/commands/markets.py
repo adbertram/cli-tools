@@ -2,6 +2,7 @@
 COMMAND_CREDENTIALS = {
     "list": ["no_auth"],
     "get": ["no_auth"],
+    "orderbook": ["no_auth"],
     "current": ["no_auth"],
 }
 
@@ -77,6 +78,20 @@ def markets_get(
     """Get one market by ticker."""
     with open_client(env, demo) as client:
         emit_record(client.get_market(ticker), table, properties)
+
+
+@app.command("orderbook")
+@command
+def markets_orderbook(
+    ticker: str = typer.Argument(..., help="Market ticker"),
+    table: bool = TABLE_OPTION,
+    properties: Optional[str] = PROPERTIES_OPTION,
+    env: Optional[str] = ENV_OPTION,
+    demo: bool = DEMO_OPTION,
+):
+    """Get all order book price levels for a market."""
+    with open_client(env, demo) as client:
+        emit_record(client.get_orderbook(ticker), table, properties)
 
 
 @app.command("current")
