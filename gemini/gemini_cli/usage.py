@@ -17,6 +17,11 @@ PRICING = {
     "gemini-3.1-pro-preview": {"input": 2.00, "output": 12.00},
     "gemini-3-flash-preview": {"input": 0.50, "output": 3.00},
     "gemini-3-pro-image-preview": {"input": 2.00, "output": 12.00},
+    # Nano Banana text/thinking rates (image output: see IMAGE_PRICING)
+    "gemini-3-pro-image": {"input": 2.00, "output": 12.00},
+    "gemini-nano-banana-2.1": {"input": 1.50, "output": 7.50},
+    "gemini-3.1-flash-image": {"input": 0.50, "output": 3.00},
+    "gemini-3.1-flash-lite-image": {"input": 0.25, "output": 1.50},
 
     # Gemini 2.5 models
     "gemini-2.5-pro": {"input": 1.25, "output": 10.00},
@@ -60,6 +65,37 @@ PRICING = {
 
 
 
+# Image output pricing (paid tier, Standard), from
+# https://ai.google.dev/gemini-api/docs/pricing (fetched 2026-11-03).
+# "image_output" is USD per 1M image-output tokens; "per_image" is the page's
+# per-image equivalent by output size. Image output tokens are billed at the
+# image rate, not the text output rate in PRICING.
+# Imagen 4 is shut down (2026-08-17) and no longer listed on the pricing page.
+IMAGE_PRICING = {
+    "gemini-3-pro-image": {
+        "image_output": 120.00,
+        "per_image": {"1K": 0.134, "2K": 0.134, "4K": 0.24},
+    },
+    "gemini-nano-banana-2.1": {
+        "image_output": 30.00,
+        "per_image": {"1K": 0.0336, "2K": 0.0504, "4K": 0.113},
+    },
+    "gemini-3.1-flash-image": {
+        "image_output": 60.00,
+        "per_image": {"0.5K": 0.045, "1K": 0.067, "2K": 0.101, "4K": 0.151},
+    },
+    "gemini-3.1-flash-lite-image": {
+        "image_output": 30.00,
+        "per_image": {"1K": 0.0336},
+    },
+    # The page lists only a flat per-image price for 2.5 Flash Image.
+    "gemini-2.5-flash-image": {"per_image": {"default": 0.039}},
+}
+# Shut-down preview; the pricing page has no separate row. Assumed to match
+# gemini-3-pro-image for historical records (unverified).
+IMAGE_PRICING["gemini-3-pro-image-preview"] = IMAGE_PRICING["gemini-3-pro-image"]
+
+
 # Scheduled price changes: model -> list of (effective ISO date, pricing)
 PRICE_CHANGES = {
     "gemini-4-argon": [("2026-12-01", {"input": 4.00, "output": 20.00})],
@@ -74,6 +110,56 @@ def get_pricing(model_key: str, on: Optional[date] = None) -> Dict[str, float]:
         if on >= date.fromisoformat(effective):
             pricing = changed
     return pricing
+
+def _per_image_price(image_pricing: Dict[str, Any], image_size: Optional[str]) -> float:
+    per_image = image_pricing.get("per_image", {})
+    if image_size in per_image:
+        return per_image[image_size]
+    if "default" in per_image:
+        return per_image["default"]
+    # Unknown size: use the most expensive listed size so we never under-report.
+    return max(per_image.values()) if per_image else 0.0
+
+
+def estimate_cost(
+    model_key: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    image_output_tokens: int = 0,
+    image_count: int = 0,
+    image_size: Optional[str] = None,
+    on: Optional[date] = None,
+) -> Dict[str, float]:
+    """Estimate USD cost for one request.
+
+    ``completion_tokens`` is the total output (candidates) token count, which
+    includes ``image_output_tokens``. Image output is billed at the model's
+    image-token rate when the response reports image tokens; otherwise at the
+    per-image price for ``image_size`` times ``image_count``. The remaining
+    output tokens are billed at the text output rate from ``get_pricing``.
+    """
+    pricing = get_pricing(model_key, on=on)
+    input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
+
+    image_cost = 0.0
+    text_output_tokens = completion_tokens
+    image_pricing = IMAGE_PRICING.get(model_key)
+    if image_pricing:
+        if image_output_tokens and "image_output" in image_pricing:
+            image_cost = (image_output_tokens / 1_000_000) * image_pricing["image_output"]
+            text_output_tokens = max(completion_tokens - image_output_tokens, 0)
+        elif image_count:
+            image_cost = image_count * _per_image_price(image_pricing, image_size)
+            text_output_tokens = max(completion_tokens - image_output_tokens, 0)
+
+    output_cost = (text_output_tokens / 1_000_000) * pricing["output"]
+    return {
+        "input_cost": input_cost,
+        "output_cost": output_cost,
+        "image_cost": image_cost,
+        "total_cost": input_cost + output_cost + image_cost,
+    }
+
 
 def get_usage_file(config=None) -> Path:
     """Get path to usage tracking file."""
@@ -107,6 +193,9 @@ def record_usage(
     cached_tokens: int = 0,
     operation: str = "generate",
     config=None,
+    image_output_tokens: int = 0,
+    image_count: int = 0,
+    image_size: Optional[str] = None,
 ) -> None:
     """
     Record usage from an API call.
@@ -118,6 +207,9 @@ def record_usage(
         total_tokens: Total tokens used
         cached_tokens: Number of cached tokens (reduced cost)
         operation: Type of operation (generate, analyze_video, etc.)
+        image_output_tokens: Output tokens with IMAGE modality (subset of completion_tokens)
+        image_count: Number of images returned
+        image_size: Requested image size (e.g. "1K", "2K", "4K")
     """
     data = load_usage_data(config)
 
@@ -126,12 +218,14 @@ def record_usage(
 
     # Get pricing for this model
     model_key = model.replace("models/", "")
-    pricing = get_pricing(model_key)
-
-    # Calculate cost (per 1M tokens)
-    input_cost = (prompt_tokens / 1_000_000) * pricing["input"]
-    output_cost = (completion_tokens / 1_000_000) * pricing["output"]
-    total_cost = input_cost + output_cost
+    total_cost = estimate_cost(
+        model_key,
+        prompt_tokens,
+        completion_tokens,
+        image_output_tokens=image_output_tokens,
+        image_count=image_count,
+        image_size=image_size,
+    )["total_cost"]
 
     # Record individual request
     request = {
@@ -144,6 +238,10 @@ def record_usage(
         "cached_tokens": cached_tokens,
         "estimated_cost": round(total_cost, 6),
     }
+    if image_count or image_output_tokens:
+        request["image_count"] = image_count
+        request["image_output_tokens"] = image_output_tokens
+        request["image_size"] = image_size
     data["requests"].append(request)
 
     # Update daily totals

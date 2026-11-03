@@ -58,10 +58,17 @@ def _record_response_usage(
     model: str,
     operation: str = "generate",
     config=None,
+    image_count: int = 0,
+    image_size: Optional[str] = None,
 ) -> None:
     """Record usage from a response's usage_metadata."""
     if response.usage_metadata:
         meta = response.usage_metadata
+        image_output_tokens = sum(
+            (detail.token_count or 0)
+            for detail in (meta.candidates_tokens_details or [])
+            if detail.modality == types.MediaModality.IMAGE
+        )
         record_usage(
             model=model,
             prompt_tokens=meta.prompt_token_count or 0,
@@ -70,6 +77,9 @@ def _record_response_usage(
             cached_tokens=meta.cached_content_token_count or 0,
             operation=operation,
             config=config,
+            image_output_tokens=image_output_tokens,
+            image_count=image_count,
+            image_size=image_size,
         )
 
 
@@ -467,9 +477,6 @@ class GeminiClient:
                 config=config,
             )
 
-            # Record usage
-            _record_response_usage(response, model, "image_generate", self.config)
-
             # Extract results
             result = {
                 "text": None,
@@ -484,6 +491,13 @@ class GeminiClient:
                         "data": part.inline_data.data,
                         "mime_type": part.inline_data.mime_type
                     })
+
+            # Record usage (image output is priced separately from text)
+            _record_response_usage(
+                response, model, "image_generate", self.config,
+                image_count=len(result["images"]),
+                image_size=image_size,
+            )
 
             if not result["images"]:
                 raise ClientError("No image was generated in the response")
