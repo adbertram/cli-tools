@@ -32,8 +32,8 @@ def create(config, name, contribution, starting_balance, emoji, color,
         if goal <= 0:
             raise ClientError('Goal must be positive')
         values['goalAmount'] = float(goal)
-    if bool(replace_bill) != bool(settled_transaction):
-        raise ClientError('Provide --replace-bill and --settled-transaction together')
+    if settled_transaction and not replace_bill:
+        raise ClientError('--settled-transaction requires --replace-bill')
     for ident in (replace_bill, settled_transaction):
         if ident is not None and (not ident or '/' in ident or ident in ('.', '..')):
             raise ClientError('Invalid bill or transaction ID')
@@ -47,37 +47,41 @@ def create(config, name, contribution, starting_balance, emoji, color,
         plans = [('funds', fund_id, fields, None)]
         if replace_bill:
             if starting_balance != 0:
-                raise ClientError('Replacing a settled bill requires a zero starting balance')
+                raise ClientError('Replacing a bill requires a zero starting balance')
             bill = read_document(http, user_url, headers, uid, 'items', replace_bill)
-            tx = read_document(http, user_url, headers, uid, 'transactions', settled_transaction)
-            b, t = bill['fields'], tx['fields']
+            b = bill['fields']
             if b.get('color') != {'stringValue': 'warning'} or b.get('archived') == {'booleanValue': True}:
                 raise ClientError('Replacement requires an active expense bill')
-            bank = t.get('__plaidTx', {}).get('mapValue', {}).get('fields', {})
-            bank_id = bank.get('id', {}).get('stringValue')
-            if (t.get('target') != {'stringValue': 'INITIAL'}
-                    or t.get('color') != {'stringValue': 'warning'}
-                    or not isinstance(bank_id, str) or not bank_id.strip()
-                    or t.get('isCash') == {'booleanValue': True} or 'transferDirection' in t):
-                raise ClientError('Settlement requires an unreviewed bank expense')
-            try:
-                firestore_amount(t.get('amount'))
-                firestore_amount(bank.get('amount'))
-            except (ValueError, ClientError):
-                raise ClientError('Settlement requires a positive bank debit') from None
-            tx_date = t.get('date', {}).get('stringValue')
-            try:
-                if date.fromisoformat(tx_date).isoformat() != tx_date:
-                    raise ValueError
-            except (ValueError, TypeError):
-                raise ClientError('Settlement date is invalid') from None
-            merchant = t.get('title', {}).get('stringValue')
-            if not isinstance(merchant, str) or not merchant.strip():
-                raise ClientError('Settlement title is invalid')
-            changes = {'archived': encode_value(True), 'latestTransactionDate': encode_value(tx_date),
-                       'latestTransactionMerchant': encode_value(merchant)}
-            plans += [('items', replace_bill, changes, bill),
-                      ('transactions', settled_transaction, {'target': encode_value('RECURRING'), 'itemId': encode_value(replace_bill)}, tx)]
+            bill_changes = {'archived': encode_value(True)}
+            plans.append(('items', replace_bill, bill_changes, bill))
+            if settled_transaction:
+                tx = read_document(http, user_url, headers, uid, 'transactions', settled_transaction)
+                t = tx['fields']
+                bank = t.get('__plaidTx', {}).get('mapValue', {}).get('fields', {})
+                bank_id = bank.get('id', {}).get('stringValue')
+                if (t.get('target') != {'stringValue': 'INITIAL'}
+                        or t.get('color') != {'stringValue': 'warning'}
+                        or not isinstance(bank_id, str) or not bank_id.strip()
+                        or t.get('isCash') == {'booleanValue': True} or 'transferDirection' in t):
+                    raise ClientError('Settlement requires an unreviewed bank expense')
+                try:
+                    firestore_amount(t.get('amount'))
+                    firestore_amount(bank.get('amount'))
+                except (ValueError, ClientError):
+                    raise ClientError('Settlement requires a positive bank debit') from None
+                tx_date = t.get('date', {}).get('stringValue')
+                try:
+                    if date.fromisoformat(tx_date).isoformat() != tx_date:
+                        raise ValueError
+                except (ValueError, TypeError):
+                    raise ClientError('Settlement date is invalid') from None
+                merchant = t.get('title', {}).get('stringValue')
+                if not isinstance(merchant, str) or not merchant.strip():
+                    raise ClientError('Settlement title is invalid')
+                changes = {'latestTransactionDate': encode_value(tx_date),
+                           'latestTransactionMerchant': encode_value(merchant)}
+                bill_changes.update(changes)
+                plans.append(('transactions', settled_transaction, {'target': encode_value('RECURRING'), 'itemId': encode_value(replace_bill)}, tx))
         writes = []
         for collection, ident, change, original in plans:
             write = {'update': {'name': USER_DOCUMENT_ROOT + uid + '/' + collection + '/' + ident, 'fields': change},

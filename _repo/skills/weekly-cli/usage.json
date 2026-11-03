@@ -1,7 +1,7 @@
 {
   "tool": "weekly",
   "description": "CLI interface for weekly",
-  "discovered_at": "2026-11-03T17:27:26Z",
+  "discovered_at": "2026-11-03T17:43:13Z",
   "total_commands": 37,
   "global_options": [],
   "commands": {
@@ -797,13 +797,13 @@
               "name": "--replace-bill",
               "type": "TEXT",
               "required": false,
-              "help": "Archive a paid expense bill as this fund replaces its allocation"
+              "help": "Archive an expense bill as this fund replaces its allocation"
             },
             {
               "name": "--settled-transaction",
               "type": "TEXT",
               "required": false,
-              "help": "Unreviewed bank expense paid against the replaced bill"
+              "help": "Optional unreviewed bank expense paid against the replaced bill"
             },
             {
               "name": "--table",

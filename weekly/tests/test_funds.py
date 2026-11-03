@@ -41,6 +41,25 @@ class FundTests(unittest.TestCase):
         self.assertEqual(set(writes[1]['updateMask']['fieldPaths']),{'archived','latestTransactionDate','latestTransactionMerchant'})
         self.assertEqual(writes[2]['updateMask']['fieldPaths'],['target','itemId'])
 
+    def test_replace_bill_without_settlement_archives_only_and_reads_no_transaction(self):
+        self.http.post.return_value.json.return_value = {'writeResults': [{}, {}]}
+        after_bill = deepcopy(self.bill)
+        after_bill['fields']['archived'] = {'booleanValue': True}
+        def read(h, u, headers, uid, col, ident):
+            self.assertNotEqual(col, 'transactions')
+            if self.http.post.called:
+                return {'fields': self.http.post.call_args.kwargs['json']['writes'][0]['update']['fields']} if col == 'funds' else after_bill
+            return self.bill
+        with patch('weekly_cli.funds.read_document', side_effect=read):
+            result = create(object(), **{**self.args, 'settled_transaction': None})
+        writes = self.http.post.call_args.kwargs['json']['writes']
+        self.assertEqual(len(writes), 2)
+        self.assertEqual(writes[1]['update']['fields'], {'archived': {'booleanValue': True}})
+        self.assertEqual(writes[1]['updateMask'], {'fieldPaths': ['archived']})
+        self.assertEqual(writes[1]['currentDocument'], {'updateTime': self.version})
+        self.assertFalse(result['current_week_credits_created'])
+        self.assertEqual(len(result['changes']), 2)
+
     def test_standalone_future_fund_has_one_create_and_no_week_writes(self):
         self.http.post.return_value.json.return_value = {'writeResults': [{}]}
         args = {**self.args, 'replace_bill': None, 'settled_transaction': None}
@@ -69,7 +88,7 @@ class FundTests(unittest.TestCase):
             self.assertEqual(json.loads(result.stdout), [{'id': 'f', 'name': 'Example'}])
 
     def test_invalid_and_duplicate_inputs_do_not_commit(self):
-        for change in ({'name':''},{'contribution':'-1'},{'contribution':'1.001'},{'starting_balance':'-1'},{'color':'invented'},{'goal':'0'},{'settled_transaction':None},{'starting_balance':'1'},{'replace_bill':'a/b'}):
+        for change in ({'name':''},{'contribution':'-1'},{'contribution':'1.001'},{'starting_balance':'-1'},{'color':'invented'},{'goal':'0'},{'replace_bill':None},{'starting_balance':'1'},{'replace_bill':'a/b'}):
             with self.subTest(change=change),self.assertRaises(ClientError):create(object(),**{**self.args,**change})
         with patch('weekly_cli.funds.list_documents',return_value=[{'name':'EXAMPLE FUND'}]),self.assertRaises(ClientError):create(object(),**self.args)
         self.http.post.assert_not_called()
