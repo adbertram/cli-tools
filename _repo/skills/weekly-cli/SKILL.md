@@ -65,11 +65,13 @@ weekly <command-group> <action> [arguments] [options]
 | Find one transaction in the selected export range | `weekly transactions get <TRANSACTION_ID>` |
 | List transactions in the selected export range | `weekly transactions list` |
 | List the current-week review queue | `weekly transactions list --unreviewed` |
+| Ignore an unreviewed bank transaction | `weekly transactions ignore <TRANSACTION_ID> --dry-run` (omit `--dry-run` to apply) |
 | Split an eligible 10.00 bank-linked expense | `weekly transactions split <TRANSACTION_ID> --part '6.00:Groceries' --part '4.00:Other'` |
 | Update a safe-to-spend category, or a manual entry amount and title | `weekly transactions update <TRANSACTION_ID>` |
 </quick_start>
 
 <service_boundaries>
+- `transactions ignore` changes an unreviewed bank-linked transaction target from INITIAL to IGNORED, preserving every other field. `--dry-run` reads and previews without writing. Already ignored entries are a no-op. Other transaction targets, manual entries and internal transfer records are rejected. It checks the server update-time precondition and verifies a fresh read; after an uncertain outcome, use the same command with `--dry-run` to reconcile before retrying. Export visibility follows the captured ignored-transaction export setting.
 - `bills create` supports all app frequencies, categories and emoji backgrounds. Supply an explicit title, positive exact-cent amount, interval, category, emoji and emoji color. Kind defaults to expense; income also uses positive amounts, and kind is independent of category. `--next-date YYYY-MM-DD` sets the next transaction date; `--hide-from-reports` and `--archived` are optional. Archived items do not affect the weekly spending limit. `--dry-run` validates locally without contacting the account. Creation writes only the recurring item; reconcile a fresh bills list before retrying an uncertain outcome. `bimonthly` means twice a month; `two_months` means every two months; `uncategorized` means Other.
 
 - `weeks delete` requires `--dry-run` to preview or `--yes` to execute. It targets one own-user week document with its update-time precondition and confirms absence. The CLI does not delete transactions/fund contributions or recalculate later rollover. Current weeks can be deleted; the preview explains that current-budget/review commands then lack a current week. Check fresh saved weeks before retrying an uncertain outcome. This uses documented backend document deletion, not a verified native app deletion workflow.
@@ -100,7 +102,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 - **weeks** -- Read/delete saved weeks and create completed historical weeks (subcommands: create, delete, get, list)
 - **cache** -- Manage response cache (subcommands: clear)
 - **categories** -- Manage spending categories (subcommands: create, get, list)
-- **transactions** -- Read transactions and manage spending (subcommands: create, get, list, split, update)
+- **transactions** -- Read transactions and manage spending (subcommands: create, get, ignore, list, split, update)
 </principle>
 </essential_principles>
 

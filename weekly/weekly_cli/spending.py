@@ -55,6 +55,14 @@ def get_document(http, url, headers, uid, transaction_id):
     return doc
 
 
+def validate_transaction_version(doc):
+    try:
+        if datetime.fromisoformat(doc['updateTime'].replace('Z', '+00:00')).utcoffset() is None:
+            raise ValueError
+    except (ValueError, TypeError, AttributeError):
+        raise ClientError('Original transaction version is invalid') from None
+
+
 def export_doc(doc):
     return {'id':doc['name'].rsplit('/',1)[-1], **{k:decode_value(v) for k,v in doc['fields'].items()}}
 
@@ -130,11 +138,7 @@ def split(config, transaction_id, parts):
     try:
         http, url, headers, data = client_context(config)
         original = get_document(http, url, headers, data['user_id'], transaction_id)
-        try:
-            if datetime.fromisoformat(original['updateTime'].replace('Z', '+00:00')).utcoffset() is None:
-                raise ValueError
-        except (ValueError, TypeError, AttributeError):
-            raise ClientError('Original transaction version is invalid') from None
+        validate_transaction_version(original)
         existing = original['fields']
         try:
             bank_id = existing['__plaidTx']['mapValue']['fields']['id']['stringValue']

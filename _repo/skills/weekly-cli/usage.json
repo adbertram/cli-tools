@@ -1,8 +1,8 @@
 {
   "tool": "weekly",
   "description": "CLI interface for weekly",
-  "discovered_at": "2026-11-03T16:11:23Z",
-  "total_commands": 33,
+  "discovered_at": "2026-11-03T16:51:37Z",
+  "total_commands": 34,
   "global_options": [],
   "commands": {
     "auth": {
@@ -829,6 +829,41 @@
               "required": false,
               "help": "Comma-separated fields, supports dot notation",
               "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "ignore": {
+          "help": "Ignore an unreviewed bank transaction; retain its original bank details.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Unreviewed bank transaction ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Preview the change without writing",
+              "takes_value": false
             },
             {
               "name": "--table",

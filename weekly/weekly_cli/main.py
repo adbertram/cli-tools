@@ -17,6 +17,7 @@ from .session import import_capture, import_export, refresh, delete_profile_secr
 from .transactions import list_transactions
 from .firestore import list_documents, user_preferences, current_week, create_category
 from .spending import create, update, split
+from .ignoring import ignore
 from .weeks import create as create_week, delete as delete_week
 from .bills import create as create_bill, INTERVALS, CATEGORIES, EMOJI_COLORS
 
@@ -152,6 +153,18 @@ def spending_update(
 ):
     """Update a safe-to-spend category, or manual entry amount and title."""
     print_output(update(get_config(profile), transaction_id, amount, title, category), table=table)
+
+
+@transactions.command('ignore')
+@command
+def transaction_ignore(
+    transaction_id: str = typer.Argument(..., help='Unreviewed bank transaction ID'),
+    dry_run: bool = typer.Option(False, '--dry-run', help='Preview the change without writing'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile'),
+):
+    """Ignore an unreviewed bank transaction; retain its original bank details."""
+    print_output(ignore(get_config(profile), transaction_id, dry_run), table=table)
 
 
 @transactions.command('split')
