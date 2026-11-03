@@ -18,6 +18,7 @@ from .transactions import list_transactions
 from .firestore import list_documents, user_preferences, current_week, create_category
 from .spending import create, update, split
 from .weeks import create as create_week, delete as delete_week
+from .bills import create as create_bill, INTERVALS, CATEGORIES, EMOJI_COLORS
 
 
 def login_handler(config, force):
@@ -196,6 +197,59 @@ def budget_current(table: bool = typer.Option(False, '--table', '-t'), profile: 
 
 
 app.add_typer(budget, name='budget')
+bills = typer.Typer(help='Read and create recurring bills and income', no_args_is_help=True)
+
+
+@bills.command('create')
+@command
+def bills_create(
+    title: str = typer.Option(..., '--title', help='Recurring bill description'),
+    amount: str = typer.Option(..., '--amount', help='Positive amount in exact cents'),
+    interval: str = typer.Option(..., '--interval', help='Intervals: ' + ', '.join(INTERVALS)),
+    category: str = typer.Option(..., '--category', help='Bill categories: ' + ', '.join(CATEGORIES)),
+    emoji: str = typer.Option(..., '--emoji', help='Bill icon emoji'),
+    emoji_color: str = typer.Option(..., '--emoji-color', help='Icon background colors: ' + ', '.join(EMOJI_COLORS)),
+    kind: str = typer.Option('expense', '--kind', help='expense or income, independent of category'),
+    next_date: Optional[str] = typer.Option(None, '--next-date', help='Optional next transaction date YYYY-MM-DD'),
+    hide_from_reports: bool = typer.Option(False, '--hide-from-reports', help='Exclude this item from reports'),
+    archived: bool = typer.Option(False, '--archived', help='Create archived, without affecting the weekly spending limit'),
+    dry_run: bool = typer.Option(False, '--dry-run', help='Validate and preview without reading or writing the account'),
+    table: bool = typer.Option(False, '--table', '-t', help='Display as a table'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile'),
+):
+    """Create a recurring bill or income item."""
+    print_output(create_bill(get_config(profile), title, amount, interval, category,
+                             emoji, emoji_color, kind, next_date, dry_run,
+                             hide_from_reports, archived), table=table)
+
+
+@bills.command('list')
+@command
+def bills_list(
+    limit: Optional[int] = typer.Option(None, '--limit', '-l', min=1, help='Maximum results (no limit by default)'),
+    filter: Optional[List[str]] = typer.Option(None, '--filter', '-f', help='Filter: field:op:value (e.g., title:contains:Rent)'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated fields, supports dot notation'),
+    table: bool = typer.Option(False, '--table', '-t', help='Display as a table'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile'),
+):
+    """List saved recurring bills and income, preserving their native fields."""
+    rows = list_documents(get_config(profile), 'items', limit=limit, filters=filter)
+    render_rows(rows, properties, table, ['id', 'title', 'amount', 'interval', 'category'])
+
+
+@bills.command('get')
+@command
+def bills_get(
+    item_id: str = typer.Argument(..., help='Recurring bill or income ID'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p', help='Comma-separated fields, supports dot notation'),
+    table: bool = typer.Option(False, '--table', '-t', help='Display as a table'),
+    profile: Optional[str] = typer.Option(None, '--profile', help='Saved authentication profile'),
+):
+    """Get a saved recurring bill or income item by ID."""
+    collection_get('items', item_id, properties, table, profile)
+
+
+app.add_typer(bills, name='bills')
 weeks = typer.Typer(help='Read and delete weeks; create completed historical weeks', no_args_is_help=True)
 
 

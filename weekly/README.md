@@ -52,3 +52,20 @@ Transaction list/get output preserves the CSV export's columns. Supported range 
 `transactions split` divides an eligible 10.00 expense in the example above. It accepts only positive, unsplit, bank-linked, non-transfer Safe-to-Spend expenses. Manual entries, refunds, transfers and already-split entries are rejected. Provide at least two `--part AMOUNT:CATEGORY` values with positive amounts in exact cents that total the original amount exactly. Each category must resolve uniquely, without regard to case, among the current account's saved categories (`weekly categories list`). Optional `--table` and `--profile NAME` select the output format and profile.
 
 The first part keeps the source transaction ID; later parts receive new IDs. All parts preserve the original title, date, color and complete bank link. The changes are committed atomically. If an error leaves the outcome uncertain, use the reported transaction IDs to reconcile the result before taking further action; don't blindly retry.
+
+## Recurring bills and income
+
+```bash
+weekly bills list
+weekly bills list --filter 'category:eq:utilities' --properties id,title,amount,interval
+weekly bills get ITEM_ID
+weekly bills create --title Electricity --amount 35.75 --interval monthly --category utilities --emoji '💡' --emoji-color blue --next-date 2026-11-15 --dry-run
+weekly bills create --title Electricity --amount 35.75 --interval monthly --category utilities --emoji '💡' --emoji-color blue --next-date 2026-11-15
+weekly bills create --title Paycheck --amount 1000.00 --kind income --interval weekly --category income --emoji '💰' --emoji-color yellow --dry-run
+```
+
+`bills list/get` returns saved recurring bill and income records with their native fields. List supports the standard filter, limit, properties and table options. Reading does not refresh bank transactions.
+
+`bills create` requires an explicit description, positive exact-cent amount, interval, bill category, emoji and emoji background color. The kind defaults to `expense`; `income` uses a positive amount and the native success color. The optional `--next-date YYYY-MM-DD` sets both native next-transaction date fields; omitting it leaves those fields absent. `--dry-run` performs local validation and returns the proposed item without contacting the account. Creation writes only the new recurring item. It does not create a payment or change saved week records. An uncertain response must be reconciled with a fresh bills list before retrying.
+
+All 19 app frequencies, 15 bill categories and 7 emoji backgrounds are supported; `weekly bills create --help` lists their identifiers. `bimonthly` means twice a month, `two_months` means every two months, and `uncategorized` is Other. Kind and category can be chosen independently. `--hide-from-reports` excludes the item from reports; `--archived` creates it archived so it does not affect the weekly spending limit. Both flags are optional.

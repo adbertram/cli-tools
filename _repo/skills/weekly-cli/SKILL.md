@@ -3,7 +3,7 @@ name: weekly-cli
 description: >-
   Use this skill for service operations only. DO NOT use this skill for CLI implementation lifecycle work such as creating, testing, updating, troubleshooting, validating, removing, or documenting the CLI tool itself; delegate those tasks to cli-tool-expert.
   MANDATORY: Execute Weekly operations using the `weekly` CLI tool.
-  Read Weekly budgets, account balances and transaction exports; create manual entries, update categories and split eligible bank-linked expenses.
+  Read Weekly budgets, account balances and transaction exports; create recurring bills and income, create manual entries, update categories and split eligible bank-linked expenses.
   Triggers: weekly budgeting app, weekly budget cli, weekly transactions cli
 ---
 
@@ -48,6 +48,9 @@ weekly <command-group> <action> [arguments] [options]
 | Test authentication by verifying credentials work across profiles | `weekly auth test` |
 | Get a saved account balance by ID | `weekly balances get <ITEM_ID>` |
 | List saved account balance records | `weekly balances list` |
+| List recurring bills and income | `weekly bills list` |
+| Read one recurring item | `weekly bills get <ITEM_ID>` |
+| Create a recurring bill | `weekly bills create --title Electricity --amount 35.75 --interval monthly --category utilities --emoji '💡' --emoji-color blue` |
 | Read current week, recurring items, funds and budget preferences | `weekly budget current` |
 | List saved budget weeks | `weekly weeks list` |
 | Get a saved budget week | `weekly weeks get <ITEM_ID>` |
@@ -67,6 +70,8 @@ weekly <command-group> <action> [arguments] [options]
 </quick_start>
 
 <service_boundaries>
+- `bills create` supports all app frequencies, categories and emoji backgrounds. Supply an explicit title, positive exact-cent amount, interval, category, emoji and emoji color. Kind defaults to expense; income also uses positive amounts, and kind is independent of category. `--next-date YYYY-MM-DD` sets the next transaction date; `--hide-from-reports` and `--archived` are optional. Archived items do not affect the weekly spending limit. `--dry-run` validates locally without contacting the account. Creation writes only the recurring item; reconcile a fresh bills list before retrying an uncertain outcome. `bimonthly` means twice a month; `two_months` means every two months; `uncategorized` means Other.
+
 - `weeks delete` requires `--dry-run` to preview or `--yes` to execute. It targets one own-user week document with its update-time precondition and confirms absence. The CLI does not delete transactions/fund contributions or recalculate later rollover. Current weeks can be deleted; the preview explains that current-budget/review commands then lack a current week. Check fresh saved weeks before retrying an uncertain outcome. This uses documented backend document deletion, not a verified native app deletion workflow.
 - `weeks create` supports completed past weeks only, using explicit inclusive dates and an exact-cent spending limit (zero allowed). Overlapping saved weeks, current/upcoming dates and ranges containing reviewed/manual/transfer entries fail explicitly. The verified flow has no rollover, derives `currentPlan` from the unique current saved week, and writes only the historical week. `--dry-run` previews without writing; omit it to create. Check fresh saved weeks before retrying an uncertain creation. `weeks list/get` preserve missing allowance fields rather than guessing a limit.
 - `categories create` requires explicit name, color and emoji; it refuses duplicate names ignoring case and creates a spending category, not a savings fund. Check a fresh categories list before retrying an uncertain creation.
@@ -90,6 +95,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 <principle name="Command Groups">
 - **auth** -- Manage weekly authentication (subcommands: import-capture, import-export, login, logout, profiles, refresh, status, test)
 - **balances** -- Read linked account balances (subcommands: get, list)
+- **bills** -- Read and create recurring bills and income (subcommands: create, get, list)
 - **budget** -- Read Weekly budget records (subcommands: current)
 - **weeks** -- Read/delete saved weeks and create completed historical weeks (subcommands: create, delete, get, list)
 - **cache** -- Manage response cache (subcommands: clear)

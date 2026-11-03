@@ -93,7 +93,7 @@ def encode_value(value):
 
 
 def create_document(config, collection, values):
-    resources = {'tags': ('category', 'categories'), 'weekInstances': ('week', 'weeks')}
+    resources = {'tags': ('category', 'categories'), 'weekInstances': ('week', 'weeks'), 'items': ('bill', 'bills')}
     if collection not in resources:
         raise ClientError('Unsupported Weekly creation collection')
     noun, plural = resources[collection]
@@ -101,6 +101,8 @@ def create_document(config, collection, values):
     fields = {key: encode_value(value) for key, value in values.items()}
     try:
         response = client.post(user_url + '/' + collection, headers=headers, json={'fields': fields}, timeout=30, allow_redirects=False)
+        if response.status_code == 408 or response.status_code >= 500:
+            raise ClientError(f'Weekly {noun} creation outcome uncertain; check {plural} before retrying')
         if not 200 <= response.status_code < 300:
             raise ClientError(f'Weekly {noun} creation failed (HTTP {response.status_code})')
         doc = response.json()
