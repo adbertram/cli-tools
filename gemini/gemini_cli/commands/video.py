@@ -3,7 +3,7 @@ from typing import List, Optional
 import typer
 import json
 from pathlib import Path
-from ..client import get_client
+from ..client import get_client, ThinkingLevel
 from cli_tools_shared.output import command, print_json, print_success, print_error, print_info, handle_error
 from ..file_types import is_supported_file, UnsupportedFileTypeError, get_file_category
 
@@ -21,6 +21,8 @@ def video_analyze(
     no_wait: bool = typer.Option(False, "--no-wait", help="Don't wait for processing (large files only)"),
     json_schema: str = typer.Option(None, "--json-schema", "-s", help="Path to JSON schema file for structured output"),
     fps: float = typer.Option(None, "--fps", help="Frames per second for video sampling (default: 1). Use higher values (2-5) for fast-action or sync detection."),
+    temperature: Optional[float] = typer.Option(None, "--temperature", "-T", help="Sampling temperature. Omit to use the model default. gemini-4-argon and Gemini 3.6+ ignore it."),
+    thinking_level: Optional[ThinkingLevel] = typer.Option(None, "--thinking-level", help="Thinking level (thinking_level). Omit to use the model default. Supported levels vary by model, e.g. gemini-4-argon: low|medium|high."),
 ):
     """
     Upload and analyze a video file with Gemini.
@@ -126,7 +128,9 @@ def video_analyze(
             auto_wait=not no_wait,
             additional_files=files,
             response_schema=response_schema,
-            fps=fps
+            fps=fps,
+            temperature=temperature,
+            thinking_level=thinking_level.value if thinking_level else None,
         )
 
         # Display result

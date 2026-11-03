@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+from enum import Enum
 from typing import Optional, List, Dict, Any, TypeVar, Callable
 from pathlib import Path
 from google import genai
@@ -81,6 +82,41 @@ def _record_response_usage(
             image_count=image_count,
             image_size=image_size,
         )
+
+
+class ThinkingLevel(str, Enum):
+    """thinking_level values accepted by google-genai ThinkingConfig.
+
+    Supported levels vary by model (e.g. gemini-4-argon: low/medium/high;
+    gemini-3.5-flash-lite: minimal/low/medium/high). See
+    https://ai.google.dev/gemini-api/docs/thinking
+    """
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+def _build_generate_config(
+    response_schema: Optional[Dict[str, Any]] = None,
+    temperature: Optional[float] = None,
+    thinking_level: Optional[str] = None,
+) -> Optional[types.GenerateContentConfig]:
+    """Build a GenerateContentConfig with only the options that were set.
+
+    Returns None when nothing is set, so model defaults apply unchanged.
+    """
+    kwargs: Dict[str, Any] = {}
+    if response_schema:
+        kwargs["response_mime_type"] = "application/json"
+        kwargs["response_schema"] = response_schema
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    if thinking_level is not None:
+        kwargs["thinking_config"] = types.ThinkingConfig(
+            thinking_level=ThinkingLevel(thinking_level).value.upper()
+        )
+    return types.GenerateContentConfig(**kwargs) if kwargs else None
 
 
 class ClientError(Exception):
@@ -231,7 +267,9 @@ class GeminiClient:
         file_refs: Optional[List[types.File]] = None,
         operation: str = "generate",
         response_schema: Optional[Dict[str, Any]] = None,
-        video_fps: Optional[float] = None
+        video_fps: Optional[float] = None,
+        temperature: Optional[float] = None,
+        thinking_level: Optional[str] = None,
     ) -> str:
         """
         Generate content using Gemini API.
@@ -243,6 +281,8 @@ class GeminiClient:
             operation: Operation type for usage tracking
             response_schema: Optional JSON schema for structured output
             video_fps: Optional FPS for video files (applied to first video file)
+            temperature: Optional sampling temperature (sent only when set)
+            thinking_level: Optional thinking level (minimal/low/medium/high)
 
         Returns:
             Generated text response
@@ -270,13 +310,11 @@ class GeminiClient:
                         contents.append(file_ref)
             contents.append(prompt)
 
-            # Build config for structured output if schema provided
-            config = None
-            if response_schema:
-                config = types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=response_schema
-                )
+            config = _build_generate_config(
+                response_schema=response_schema,
+                temperature=temperature,
+                thinking_level=thinking_level,
+            )
 
             response = _retry_on_transient_api_error(
                 self.client.models.generate_content,
@@ -305,7 +343,9 @@ class GeminiClient:
         auto_wait: bool = True,
         additional_files: Optional[List[str]] = None,
         response_schema: Optional[Dict[str, Any]] = None,
-        fps: Optional[float] = None
+        fps: Optional[float] = None,
+        temperature: Optional[float] = None,
+        thinking_level: Optional[str] = None,
     ) -> str:
         """
         Upload and analyze a video file.
@@ -320,6 +360,8 @@ class GeminiClient:
             fps: Frames per second for video sampling (default: 1 FPS by Gemini).
                  Use higher values (2-5) for fast-action or sync detection.
                  Use lower values (<1) for long static videos.
+            temperature: Optional sampling temperature (sent only when set)
+            thinking_level: Optional thinking level (minimal/low/medium/high)
 
         Returns:
             Analysis response text
@@ -349,13 +391,11 @@ class GeminiClient:
                 with open(video_path, 'rb') as f:
                     video_bytes = f.read()
 
-                # Build config for structured output if schema provided
-                config = None
-                if response_schema:
-                    config = types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=response_schema
-                    )
+                config = _build_generate_config(
+                    response_schema=response_schema,
+                    temperature=temperature,
+                    thinking_level=thinking_level,
+                )
 
                 # Build video part with optional FPS metadata
                 video_part = types.Part(
@@ -401,7 +441,9 @@ class GeminiClient:
             prompt, model, all_files,
             operation="video_analyze",
             response_schema=response_schema,
-            video_fps=fps
+            video_fps=fps,
+            temperature=temperature,
+            thinking_level=thinking_level,
         )
 
     # ==================== Image Generation ====================
