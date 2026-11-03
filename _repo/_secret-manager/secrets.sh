@@ -289,6 +289,7 @@ run_security() {
         return 0
     fi
 
+    log_error "keychain command failed status=$status"
     cat "$stderr_file" >&2
     rm -f "$stdout_file" "$stderr_file"
     return "$status"
@@ -342,7 +343,19 @@ cmd_set() {
     value="$(resolve_set_value "$value_arg")"
 
     log_info "security add-generic-password (service=$SERVICE account=$name)"
-    run_security security add-generic-password -U -s "$SERVICE" -a "$name" -w "$value" "${KEYCHAIN_ARGS[@]}" >/dev/null || return $?
+    # security's -U update is not atomic across processes: overlapping updates
+    # can fail with errSecDuplicateItem (45). Hold an OS lock until it exits.
+    # Keep the lock file in place so waiting writers always lock the same inode.
+    run_security python3 -c '
+import fcntl
+import os
+import subprocess
+import sys
+
+with open(os.path.realpath(sys.argv[1]) + ".write.lock", "a") as lock:
+    fcntl.flock(lock, fcntl.LOCK_EX)
+    sys.exit(subprocess.call(sys.argv[2:]))
+' "$KEYCHAIN" security add-generic-password -U -s "$SERVICE" -a "$name" -w "$value" "${KEYCHAIN_ARGS[@]}" >/dev/null || return $?
     log_info "security add-generic-password completed (service=$SERVICE account=$name)"
 }
 

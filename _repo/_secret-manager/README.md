@@ -24,6 +24,12 @@ Service namespace: `cli-tools`
 
 Default keychain: `~/.local/share/cli-tools/cli-tools.keychain-db`
 
+Concurrent `set` calls serialize the Keychain update using an OS advisory lock
+beside the keychain (`<keychain>.write.lock`). This prevents macOS `security -U`
+updates from colliding. The lock releases when the writer exits, including on
+failure; the empty lock file remains so waiting writers share the same inode.
+Python 3 is required for this lock, as for the helper's import/export commands.
+
 ## Portability and access
 
 The default managed keychain is created with an empty keychain-file unlock

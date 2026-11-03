@@ -422,7 +422,8 @@ def _set_secret_value(secret_name: str, value: str, profile_path: Path) -> None:
         result = _run_secret_manager("set", secret_name, secret_value=value)
         if result.returncode != 0:
             raise ConfigError(
-                f"Failed to store secret '{secret_name}' for {profile_path}."
+                f"Failed to store secret '{secret_name}' for {profile_path} "
+                f"(secret manager exit {result.returncode})."
             )
         _forget_secret_value(secret_name)
 

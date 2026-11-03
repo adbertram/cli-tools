@@ -760,3 +760,73 @@ esac
     )
     assert broken.returncode == 5
     assert "unexpected failure" in broken.stderr
+
+
+@pytest.mark.parametrize("failing_writer", [False, True])
+def test_concurrent_sets_serialize_keychain_updates_and_release_after_failure(
+    tmp_path: Path, failing_writer: bool
+) -> None:
+    """Independent helpers must never overlap security's non-atomic -U call."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_executable(
+        fake_bin / "security",
+        """#!/usr/bin/env python3
+import os
+from pathlib import Path
+import sys
+import time
+
+if sys.argv[1] == 'unlock-keychain':
+    sys.exit(0)
+assert sys.argv[1] == 'add-generic-password'
+marker = Path(os.environ['FAKE_ACTIVE_WRITER'])
+try:
+    fd = os.open(marker, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+except FileExistsError:
+    print('security: The specified item already exists in the keychain.', file=sys.stderr)
+    sys.exit(45)
+try:
+    time.sleep(0.08)
+    value = sys.argv[sys.argv.index('-w') + 1]
+    if value == 'synthetic-fail':
+        sys.exit(7)
+    Path(os.environ['FAKE_STORED_VALUE']).write_text(value)
+finally:
+    os.close(fd)
+    marker.unlink()
+""",
+    )
+    env = _base_env(fake_bin, tmp_path)
+    env['FAKE_ACTIVE_WRITER'] = str(tmp_path / 'active')
+    env['FAKE_STORED_VALUE'] = str(tmp_path / 'stored')
+    values = ['synthetic-fail' if failing_writer else 'synthetic-0']
+    values += [f'synthetic-{i}' for i in range(1, 8)]
+    processes = []
+    for value in values:
+        proc = subprocess.Popen(
+            ['bash', str(SECRETS_SCRIPT), 'set', 'weekly-session-data'],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=env, text=True,
+        )
+        proc.stdin.write(value)
+        proc.stdin.close()
+        proc.stdin = None
+        processes.append(proc)
+    for value, proc in zip(values, processes):
+        stdout, stderr = proc.communicate(timeout=20)
+        assert proc.returncode == (7 if value == 'synthetic-fail' else 0), stderr
+        assert stdout == ''
+        assert value not in stderr
+    assert (tmp_path / 'stored').read_text() in [v for v in values if v != 'synthetic-fail']
+    assert not (tmp_path / 'active').exists()
+    if failing_writer:
+        log = Path(env['HOME']) / '.local/share/cli-tools/secrets.log'
+        assert 'keychain command failed status=7' in log.read_text()
+        after = subprocess.run(
+            ['bash', str(SECRETS_SCRIPT), 'set', 'weekly-session-data'],
+            input='synthetic-after-failure', capture_output=True, text=True,
+            env=env, timeout=10,
+        )
+        assert after.returncode == 0, after.stderr
+        assert (tmp_path / 'stored').read_text() == 'synthetic-after-failure'
