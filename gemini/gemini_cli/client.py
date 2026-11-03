@@ -399,7 +399,7 @@ class GeminiClient:
     def generate_image(
         self,
         prompt: str,
-        model: str = "gemini-3-pro-image-preview",
+        model: str = "gemini-3-pro-image",
         aspect_ratio: str = "16:9",
         image_size: str = "2K",
         use_search: bool = False,
@@ -410,13 +410,12 @@ class GeminiClient:
 
         Args:
             prompt: Text prompt describing the image to generate
-            model: Model to use (default: gemini-3-pro-image-preview aka Nano Banana Pro)
+            model: Model to use (default: gemini-3-pro-image aka Nano Banana Pro)
             aspect_ratio: Aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4)
             image_size: Output size (1K, 2K, 4K)
             use_search: Enable Google Search grounding for real-time data
             input_images: Optional list of reference image paths for image editing /
-                multi-image composition. Only supported by Nano Banana models
-                (gemini-3-pro-image-preview, gemini-2.5-flash-image).
+                multi-image composition. Supported by the Nano Banana models.
 
         Returns:
             Dict with 'image_data' (base64), 'mime_type', and 'text' (if any)
