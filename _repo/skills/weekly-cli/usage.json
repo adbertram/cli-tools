@@ -1,8 +1,8 @@
 {
   "tool": "weekly",
   "description": "CLI interface for weekly",
-  "discovered_at": "2026-11-03T16:51:37Z",
-  "total_commands": 34,
+  "discovered_at": "2026-11-03T17:27:26Z",
+  "total_commands": 37,
   "global_options": [],
   "commands": {
     "auth": {
@@ -705,6 +705,161 @@
         },
         "list": {
           "help": "List saved categories available for manual spending.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "funds": {
+      "help": "Read funds and create future weekly savings plans",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Create a future weekly fund without retroactive contribution credits.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--contribution",
+              "type": "TEXT",
+              "required": true,
+              "help": "Weekly contribution amount"
+            },
+            {
+              "name": "--starting-balance",
+              "type": "TEXT",
+              "required": true,
+              "help": "Money already set aside; use zero to start fresh"
+            },
+            {
+              "name": "--emoji",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--color",
+              "type": "TEXT",
+              "required": true,
+              "help": "Fund background: gray"
+            },
+            {
+              "name": "--goal",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional target balance"
+            },
+            {
+              "name": "--replace-bill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Archive a paid expense bill as this fund replaces its allocation"
+            },
+            {
+              "name": "--settled-transaction",
+              "type": "TEXT",
+              "required": false,
+              "help": "Unreviewed bank expense paid against the replaced bill"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "get": {
+          "help": "Get saved fund configuration.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "List fund configuration; balances depend on the contribution and spending ledger.",
           "arguments": [],
           "options": [
             {

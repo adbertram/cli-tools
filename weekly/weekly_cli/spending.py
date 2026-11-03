@@ -46,10 +46,10 @@ def check_response(response):
     return result
 
 
-def get_document(http, url, headers, uid, transaction_id):
+def get_document(http, url, headers, uid, transaction_id, collection='transactions'):
     response = http.get(url + '/' + quote(transaction_id, safe=''), headers=headers, timeout=30, allow_redirects=False)
     doc = check_response(response)
-    prefix = USER_DOCUMENT_ROOT + uid + '/transactions/'
+    prefix = USER_DOCUMENT_ROOT + uid + '/' + collection + '/'
     if doc.get('name') != prefix + transaction_id or not isinstance(doc.get('fields'), dict) or not doc.get('updateTime'):
         raise ClientError('Weekly spending response has an unexpected identity or shape')
     return doc

@@ -73,3 +73,19 @@ All 19 app frequencies, 15 bill categories and 7 emoji backgrounds are supported
 ## Ignoring bank transactions
 
 `weekly transactions ignore TRANSACTION_ID --dry-run` previews ignoring an unreviewed bank transaction. Omit `--dry-run` to apply it. The command changes only the native target to `IGNORED`, preserves the bank link and every other field, uses the saved server version to prevent overwriting concurrent edits, and verifies a fresh read. Already ignored entries are a no-op. Categorized, recurring, fund, manual and internal transfer records are rejected. If the outcome is uncertain, run `weekly transactions ignore TRANSACTION_ID --dry-run` to read its current state before retrying. Export list/get visibility follows the captured ignored-transaction export setting.
+
+## Future weekly funds
+
+```bash
+weekly funds list
+weekly funds get FUND_ID
+weekly funds create --name Maintenance --contribution 25.00 --starting-balance 0 --emoji '🔧' --color gray --goal 300 --dry-run
+```
+
+`funds create` creates a future weekly savings plan. Supply the weekly contribution, money already set aside as the starting balance, name, emoji and background color (`gray`). An optional `--goal` sets a target balance. The command does not create retroactive or prorated contribution credits, or change current-week records. Weekly's normal new-week cycle creates future contribution transactions. A fund's available balance depends on its starting balance and transaction ledger; `funds list/get` return configuration, not a calculated balance. This command supports weekly contributions and does not reproduce the app's midweek contribution adjustments.
+
+To replace an expense bill that has just been paid, provide both `--replace-bill BILL_ID` and `--settled-transaction TRANSACTION_ID`, with `--starting-balance 0`. The unreviewed bank expense is linked to the old bill as a recurring payment, the old bill is archived, and the new fund is created in one atomic commit. The bill's latest payment date and merchant are recorded; its existing scheduling fields remain unchanged while archived. Every other transaction field, including its original amount and bank link, is preserved. This avoids two active budget allocations and starts the new fund without inventing opening savings. It does not charge the settled expense to the new fund.
+
+`--dry-run` reads current records and previews the exact changes. Duplicate fund names are rejected. Version checks prevent overwriting concurrent edits. If creation reports an uncertain outcome, read the reported fund ID and selected bill/transaction before retrying. Existing funds, weeks and unrelated transactions are not changed.
+
+The future-week behavior follows [Weekly's fund contribution documentation](https://weeklybudgeting.com/knowledge-base/funds-and-savings/fund-contributions).

@@ -18,6 +18,7 @@ from .transactions import list_transactions
 from .firestore import list_documents, user_preferences, current_week, create_category
 from .spending import create, update, split
 from .ignoring import ignore
+from .funds import create as create_fund
 from .weeks import create as create_week, delete as delete_week
 from .bills import create as create_bill, INTERVALS, CATEGORIES, EMOJI_COLORS
 
@@ -210,6 +211,58 @@ def budget_current(table: bool = typer.Option(False, '--table', '-t'), profile: 
 
 
 app.add_typer(budget, name='budget')
+funds = typer.Typer(help='Read funds and create future weekly savings plans', no_args_is_help=True)
+
+
+@funds.command('create')
+@command
+def funds_create(
+    name: str = typer.Option(..., '--name'),
+    contribution: str = typer.Option(..., '--contribution', help='Weekly contribution amount'),
+    starting_balance: str = typer.Option(..., '--starting-balance', help='Money already set aside; use zero to start fresh'),
+    emoji: str = typer.Option(..., '--emoji'),
+    color: str = typer.Option(..., '--color', help='Fund background: gray'),
+    goal: Optional[str] = typer.Option(None, '--goal', help='Optional target balance'),
+    replace_bill: Optional[str] = typer.Option(None, '--replace-bill', help='Archive a paid expense bill as this fund replaces its allocation'),
+    settled_transaction: Optional[str] = typer.Option(None, '--settled-transaction', help='Unreviewed bank expense paid against the replaced bill'),
+    dry_run: bool = typer.Option(False, '--dry-run'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile'),
+):
+    """Create a future weekly fund without retroactive contribution credits."""
+    print_output(create_fund(get_config(profile), name, contribution, starting_balance,
+                             emoji, color, goal, replace_bill, settled_transaction, dry_run), table=table)
+
+
+@funds.command('list')
+@command
+def funds_list(
+    limit: Optional[int] = typer.Option(None, '--limit', '-l', min=1),
+    filter: Optional[List[str]] = typer.Option(None, '--filter', '-f', help='Filter: field:op:value (e.g., name:eq:value)'),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile'),
+):
+    """List fund configuration; balances depend on the contribution and spending ledger."""
+    rows = list_documents(get_config(profile), 'funds', limit=limit, filters=filter)
+    render_rows(rows, properties, table, ['id', 'name', 'contributionAmount', 'contributionInterval'])
+
+
+@funds.command('get')
+@command
+def funds_get(
+    item_id: str = typer.Argument(...),
+    properties: Optional[str] = typer.Option(None, '--properties', '-p'),
+    table: bool = typer.Option(False, '--table', '-t'),
+    profile: Optional[str] = typer.Option(None, '--profile'),
+):
+    """Get saved fund configuration."""
+    collection_get('funds', item_id, properties, table, profile)
+
+
+app.add_typer(funds, name='funds')
+
+
 bills = typer.Typer(help='Read and create recurring bills and income', no_args_is_help=True)
 
 

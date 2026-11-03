@@ -65,12 +65,16 @@ weekly <command-group> <action> [arguments] [options]
 | Find one transaction in the selected export range | `weekly transactions get <TRANSACTION_ID>` |
 | List transactions in the selected export range | `weekly transactions list` |
 | List the current-week review queue | `weekly transactions list --unreviewed` |
+| List fund configuration | `weekly funds list` |
+| Read a fund | `weekly funds get <FUND_ID>` |
+| Preview a future weekly fund | `weekly funds create --name Maintenance --contribution 25 --starting-balance 0 --emoji '🔧' --color gray --dry-run` |
 | Ignore an unreviewed bank transaction | `weekly transactions ignore <TRANSACTION_ID> --dry-run` (omit `--dry-run` to apply) |
 | Split an eligible 10.00 bank-linked expense | `weekly transactions split <TRANSACTION_ID> --part '6.00:Groceries' --part '4.00:Other'` |
 | Update a safe-to-spend category, or a manual entry amount and title | `weekly transactions update <TRANSACTION_ID>` |
 </quick_start>
 
 <service_boundaries>
+- `funds create` creates a weekly fund configuration without retroactive/current-week contribution credits; Weekly handles future contributions when starting new weeks. Supply name, contribution, starting balance, emoji and gray background; goal is optional. List/get return configuration, not calculated available balances. To replace a paid expense bill, pair `--replace-bill` with `--settled-transaction` and zero starting balance: one atomic commit creates the fund, archives the bill (recording latest payment date/title while preserving its schedule), and links the unreviewed bank expense as RECURRING. It preserves all other fields and does not charge the new fund for the old payment. Preview with `--dry-run`; inspect reported IDs before retrying uncertain outcomes. This supports weekly contributions and does not reproduce native midweek proration.
 - `transactions ignore` changes an unreviewed bank-linked transaction target from INITIAL to IGNORED, preserving every other field. `--dry-run` reads and previews without writing. Already ignored entries are a no-op. Other transaction targets, manual entries and internal transfer records are rejected. It checks the server update-time precondition and verifies a fresh read; after an uncertain outcome, use the same command with `--dry-run` to reconcile before retrying. Export visibility follows the captured ignored-transaction export setting.
 - `bills create` supports all app frequencies, categories and emoji backgrounds. Supply an explicit title, positive exact-cent amount, interval, category, emoji and emoji color. Kind defaults to expense; income also uses positive amounts, and kind is independent of category. `--next-date YYYY-MM-DD` sets the next transaction date; `--hide-from-reports` and `--archived` are optional. Archived items do not affect the weekly spending limit. `--dry-run` validates locally without contacting the account. Creation writes only the recurring item; reconcile a fresh bills list before retrying an uncertain outcome. `bimonthly` means twice a month; `two_months` means every two months; `uncategorized` means Other.
 
@@ -97,6 +101,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 <principle name="Command Groups">
 - **auth** -- Manage weekly authentication (subcommands: import-capture, import-export, login, logout, profiles, refresh, status, test)
 - **balances** -- Read linked account balances (subcommands: get, list)
+- **funds** -- Read configuration and create future weekly funds (subcommands: create, get, list)
 - **bills** -- Read and create recurring bills and income (subcommands: create, get, list)
 - **budget** -- Read Weekly budget records (subcommands: current)
 - **weeks** -- Read/delete saved weeks and create completed historical weeks (subcommands: create, delete, get, list)
