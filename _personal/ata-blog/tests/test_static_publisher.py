@@ -369,6 +369,52 @@ def test_preview_status_deploys_without_notion_write_and_restores_corpus(publish
     assert client._find_static_post("journaled-static-publisher") is None
 
 
+def test_preview_sigterm_restores_corpus_before_exit(publisher):
+    # A harness timeout sends SIGTERM mid-build. The staged post must not be
+    # stranded, or the retry fails with "Static post with slug ... already exists".
+    import os
+    import signal
+
+    client, article, _markdown, _image, _manifest, counters, _token = publisher
+    article["Status"] = "Ready to Publish"
+    prior_corpus_sha256 = client_module._static_corpus_sha256()
+    original_build = client._run_static_build
+    calls = []
+
+    def build_then_sigterm(release_ref, corpus_sha256):
+        calls.append(corpus_sha256)
+        if len(calls) == 1:
+            assert client._find_static_post("journaled-static-publisher") is not None
+            os.kill(os.getpid(), signal.SIGTERM)
+        return original_build(release_ref, corpus_sha256)
+
+    client._run_static_build = build_then_sigterm
+    previous_handler = signal.getsignal(signal.SIGTERM)
+
+    with pytest.raises(ClientError, match="interrupted by SIGTERM"):
+        client.publish_article(
+            PAGE_ID,
+            status="preview",
+            check_duplicates=True,
+            featured_image="ignored.png",
+        )
+
+    assert signal.getsignal(signal.SIGTERM) == previous_handler
+    assert counters["deploy"] == 0
+    assert client._find_static_post("journaled-static-publisher") is None
+    assert client_module._static_corpus_sha256() == prior_corpus_sha256
+
+    # The retry is not blocked by a leftover post file.
+    client._run_static_build = original_build
+    result = client.publish_article(
+        PAGE_ID,
+        status="preview",
+        check_duplicates=True,
+        featured_image="ignored.png",
+    )
+    assert result["corpus_restored"] is True
+
+
 def test_preview_status_cannot_be_combined_with_scheduling(publisher):
     client, article, _markdown, _image, _manifest, counters, _token = publisher
     article["Status"] = "Ready to Publish"

@@ -5,7 +5,9 @@ import json
 import mimetypes
 import os
 import re
+import signal
 import subprocess
+import threading
 import tempfile
 import time
 import uuid
@@ -59,6 +61,31 @@ SCHEDULED_FEATURED_IMAGE_KEY_PREFIX = "wp-content/uploads/publisher/scheduled/"
 STATIC_SITE_ORIGIN = "https://adamtheautomator.com"
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 EMPTY_UUID = "00000000-0000-4000-8000-000000000000"
+
+
+@contextmanager
+def _sigterm_raises(message: str):
+    """Turn the first SIGTERM into a ClientError so `finally` cleanup runs.
+
+    A harness that kills a long foreground command sends SIGTERM; Python's
+    default handler exits without unwinding, which strands a staged corpus
+    file. The handler restores the previous disposition before raising, so
+    a second SIGTERM still terminates immediately.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def handler(_signum, _frame):
+        signal.signal(signal.SIGTERM, previous)
+        raise ClientError(message)
+
+    signal.signal(signal.SIGTERM, handler)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 def _canonical_json_bytes(value: Any) -> bytes:
@@ -4008,7 +4035,9 @@ class AtaBlogClient:
             deployment: Optional[Dict[str, Any]] = None
             current_stage = "build-lock acquisition"
 
-            with self._static_build_lock(paths):
+            with self._static_build_lock(paths), _sigterm_raises(
+                "Static preview interrupted by SIGTERM"
+            ):
                 try:
                     current_stage = "staging"
                     stage = self._stage_static_article(
