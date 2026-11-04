@@ -229,8 +229,8 @@ slack canvas list C1234567890
 
 # Get canvas content
 slack canvas get F1234567890
-slack canvas get F1234567890 --section-types h1,h2
-slack canvas get F1234567890 --contains "Project"
+slack canvas get F1234567890 --table
+slack canvas get F1234567890 --html
 ```
 
 ### Bookmarks
