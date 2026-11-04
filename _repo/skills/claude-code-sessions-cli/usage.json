@@ -1,7 +1,7 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-10-29T15:56:33Z",
+  "discovered_at": "2026-11-04T19:21:26Z",
   "total_commands": 34,
   "global_options": [
     {
@@ -410,9 +410,15 @@
       ],
       "commands": {
         "accounts": {
-          "help": "List account and organization IDs that have saved Desktop sessions.",
+          "help": "List account and organization IDs that have saved Desktop sessions in every Desktop app store.",
           "arguments": [],
           "options": [
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Desktop app data directory name, e.g. Claude or Claude-3p"
+            },
             {
               "name": "--table",
               "type": "bool",
@@ -452,7 +458,7 @@
           ]
         },
         "get": {
-          "help": "Get a Desktop session record for a specific account and organization.",
+          "help": "Get a Desktop session record for a specific store, account, and organization.",
           "arguments": [
             {
               "name": "session_id",
@@ -462,6 +468,12 @@
             }
           ],
           "options": [
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Desktop app data directory name, e.g. Claude or Claude-3p"
+            },
             {
               "name": "--account",
               "type": "TEXT",
@@ -491,7 +503,7 @@
           ]
         },
         "import": {
-          "help": "Copy a session and linked Desktop records into another local account.",
+          "help": "Copy a session and linked Desktop records into another local account or Desktop app store.",
           "arguments": [
             {
               "name": "title",
@@ -526,6 +538,18 @@
               "help": ""
             },
             {
+              "name": "--source-store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Source Desktop app data directory name, e.g. Claude-3p"
+            },
+            {
+              "name": "--destination-store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Destination Desktop app data directory name, e.g. Claude"
+            },
+            {
               "name": "--session-id",
               "type": "TEXT",
               "required": false,
@@ -554,9 +578,15 @@
           ]
         },
         "list": {
-          "help": "List Desktop records with their account and organization.",
+          "help": "List Desktop records with their store, account, and organization.",
           "arguments": [],
           "options": [
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Desktop app data directory name, e.g. Claude or Claude-3p"
+            },
             {
               "name": "--account",
               "type": "TEXT",
