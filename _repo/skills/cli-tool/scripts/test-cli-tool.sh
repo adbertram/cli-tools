@@ -451,13 +451,18 @@ print(json.loads(os.environ["PRECHECK_JSON"])["message"])
 PY
 )"
 
-PYTEST_ARGS=(--cli-name "$CLI_NAME" --tb=short --junitxml="$JUNIT")
+# Value options use the --opt=value form. pytest parses the command line before
+# the harness conftest registers these options; a space-separated value of an
+# unregistered option is treated as a positional path, so a value naming a file
+# inside the target CLI's checkout (--cli-executable) pulled that checkout's
+# conftest.py in as the top-level "conftest" module.
+PYTEST_ARGS=(--cli-name="$CLI_NAME" --tb=short --junitxml="$JUNIT")
 if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then
-    PYTEST_ARGS+=(--cli-executable "$CLI_EXECUTABLE")
+    PYTEST_ARGS+=(--cli-executable="$CLI_EXECUTABLE")
 fi
 PYTEST_ARGS+=(-k "not test_auth_status_schema")
-[[ -n "$CLI_PROFILE" ]] && PYTEST_ARGS+=(--profile "$CLI_PROFILE")
-[[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command "$COMMAND")
+[[ -n "$CLI_PROFILE" ]] && PYTEST_ARGS+=(--profile="$CLI_PROFILE")
+[[ -n "$COMMAND" ]] && PYTEST_ARGS+=(--command="$COMMAND")
 $VERBOSE && PYTEST_ARGS+=(-v) || PYTEST_ARGS+=(-q)
 
 uv run python -m pytest "$SKILL_DIR/tests" "${PYTEST_ARGS[@]}" 2>&1 | tee -a "$RAW_OUTPUT_FILE" >&2

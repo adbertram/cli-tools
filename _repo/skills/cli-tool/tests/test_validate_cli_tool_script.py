@@ -161,8 +161,8 @@ def test_test_script_supports_worktree_executable_override():
     assert "--cli-executable <path>" in script_text
     assert '--cli-executable) CLI_EXECUTABLE="$2"; shift 2 ;;' in script_text
     assert "test_cli_executable_override" in script_text
-    assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --tb=short --junitxml="$JUNIT")' in script_text
-    assert 'if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then\n    PYTEST_ARGS+=(--cli-executable "$CLI_EXECUTABLE")\nfi' in script_text
+    assert 'PYTEST_ARGS=(--cli-name="$CLI_NAME" --tb=short --junitxml="$JUNIT")' in script_text
+    assert 'if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then\n    PYTEST_ARGS+=(--cli-executable="$CLI_EXECUTABLE")\nfi' in script_text
     assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --cli-executable "$CLI_EXECUTABLE"' not in script_text
     assert 'uv run python -m pytest "$SKILL_DIR/tests" "${PYTEST_ARGS[@]}"' in script_text
 
