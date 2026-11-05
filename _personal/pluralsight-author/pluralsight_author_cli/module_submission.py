@@ -111,6 +111,15 @@ class ModuleSubmission:
             raise ClientError(f'Pluralsight API {method} failed (HTTP {response.status_code}).')
         return response.json() if response.content else None
 
+    def read_clips(self, module):
+        rows = self.request('GET', CONTENT + f'v1/clip/module/{module["guid"]}')
+        for row in rows:
+            canonical = self.request('GET', CONTENT + f'v1/clip/{row["guid"]}')
+            if canonical.get('guid') != row['guid'] or not isinstance(canonical.get('title'), str):
+                raise ClientError('Authoritative Pluralsight clip identity/title is missing.')
+            row['title'] = canonical['title']
+        return rows
+
     def inspect(self, course_id, module_order):
         self.connect(course_id)
         course = self.request('GET', API + f'course/{int(course_id)}')
@@ -124,15 +133,45 @@ class ModuleSubmission:
             raise ClientError('Module order must identify exactly one Pluralsight module.')
         module = matches[0]
         return {'course_id': int(course_id), 'course_title': course['title'], 'module': module,
-                'clips': self.request('GET', API + f'clip/module/{module["id"]}'),
+                'clips': self.read_clips(module),
                 'assets': self.request('GET', ASSETS + f'module-assets/{module["id"]}')}
 
     def refresh(self, state):
         mid = state['module']['id']
         state['module'] = self.request('GET', API + f'module/{mid}')
-        state['clips'] = self.request('GET', API + f'clip/module/{mid}')
+        state['clips'] = self.read_clips(state['module'])
         state['assets'] = self.request('GET', ASSETS + f'module-assets/{mid}')
         return state
+
+    def displayed_clips(self, course_id, module_id, clip_ids):
+        page = self.browser.get_page(f'https://app.pluralsight.com/author-tools/details/{course_id}/modules')
+        page.wait_for_selector(f'#anchor_{module_id}', state='attached', timeout=15000)
+        for clip_id in clip_ids:
+            page.wait_for_selector(f'#anchor_{clip_id}', state='attached', timeout=15000)
+        return page.evaluate("""(moduleId) => {
+          const module=document.getElementById('anchor_'+moduleId)?.closest('ps-course-module');
+          if(!module)throw Error('Expected the requested displayed module');
+          return Array.from(module.querySelectorAll('tbody tr'))
+            .filter(r=>r.querySelector('span[id^="anchor_"]')).map(r=>({
+              id:Number(r.querySelector('span[id^="anchor_"]').id.replace('anchor_','')),
+              title:r.querySelector('td:nth-child(2) > span > span')?.textContent.trim(),
+              index:Number(r.querySelector('td:first-child').textContent.trim())-1}));
+        }""", module_id)
+
+    def verify_names(self, state, manifest):
+        self.refresh(state)
+        rows = sorted(state['clips'], key=lambda c: c['index'])
+        expected = [c['title'] for c in manifest['clips']]
+        if [c['title'] for c in rows] != expected or [c['index'] for c in rows] != list(range(len(expected))):
+            raise ClientError('Authoritative Pluralsight module clip titles/order do not match the submission.')
+        for row in rows:
+            canonical = self.request('GET', CONTENT + f'v1/clip/{row["guid"]}')
+            if canonical.get('title') != row['title']:
+                raise ClientError(f'Authoritative Pluralsight clip {row["guid"]} title does not match the submission.')
+        displayed = self.displayed_clips(state['course_id'], state['module']['id'], [row['id'] for row in rows])
+        if displayed != [{k: row[k] for k in ('id', 'title', 'index')} for row in rows]:
+            raise ClientError('Displayed Pluralsight module clip names/order do not match the authoritative submission.')
+        return rows, [row['title'] for row in displayed]
 
     def remote_matches(self, url, path, *, pending=False):
         # Compare exact uploaded bytes, including manual uploads and same-name revisions.
@@ -259,26 +298,32 @@ class ModuleSubmission:
                 if len(matches) != 1 or not self.remote_matches(matches[0]['downloadLink'], clip['path']):
                     raise ClientError('Uploaded clip content is not ready in Pluralsight readback.')
                 existing = matches[0]
-            if existing['title'] != clip['title'] or existing['index'] != index:
-                if submitted:
-                    raise ClientError('Submitted module clip title/order differs from manifest.')
-                changed = dict(existing, title=clip['title'], index=index, moduleId=module['id'])
-                self.request('POST', API + f'clip/{existing["id"]}', json=changed)
         for _ in range(120):
             self.refresh(state)
             ready_decks = [a for a in state['assets'] if a['type'] == 'slides' and a['status'] == 'done']
             if len(ready_decks) == 1 and self.remote_matches(ASSETS + ready_decks[0]['downloadRoute'].lstrip('/'), deck, pending=not submitted):
                 break
             time.sleep(2)
+        # Rename the complete uploaded set through the same authoritative API as the UI.
+        ordered = []
+        for clip in clips:
+            matches = [c for c in state['clips'] if source_name_matches(c['videoFile']['originalVideoFileName'], clip['path']) or c['title'] == clip['title']]
+            if len(matches) != 1:
+                raise ClientError('Cannot identify the complete module clip set before renaming.')
+            ordered.append(matches[0])
+        if not submitted:
+            for clip, row in zip(clips, ordered):
+                if row['title'] != clip['title']:
+                    self.request('PUT', CONTENT + f'v1/clip/{row["guid"]}', json={'title': clip['title']})
+            if [row['index'] for row in ordered] != list(range(len(clips))):
+                self.request('PUT', API + f'clip/reorder/{module["id"]}',
+                             json={'newOrder': {row['guid']: i for i, row in enumerate(ordered)}})
+        verified_rows, display_titles = self.verify_names(state, manifest)
         # All uploaded data must be complete and byte-identical before external submission.
-        receipts = []
         for index, clip in enumerate(clips):
             matches = [c for c in state['clips'] if c['title'] == clip['title'] and c['index'] == index]
             if len(matches) != 1 or not self.remote_matches(matches[0]['downloadLink'], clip['path']):
                 raise ClientError('Pluralsight clip title/order/content verification failed.')
-            c = matches[0]
-            receipts.append({'record_id': clip['record_id'], 'id': c['id'], 'guid': c['guid'], 'title': c['title'],
-                'index': c['index'], 'original_file_name': c['videoFile']['originalVideoFileName']})
         decks = [a for a in state['assets'] if a['type'] == 'slides']
         if len(decks) != 1 or decks[0]['status'] != 'done' or not self.remote_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck):
             raise ClientError('Pluralsight deck content verification failed.')
@@ -292,6 +337,12 @@ class ModuleSubmission:
                 time.sleep(2)
             else:
                 raise ClientError('Pluralsight has not confirmed submitted status; retry will inspect existing uploads.')
+        # Submission can trigger projection updates. Never return cached pre-submit names.
+        verified_rows, display_titles = self.verify_names(state, manifest)
+        receipts = [{'record_id': clip['record_id'], 'id': row['id'], 'guid': row['guid'],
+                     'title': row['title'], 'index': row['index'],
+                     'original_file_name': row['videoFile']['originalVideoFileName']}
+                    for clip, row in zip(clips, verified_rows)]
         return {'ok': True, 'course_id': course_id, 'course_title': state['course_title'], 'module_order': state['module']['index'], 'module_id': module['id'], 'module_guid': module['guid'],
             'module_title': module['title'], 'status': state['module']['status'], 'already_submitted': submitted,
-            'deck': {k: decks[0][k] for k in ('id', 'fileName', 'type', 'status')}, 'clips': receipts}
+            'display_titles': display_titles, 'deck': {k: decks[0][k] for k in ('id', 'fileName', 'type', 'status')}, 'clips': receipts}

@@ -21,6 +21,9 @@ class FakeSubmission(ModuleSubmission):
     def __init__(self, state):
         self.state = state
         self.calls = []
+        self.canonical = {c['guid']: c['title'] for c in state['clips']}
+    def displayed_clips(self, course_id, module_id, clip_ids):
+        return [{'id': c['id'], 'title': self.canonical[c['guid']], 'index': c['index']} for c in sorted(self.state['clips'], key=lambda c:c['index'])]
     def inspect(self, course_id, module_order):
         return self.state
     def resolve_course(self, title):
@@ -30,6 +33,8 @@ class FakeSubmission(ModuleSubmission):
     def remote_matches(self, url, path, **kwargs):
         return self.matches
     def request(self, *args, **kwargs):
+        if args[0] == 'GET':
+            return {'title': self.canonical[args[1].rsplit('/', 1)[-1]]}
         self.calls.append(args)
         raise AssertionError('No mutation should occur')
 
@@ -40,7 +45,7 @@ def submitted(tmp_path):
     clip = tmp_path / 'clip.edited.mp4'; clip.write_bytes(b'video')
     manifest = {'course_title': 'Course', 'module_order': 1, 'module_title': 'Module',
                 'deck_path': str(deck), 'clips': [{'record_id': 'rec1', 'title': 'Clip', 'path': str(clip)}]}
-    state = {'course_title': 'Course', 'module': {'id': 1, 'guid': 'm1', 'index': 1, 'title': 'Module', 'status': 'submitted'},
+    state = {'course_id': 123, 'course_title': 'Course', 'module': {'id': 1, 'guid': 'm1', 'index': 1, 'title': 'Module', 'status': 'submitted'},
              'clips': [{'id': 2, 'guid': 'c1', 'index': 0, 'title': 'Clip', 'downloadLink': 'https://object.example/video',
                         'videoFile': {'originalVideoFileName': 'uuid_clip.edited.mp4'}}],
              'assets': [{'id': 'd1', 'type': 'slides', 'status': 'done', 'downloadRoute': '/module-assets/download/d1', 'fileName': 'deck.pptx'}]}
@@ -97,12 +102,15 @@ def test_external_download_never_gets_authorization(tmp_path, monkeypatch):
 
 class UpdatingSubmission(FakeSubmission):
     def request(self, method, url, **kwargs):
+        if method == 'GET':
+            return {'title': self.canonical[url.rsplit('/', 1)[-1]]}
         self.calls.append((method, url, kwargs))
         if '/module-assets' in url:
             self.state['assets'] = [{'id': 'd1', 'type': 'slides', 'status': 'done',
                                     'downloadRoute': '/module-assets/download/d1', 'fileName': 'deck.pptx'}]
         elif '/clip/' in url:
             self.state['clips'][0].update(kwargs['json'])
+            self.canonical[self.state['clips'][0]['guid']] = kwargs['json']['title']
         elif '/submit-move-to-qa' in url or '/updates-submit-move-to-qa' in url:
             self.state['module']['status'] = 'updates_submitted' if 'updates-submit' in url else 'submitted'
         return {'id': 'd1'}
@@ -113,6 +121,7 @@ class UpdatingSubmission(FakeSubmission):
         self.video_uploaded = True
         self.state['clips'] = [{'id': 2, 'guid': 'c1', 'index': index, 'title': Path(path).name,
              'downloadLink': 'https://object.example/video', 'videoFile': {'originalVideoFileName': 'uuid_' + Path(path).name}}]
+        self.canonical['c1'] = Path(path).name
         return 'c1'
     def refresh(self, state):
         if state['assets']:
@@ -143,9 +152,9 @@ def test_new_and_revised_submission_upload_then_rename_then_submit(submitted, st
     assert result['ok'] and not result['already_submitted']
     assert transport.calls[0][0] == 'POST' and '/module-assets' in transport.calls[0][1]
     assert ('upload_video', existing) in transport.calls
-    rename = next(c for c in transport.calls if c[0] == 'POST' and '/clip/' in c[1])
+    rename = next(c for c in transport.calls if c[0] == 'PUT' and '/v1/clip/' in c[1])
     assert rename[2]['json']['title'] == 'Clip'
-    assert rename[2]['json']['index'] == 0
+    assert rename[2]['json'] == {'title': 'Clip'}
     assert transport.calls[-1][1].endswith('/' + action)
 
 
@@ -256,3 +265,121 @@ def test_existing_other_deck_is_promoted_without_duplicate_upload(submitted):
     assert method == 'PUT' and url.endswith('/module-assets/d1')
     assert kwargs == {'params': {'source': 'author-tools'}, 'json': {'type': 'slides'}}
     assert not any(c[0] == 'upload_video' for c in transport.calls)
+
+
+def test_legacy_correct_title_does_not_allow_submit_when_authoritative_title_differs(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'in_progress'
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = True; transport.video_uploaded = True
+    # Independently stored authoritative service still has the generated title,
+    # even though the legacy/module projection appears correctly renamed.
+    transport.canonical['c1'] = 'Clip_video_generated.edited'
+    with pytest.raises(ClientError, match='Authoritative Pluralsight clip c1 title'):
+        transport.submit(manifest)
+    assert not any('/submit-move-to-qa' in c[1] for c in transport.calls)
+
+
+def test_actual_display_mismatch_blocks_irreversible_submit(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'in_progress'
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = True; transport.video_uploaded = True
+    transport.displayed_clips = lambda *args: [{'id': 2, 'title': 'Filename generated title', 'index': 0}]
+    with pytest.raises(ClientError, match='Displayed Pluralsight'):
+        transport.submit(manifest)
+    assert not any('/submit-move-to-qa' in c[1] for c in transport.calls)
+
+
+def test_post_submit_authoritative_change_never_returns_cached_success(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'in_progress'
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = True; transport.video_uploaded = True
+    original_request = transport.request
+    def request(method, url, **kwargs):
+        result = original_request(method, url, **kwargs)
+        if '/submit-move-to-qa' in url:
+            transport.canonical['c1'] = 'Generated title after submission'
+        return result
+    transport.request = request
+    with pytest.raises(ClientError, match='Authoritative Pluralsight clip c1 title'):
+        transport.submit(manifest)
+    assert any('/submit-move-to-qa' in c[1] for c in transport.calls)
+
+
+def test_display_extra_or_missing_rows_blocks_submit(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'in_progress'
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = True; transport.video_uploaded = True
+    transport.displayed_clips = lambda *args: []
+    with pytest.raises(ClientError, match='Displayed Pluralsight'):
+        transport.submit(manifest)
+    assert not any('/submit-move-to-qa' in c[1] for c in transport.calls)
+
+
+def test_shared_read_uses_per_guid_authority_over_correct_looking_module_projection():
+    transport = object.__new__(ModuleSubmission)
+    def request(method, url, **kwargs):
+        assert method == 'GET'
+        if '/module/' in url:
+            return [{'guid': 'clip-guid', 'title': 'Expected canonical name', 'index': 0}]
+        return {'guid': 'clip-guid', 'title': 'Actual generated filename title'}
+    transport.request = request
+    rows = transport.read_clips({'guid': 'module-guid'})
+    assert rows[0]['title'] == 'Actual generated filename title'
+
+
+def test_three_clip_final_pass_renames_both_generated_titles_before_submit(submitted, tmp_path):
+    old, manifest = submitted
+    names = ['First canonical title', 'Second canonical title', 'Third canonical title']
+    manifest['clips'] = []
+    old.state['module']['status'] = 'in_progress'
+    old.state['clips'] = []
+    for index, name in enumerate(names):
+        path = tmp_path / f'clip{index}.edited.mp4'; path.write_bytes(b'video')
+        manifest['clips'].append({'record_id': f'rec{index}', 'title': name, 'path': str(path)})
+        old.state['clips'].append({'id': 10 + index, 'guid': f'guid{index}', 'index': index,
+            'title': name if index == 0 else f'Generated filename {index}',
+            'downloadLink': f'https://storage.example/{index}',
+            'videoFile': {'originalVideoFileName': f'uuid_{path.name}'}})
+
+    class ThreeClipService(FakeSubmission):
+        def __init__(self, state):
+            super().__init__(state)
+            self.matches = True
+            self.display_checks = []
+        def refresh(self, state):
+            # This independent store is read through service refreshes, not a
+            # projection that echoes the previous request payload.
+            for row in state['clips']:
+                row['title'] = self.canonical[row['guid']]
+            return state
+        def request(self, method, url, **kwargs):
+            if method == 'GET':
+                guid = url.rsplit('/', 1)[-1]
+                return {'guid': guid, 'title': self.canonical[guid]}
+            self.calls.append((method, url, kwargs))
+            if method == 'PUT' and '/content/api/v1/clip/' in url:
+                self.canonical[url.rsplit('/', 1)[-1]] = kwargs['json']['title']
+            elif method == 'POST' and url.endswith('/submit-move-to-qa'):
+                assert [self.canonical[f'guid{i}'] for i in range(3)] == names
+                assert self.display_checks[-1] == names
+                self.state['module']['status'] = 'submitted'
+            else:
+                raise AssertionError('Unexpected mutation')
+            return {}
+        def displayed_clips(self, course_id, module_id, clip_ids):
+            rows = super().displayed_clips(course_id, module_id, clip_ids)
+            self.display_checks.append([r['title'] for r in rows])
+            return rows
+
+    service = ThreeClipService(old.state)
+    result = service.submit(manifest)
+    renames = [call for call in service.calls if call[0] == 'PUT']
+    assert [(c[1].rsplit('/', 1)[-1], c[2]['json']) for c in renames] == [
+        ('guid1', {'title': names[1]}), ('guid2', {'title': names[2]})]
+    assert result['display_titles'] == names
+    assert [r['title'] for r in result['clips']] == names
+    assert service.display_checks == [names, names]
