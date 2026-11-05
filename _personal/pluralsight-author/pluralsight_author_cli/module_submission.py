@@ -134,7 +134,7 @@ class ModuleSubmission:
         state['assets'] = self.request('GET', ASSETS + f'module-assets/{mid}')
         return state
 
-    def remote_matches(self, url, path):
+    def remote_matches(self, url, path, *, pending=False):
         # Compare exact uploaded bytes, including manual uploads and same-name revisions.
         getter = self.session.get if url.startswith(ASSETS + 'module-assets/') else requests.get
         try:
@@ -142,12 +142,24 @@ class ModuleSubmission:
         except requests.RequestException:
             raise ClientError('Pluralsight asset verification network request failed.') from None
         with response as r:
+            if pending and r.status_code == 404:
+                return None
             if not r.ok:
-                raise ClientError(f'Pluralsight asset verification failed (HTTP {r.status_code}).')
+                from urllib.parse import urlsplit
+                identity = urlsplit(url).path.rsplit('/', 1)[-1]
+                raise ClientError(f'Pluralsight download verification for {identity} failed (HTTP {r.status_code}).')
             h = hashlib.sha256()
             for block in r.iter_content(1024 * 1024):
                 h.update(block)
         return h.hexdigest() == digest(path)
+
+    def existing_matches(self, url, path, *, pending, identity):
+        for _ in range(120):
+            result = self.remote_matches(url, path, pending=pending)
+            if result is not None:
+                return result
+            time.sleep(2)
+        raise ClientError(f'Pluralsight {identity} download is still pending after 240 seconds.')
 
     def upload_video(self, path, module, existing=None, index=0):
         path = Path(path)
@@ -206,24 +218,34 @@ class ModuleSubmission:
         expected = set(titles)
         if any(c['title'] not in expected and not any(source_name_matches(c['videoFile']['originalVideoFileName'], x['path']) for x in clips) for c in state['clips']):
             raise ClientError('Pluralsight module contains clips outside the submission manifest.')
-        decks = [a for a in state['assets'] if a['type'] == 'slides']
+        decks = [a for a in state['assets'] if a['type'] == 'slides' or a['fileName'] == deck.name]
         if len(decks) > 1:
             raise ClientError('Pluralsight module has multiple slide decks; resolve before submission.')
-        deck_ok = bool(decks and decks[0]['status'] == 'done' and self.remote_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck))
+        deck_ok = bool(decks and decks[0]['status'] == 'done' and self.existing_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck, pending=not submitted, identity=f'deck {decks[0]["id"]}'))
+        if deck_ok and decks[0]['type'] != 'slides':
+            if submitted:
+                raise ClientError('Submitted module deck has the wrong asset type.')
+            self.request('PUT', ASSETS + f'module-assets/{decks[0]["id"]}',
+                         params={'source': 'author-tools'}, json={'type': 'slides'})
         if not deck_ok:
             if submitted:
                 raise ClientError('Submitted module deck differs from current bytes; cannot modify during review.')
             url = ASSETS + 'module-assets' + (f'/{decks[0]["id"]}' if decks else '')
             with deck.open('rb') as file:
-                self.request('PUT' if decks else 'POST', url,
+                uploaded_deck = self.request('PUT' if decks else 'POST', url,
                     data={'moduleGuid': module['guid'], 'source': 'author-tools', 'type': 'slides'},
                     files={'uri': (deck.name, file)})
+            if not isinstance(uploaded_deck, dict) or not uploaded_deck.get('id'):
+                raise ClientError('Pluralsight deck upload returned no asset ID.')
+            self.request('PUT', ASSETS + f'module-assets/{uploaded_deck["id"]}',
+                         params={'source': 'author-tools'}, json={'type': 'slides'})
         for index, clip in enumerate(clips):
             matches = [c for c in state['clips'] if c['title'] == clip['title'] or source_name_matches(c['videoFile']['originalVideoFileName'], clip['path'])]
             if len(matches) > 1:
                 raise ClientError('More than one portal clip matches a manifest clip.')
             existing = matches[0] if matches else None
-            same = bool(existing and self.remote_matches(existing['downloadLink'], clip['path']))
+            same = bool(existing and self.existing_matches(existing['downloadLink'], clip['path'],
+                        pending=not submitted, identity=f'clip {existing["guid"]}'))
             if not same:
                 if submitted:
                     raise ClientError('Submitted module video differs from current bytes; cannot modify during review.')
@@ -231,7 +253,7 @@ class ModuleSubmission:
                 for _ in range(120):
                     self.refresh(state)
                     matches = [c for c in state['clips'] if c['guid'] == uploaded_guid and c.get('downloadLink')]
-                    if len(matches) == 1 and self.remote_matches(matches[0]['downloadLink'], clip['path']):
+                    if len(matches) == 1 and self.remote_matches(matches[0]['downloadLink'], clip['path'], pending=True):
                         break
                     time.sleep(2)
                 if len(matches) != 1 or not self.remote_matches(matches[0]['downloadLink'], clip['path']):
@@ -245,7 +267,7 @@ class ModuleSubmission:
         for _ in range(120):
             self.refresh(state)
             ready_decks = [a for a in state['assets'] if a['type'] == 'slides' and a['status'] == 'done']
-            if len(ready_decks) == 1 and self.remote_matches(ASSETS + ready_decks[0]['downloadRoute'].lstrip('/'), deck):
+            if len(ready_decks) == 1 and self.remote_matches(ASSETS + ready_decks[0]['downloadRoute'].lstrip('/'), deck, pending=not submitted):
                 break
             time.sleep(2)
         # All uploaded data must be complete and byte-identical before external submission.

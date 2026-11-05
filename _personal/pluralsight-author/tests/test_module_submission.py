@@ -27,7 +27,7 @@ class FakeSubmission(ModuleSubmission):
         return 123
     def refresh(self, state):
         return state
-    def remote_matches(self, url, path):
+    def remote_matches(self, url, path, **kwargs):
         return self.matches
     def request(self, *args, **kwargs):
         self.calls.append(args)
@@ -105,8 +105,8 @@ class UpdatingSubmission(FakeSubmission):
             self.state['clips'][0].update(kwargs['json'])
         elif '/submit-move-to-qa' in url or '/updates-submit-move-to-qa' in url:
             self.state['module']['status'] = 'updates_submitted' if 'updates-submit' in url else 'submitted'
-        return {}
-    def remote_matches(self, url, path):
+        return {'id': 'd1'}
+    def remote_matches(self, url, path, **kwargs):
         return self.deck_uploaded if str(path).endswith('.pptx') else self.video_uploaded
     def upload_video(self, path, module, existing=None, index=0):
         self.calls.append(('upload_video', existing is not None))
@@ -189,7 +189,7 @@ def test_replacement_waits_for_new_bytes_when_old_link_still_visible(submitted, 
     transport.deck_uploaded = True; transport.video_uploaded = False
     polls = []
     original_matches = transport.remote_matches
-    def matches(url, path):
+    def matches(url, path, **kwargs):
         if str(path).endswith('.mp4') and transport.video_uploaded:
             polls.append(url)
             if len(polls) < 3:
@@ -215,3 +215,44 @@ def test_course_resolve_rejects_ambiguous_title():
     transport.browser = Browser()
     with pytest.raises(ClientError, match='exactly one'):
         transport.resolve_course('Duplicate')
+
+
+def test_known_upload_404_is_pending_but_submitted_404_is_fatal(tmp_path, monkeypatch):
+    path = tmp_path / 'clip.edited.mp4'; path.write_bytes(b'video')
+    class Response:
+        ok = False
+        status_code = 404
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+    monkeypatch.setattr(requests, 'get', lambda *a, **kw: Response())
+    transport = object.__new__(ModuleSubmission)
+    transport.session = requests.Session()
+    assert transport.remote_matches('https://storage.example/video-id', path, pending=True) is None
+    with pytest.raises(ClientError, match='video-id.*HTTP 404'):
+        transport.remote_matches('https://storage.example/video-id', path)
+
+
+def test_partial_existing_download_waits_before_deciding_to_replace(tmp_path, monkeypatch):
+    transport = object.__new__(ModuleSubmission)
+    results = iter([None, None, True])
+    transport.remote_matches = lambda *args, **kwargs: next(results)
+    sleeps = []
+    monkeypatch.setattr('pluralsight_author_cli.module_submission.time.sleep', sleeps.append)
+    assert transport.existing_matches('https://storage.example/file', tmp_path / 'video', pending=True, identity='clip c1')
+    assert sleeps == [2, 2]
+
+
+def test_existing_other_deck_is_promoted_without_duplicate_upload(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'in_progress'
+    old.state['assets'][0]['type'] = 'other'
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = True; transport.video_uploaded = True
+    result = transport.submit(manifest)
+    assert result['ok'] and result['deck']['type'] == 'slides'
+    asset_calls = [c for c in transport.calls if '/module-assets' in c[1]]
+    assert len(asset_calls) == 1
+    method, url, kwargs = asset_calls[0]
+    assert method == 'PUT' and url.endswith('/module-assets/d1')
+    assert kwargs == {'params': {'source': 'author-tools'}, 'json': {'type': 'slides'}}
+    assert not any(c[0] == 'upload_video' for c in transport.calls)
