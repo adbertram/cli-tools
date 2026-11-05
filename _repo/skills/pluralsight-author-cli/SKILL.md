@@ -2,7 +2,7 @@
 name: pluralsight-author-cli
 description: >-
   MANDATORY: Execute pluralsight-author operations using the `pluralsight-author` CLI tool.
-  CLI interface for Pluralsight Author opportunities and Author Kit icons
+  CLI interface for Pluralsight Author opportunities, module submissions, and Author Kit icons
   Triggers: pluralsight-author, pluralsight-author cli, pluralsight author, pluralsight author opportunities, pluralsight opportunities, list pluralsight author opportunities, get pluralsight author opportunity, search pluralsight author opportunities, pluralsight author icons, author kit icons, icon library, pluralsight author auth, pluralsight author cache
 ---
 
@@ -46,6 +46,7 @@ After every `pluralsight-author` command, inspect stdout. If it is JSON with `ty
 </principle>
 
 <principle name="Command Groups">
+- `modules`: Inspect uploaded module assets or submit a manifest containing the approved PowerPoint deck and ordered edited clip videos. Follow the exact adjacent `usage.json` command contract and README manifest schema. Submission verifies uploaded bytes, titles, order, and portal status; an already-submitted module is read-only.
 - `opportunities`: Direct list/get access to the live Pluralsight Author opportunities dataset.
 - `search`: Keyword search over the opportunity dataset.
 - `icons`: Import, search, list, inspect, and download Author Kit PNG assets through profile data. Icon commands do not start Chrome or require browser authentication. `--profile` selects the archive namespace. When the imported archive is absent, icon commands fail fast with an error that names the archive path and the `icons import <archive.zip>` rebuild command; there is no browser fallback.
