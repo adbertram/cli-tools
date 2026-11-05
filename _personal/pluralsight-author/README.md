@@ -150,7 +150,9 @@ Manifest JSON requires `course_title`, `module_order` (one-based), `module_title
 `deck_path` (existing PPTX), and ordered `clips` with `record_id`, `title`, and `path`
 (existing `.edited.mp4`). Optional numeric `course_id` skips title discovery. Without
 it, exactly one in-progress Author Home card must match the course title. Course and
-module titles are confirmed against the portal API before any upload.
+module titles are confirmed against the portal API before any upload. An existing
+slide deck must have the exact local PPTX filename; a mismatch fails before any
+write, even when the bytes match.
 
 The result contains `ok`, `course_id`, `course_title`, `module_id`, `module_guid`,
 `module_title`, `module_order`, `status`, `deck`, `clips`, `display_titles`, and `already_submitted`.

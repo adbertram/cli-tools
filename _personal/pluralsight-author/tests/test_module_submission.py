@@ -383,3 +383,110 @@ def test_three_clip_final_pass_renames_both_generated_titles_before_submit(submi
     assert result['display_titles'] == names
     assert [r['title'] for r in result['clips']] == names
     assert service.display_checks == [names, names]
+
+
+@pytest.mark.parametrize('status', ['in_progress', 'updates_required', 'submitted', 'updates_submitted'])
+def test_equal_bytes_different_deck_filename_rejected_before_any_write(submitted, status):
+    transport, manifest = submitted
+    transport.state['module']['status'] = status
+    transport.state['assets'][0]['fileName'] = 'different.pptx'
+    # Equal bytes must not satisfy CourseCraft's exact filename contract.
+    transport.matches = True
+    with pytest.raises(ClientError, match='slide deck filename differs'):
+        transport.submit(manifest)
+    assert transport.calls == []
+
+
+class ReadinessPage:
+    def __init__(self, course_rows, tokens=('Bearer test',), details_ready=True):
+        self.course_rows = iter(course_rows)
+        self.tokens = iter(tokens)
+        self.details_ready = details_ready
+        self.sleeps = []
+        self.selectors = []
+        self.clicked = False
+    def evaluate(self, script, arg=None):
+        if arg is not None:
+            assert 'props?.title===title' in script
+            return next(self.course_rows)
+        if 'XMLHttpRequest.prototype.setRequestHeader' in script:
+            assert self.selectors
+            self.clicked = True
+            return None
+        assert self.clicked
+        return next(self.tokens)
+    def wait_for_selector(self, selector, **kwargs):
+        self.selectors.append((selector, kwargs))
+        if not self.details_ready:
+            from cli_tools_shared.browser import BrowserHarnessError
+            raise BrowserHarnessError('Details selector timed out')
+    def wait_for_timeout(self, ms):
+        self.sleeps.append(ms)
+
+
+def readiness_transport(page):
+    from types import SimpleNamespace
+    transport = object.__new__(ModuleSubmission)
+    transport.session = requests.Session()
+    transport.browser = SimpleNamespace(
+        get_page=lambda url: page,
+        is_authenticated=lambda: SimpleNamespace(authenticated=True),
+        live_cookies=lambda: [{'name': 'session', 'value': 'test', 'domain': 'example.com'}])
+    return transport
+
+
+def test_ready_course_and_details_have_no_fixed_wait():
+    import time
+    page = ReadinessPage([['/author-tools/details/123/modules']])
+    transport = readiness_transport(page)
+    start = time.perf_counter()
+    assert transport.resolve_course('Course') == 123
+    transport.connect(123)
+    assert time.perf_counter() - start < 1
+    assert page.sleeps == []
+    assert page.selectors == [('a[href="/author-tools/details/123"]', {'state': 'attached', 'timeout': 15000})]
+    assert transport.session.headers['Authorization'] == 'Bearer test'
+    assert transport.session.cookies.get('session') == 'test'
+
+
+def test_delayed_course_and_token_wait_only_until_ready():
+    page = ReadinessPage([[], [], ['/author-tools/details/123/modules']], tokens=[None, None, 'Bearer test'])
+    transport = readiness_transport(page)
+    assert transport.resolve_course('Course') == 123
+    assert page.sleeps == [200, 200]
+    transport.connect(123)
+    assert page.sleeps == [200, 200, 200, 200]
+    assert transport.session.headers['Authorization'] == 'Bearer test'
+
+
+@pytest.mark.parametrize('rows,waits', [([[]] * 76, 75), ([['/wrong/path']], 0)])
+def test_course_missing_or_invalid_path_fails_with_bounded_wait(rows, waits):
+    page = ReadinessPage(rows)
+    with pytest.raises(ClientError, match='exactly one'):
+        readiness_transport(page).resolve_course('Missing')
+    assert page.sleeps == [200] * waits
+
+
+def test_missing_details_does_not_install_capture_or_click():
+    from cli_tools_shared.browser import BrowserHarnessError
+    page = ReadinessPage([], details_ready=False)
+    with pytest.raises(BrowserHarnessError, match='Details selector timed out'):
+        readiness_transport(page).connect(123)
+    assert not page.clicked
+    assert not page.sleeps
+
+
+def test_deck_filename_readback_change_blocks_submit(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'in_progress'
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = True; transport.video_uploaded = True
+    original_refresh = transport.refresh
+    def refresh(state):
+        result = original_refresh(state)
+        state['assets'][0]['fileName'] = 'changed-after-inspect.pptx'
+        return result
+    transport.refresh = refresh
+    with pytest.raises(ClientError, match='deck content verification failed'):
+        transport.submit(manifest)
+    assert not transport.calls

@@ -63,7 +63,8 @@ class ModuleSubmission:
             raise ClientError('Pluralsight Author browser session is not authenticated.')
         self.course_id = int(course_id)
         p = self.browser.get_page(f'https://app.pluralsight.com/author-tools/details/{self.course_id}/modules')
-        p.wait_for_timeout(1500)
+        p.wait_for_selector(f'a[href="/author-tools/details/{self.course_id}"]',
+                            state='attached', timeout=15000)
         # Observe the SPA's own authenticated request; keep its bearer only in memory.
         p.evaluate('''() => {window.__psSubmitAuthorization=null;
           const original=XMLHttpRequest.prototype.setRequestHeader;
@@ -84,8 +85,7 @@ class ModuleSubmission:
 
     def resolve_course(self, title):
         p = self.browser.get_page('https://app.pluralsight.com/author-home')
-        p.wait_for_timeout(2000)
-        rows = p.evaluate("""(title) => {
+        course_cards = """(title) => {
           const found = [];
           for(const e of document.querySelectorAll('div')) {
             if(e.childElementCount || e.textContent.trim()!==title)continue;
@@ -98,7 +98,12 @@ class ModuleSubmission:
             }
           }
           return [...new Set(found)];
-        }""", title)
+        }"""
+        for attempt in range(76):
+            rows = p.evaluate(course_cards, title)
+            if rows or attempt == 75:
+                break
+            p.wait_for_timeout(200)
         import re
         if len(rows) != 1 or not re.fullmatch(r'/author-tools/details/[0-9]+/modules', rows[0]):
             raise ClientError('Course title must match exactly one in-progress Author Home course.')
@@ -260,6 +265,8 @@ class ModuleSubmission:
         decks = [a for a in state['assets'] if a['type'] == 'slides' or a['fileName'] == deck.name]
         if len(decks) > 1:
             raise ClientError('Pluralsight module has multiple slide decks; resolve before submission.')
+        if decks and decks[0]['fileName'] != deck.name:
+            raise ClientError('Pluralsight slide deck filename differs from the submission manifest; resolve before submission.')
         deck_ok = bool(decks and decks[0]['status'] == 'done' and self.existing_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck, pending=not submitted, identity=f'deck {decks[0]["id"]}'))
         if deck_ok and decks[0]['type'] != 'slides':
             if submitted:
@@ -325,7 +332,7 @@ class ModuleSubmission:
             if len(matches) != 1 or not self.remote_matches(matches[0]['downloadLink'], clip['path']):
                 raise ClientError('Pluralsight clip title/order/content verification failed.')
         decks = [a for a in state['assets'] if a['type'] == 'slides']
-        if len(decks) != 1 or decks[0]['status'] != 'done' or not self.remote_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck):
+        if len(decks) != 1 or decks[0]['fileName'] != deck.name or decks[0]['status'] != 'done' or not self.remote_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck):
             raise ClientError('Pluralsight deck content verification failed.')
         if not submitted:
             action = 'updates-submit-move-to-qa' if module['status'] in ('updates_required', 'available_for_updates') else 'submit-move-to-qa'
