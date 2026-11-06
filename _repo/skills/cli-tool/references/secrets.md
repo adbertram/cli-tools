@@ -144,7 +144,7 @@ expect {
 }
 ```
 
-Never leave `log_user 1` active while sending passwords, API keys, OAuth client secrets, refresh tokens, recovery codes, or MFA values. Do not paste secrets into Terminal.app or GUI prompts through Computer Use; use the CLI-tools secret manager or the CLI's own non-echoing input path.
+Never leave `log_user 1` active while sending passwords, API keys, OAuth client secrets, refresh tokens, recovery codes, or MFA values. Do not paste secrets into terminal or GUI prompts; use the CLI-tools secret manager or the CLI's own non-echoing input path.
 
 If you write an `expect` helper script to a task workspace, do not execute the
 generated file path directly from Bash. Agent-created helper files are not
