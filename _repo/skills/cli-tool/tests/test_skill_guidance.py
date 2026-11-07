@@ -323,11 +323,12 @@ def test_skill_documents_non_interrupting_cloudflare_browser_escalation():
     assert "Cloudflare And Bot Walls In Browser CLIs" in text
     assert "browser-automation" in text
     assert "CDP/browser-harness" in text
-    assert "If Adam says not to use a headed browser" in text_words
-    assert "do not set `HEADLESS=false`" in text
+    assert "Use only non-interrupting paths" in text_words
+    assert "already-running approved CDP endpoint" in text_words
     assert "remote/non-watched browser host" in text_words
+    assert "those paths cannot clear the work, report the Cloudflare blocker" in text_words
     assert "Never solve, click through, refresh around" in text
-    assert "not to interrupt him in the current turn" in router_words
+    assert "apply the `Cloudflare And Bot Walls In Browser CLIs` principle in `SKILL.md` before retrying or escalating browser surfaces" in router_words
 
 
 def test_test_workflow_shapes_auth_status_probe():
