@@ -88,10 +88,10 @@ If no public API exists, spawn the `ui-web-test-engineer` agent to explore the a
 ```
 Explore <service-url> to discover internal/hidden REST APIs.
 
-1. Follow `references/secrets.md` before asking Adam for CLI credentials.
+1. Follow `references/secrets.md` to obtain CLI credentials.
 2. If credentials are not in the secret manager, use the `lastpass` CLI tool to look them up. 
-3. If not found in LastPass, use browser automation to inspect the service's login page for third-party authentication providers (e.g., Google, Microsoft). If supported, ask Adam if he would like to use one.
-4. Ask Adam for manual credentials only if they cannot be found in the secret manager, LastPass, and third-party auth is unavailable or declined. Store newly provided reusable CLI credentials using `references/secrets.md`.
+3. If not found in LastPass, report that exact blocker. Never ask Adam for credentials or to log in.
+4. Store credentials retrieved from LastPass using `references/secrets.md`.
 5. Navigate to <service-url> and authenticate using those credentials
 6. Systematically explore the authenticated interface:
    - Visit every major section/page
@@ -155,7 +155,7 @@ Is there an existing CLI tool for this service?
 ├── YES → Use "wrapper" type
 └── NO → Did you find a public REST/JSON API that is currently usable by Adam? (Step 2.1)
     ├── YES → Use "api" type
-    ├── LEGACY/CLOSED AUTH ONLY → Ask whether Adam has the required credential; otherwise ask whether to use "browser" type
+    ├── LEGACY/CLOSED AUTH ONLY → Look up the credential in the secret manager and LastPass; if none exists, ask whether to use "browser" type
     └── NO → Did you discover internal APIs? (Step 2.2)
         ├── YES → Use "api" type (with discovered endpoints)
         └── NO → STOP: ask whether Adam wants a browser-driven command
@@ -482,7 +482,7 @@ The agent CANNOT run `auth login` automatically — it opens a GUI browser windo
 ```bash
 <name> auth status
 ```
-If not authenticated, ask the user to provide credentials or run the relevant auth command, then verify `auth status` passes.
+If not authenticated, fetch credentials from the secret manager or LastPass and run the relevant auth command, then verify `auth status` passes.
 
 **Re-auth check:** If Step 8 testing takes longer than ~30 minutes, re-run `<name> auth status` before continuing — browser sessions expire and a mid-test 403 is not a pipeline bug.
 

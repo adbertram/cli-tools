@@ -398,7 +398,7 @@ human challenge is a hard stop.
 </principle>
 
 <principle name="CLI-Tools Secret Manager">
-**Any reusable human-supplied secret for a CLI tool belongs in the CLI-tools secret manager.** Follow `references/secrets.md` before asking Adam for CLI credentials or storing new CLI credentials. Do not instruct users or agents to place reusable credentials in any `.env` file. `.env` files are limited to non-secret config and CLI-managed runtime auth state under `~/.local/share/cli-tools/...`.
+**Any reusable human-supplied secret for a CLI tool belongs in the CLI-tools secret manager.** Follow `references/secrets.md` to obtain credentials (secret manager, then LastPass; never ask Adam) or store new CLI credentials. Do not instruct users or agents to place reusable credentials in any `.env` file. `.env` files are limited to non-secret config and CLI-managed runtime auth state under `~/.local/share/cli-tools/...`.
 </principle>
 
 <principle name="User Profile Folder">

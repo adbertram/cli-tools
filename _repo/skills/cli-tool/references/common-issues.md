@@ -188,7 +188,7 @@ env | grep -i MYSERVICE
 # Check the profile .env managed by BaseConfig
 cat ~/.local/share/cli-tools/myservice/authentication_profiles/default/.env
 
-# Check reusable CLI secrets before asking Adam for the value; see references/secrets.md
+# Check reusable CLI secrets, then LastPass; never ask Adam for the value; see references/secrets.md
 
 # Verify the installed CLI resolves the intended profile
 launcher="$(command -v myservice)"

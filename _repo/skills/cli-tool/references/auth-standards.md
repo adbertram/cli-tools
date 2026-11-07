@@ -29,7 +29,7 @@ Authentication commands (`auth login`, `auth status`) are **not required for all
 
 ## CLI-Tools Secret Manager
 
-Before asking Adam for CLI credentials, or storing any new reusable CLI credential, follow `references/secrets.md`.
+To obtain CLI credentials (secret manager, then LastPass; never ask Adam), or to store any new reusable CLI credential, follow `references/secrets.md`.
 
 ## Browser-Session Auth Login Runtime
 
