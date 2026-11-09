@@ -2,6 +2,7 @@
 import json
 import warnings
 from datetime import datetime
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -44,6 +45,48 @@ def get_api_type_for_endpoint(endpoint: str) -> str:
 
 # Slack's documented limit for one files.completeUploadExternal call.
 MAX_UPLOAD_FILES = 10
+
+
+class _CanvasTextParser(HTMLParser):
+    """Convert canvas HTML to plain text, keeping link targets as `label (url)`."""
+
+    _BLOCKS = {"h1", "h2", "h3", "h4", "h5", "h6", "p", "div", "li", "ul", "ol", "br", "tr", "table"}
+    _LINKS = {"a", "lnk"}
+
+    def __init__(self):
+        super().__init__()
+        self.parts: List[str] = []
+        self._hrefs: List[Optional[str]] = []
+        self._skip = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "control":
+            self._skip += 1
+        elif tag in self._LINKS:
+            self._hrefs.append(dict(attrs).get("href"))
+        elif tag in self._BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag):
+        if tag == "control":
+            self._skip = max(0, self._skip - 1)
+        elif tag in self._LINKS and self._hrefs:
+            href = self._hrefs.pop()
+            if href:
+                self.parts.append(f" ({href})")
+        elif tag in self._BLOCKS:
+            self.parts.append("\n")
+
+    def handle_data(self, data):
+        if not self._skip:
+            self.parts.append(data)
+
+
+def _canvas_html_to_text(html: str) -> str:
+    parser = _CanvasTextParser()
+    parser.feed(html)
+    lines = (" ".join(line.split()) for line in "".join(parser.parts).splitlines())
+    return "\n".join(line for line in lines if line)
 
 
 class ClientError(Exception):
@@ -588,11 +631,9 @@ class SlackClient:
         """Delete a file."""
         return self._make_request("POST", "files.delete", data={"file": file_id})
 
-    def download_file(self, file_id: str, output_path: str) -> Dict:
-        """Download a file from Slack."""
-        file_info = self.get_file_info(file_id)
-        file_data = file_info.get("file", {})
-
+    def _open_file_download(self, file_id: str):
+        """Return (file_data, streaming response) for a Slack file's private download URL."""
+        file_data = self.get_file_info(file_id).get("file", {})
         download_url = file_data.get("url_private_download") or file_data.get("url_private")
 
         if not download_url:
@@ -612,6 +653,12 @@ class SlackClient:
 
         if not response.ok:
             raise ClientError(f"Failed to download file: {response.status_code} {response.reason}")
+
+        return file_data, response
+
+    def download_file(self, file_id: str, output_path: str) -> Dict:
+        """Download a file from Slack."""
+        file_data, response = self._open_file_download(file_id)
 
         with open(output_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8192):
@@ -640,6 +687,16 @@ class SlackClient:
             params["channel"] = channel
 
         return self._make_request("GET", "files.list", params=params)
+
+    def get_canvas_content(self, canvas_id: str) -> Dict:
+        """Get a canvas's title, plain text and raw HTML (a canvas is a Slack file served as HTML)."""
+        file_data, response = self._open_file_download(canvas_id)
+        html = response.text
+        return {
+            "title": file_data.get("title") or file_data.get("name"),
+            "content": _canvas_html_to_text(html),
+            "html": html,
+        }
 
     def test_auth(self) -> Dict:
         """Test browser session authentication and return status."""

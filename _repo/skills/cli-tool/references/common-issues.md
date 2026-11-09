@@ -100,6 +100,19 @@ Do not use Homebrew/system `pip install -e .` or
 `--break-system-packages`. CLI tools are installed as uv tools, and
 `~/.local/bin/<tool>` should point into `~/.local/share/uv/tools/`.
 
+### Reinstall fails with `<dep> was not found in the package registry`
+
+A tool whose dependencies are sibling editable checkouts (coursecraft depends
+on `ronin`, `tether`, and `warden`) is installed with `--with-editable <path>`
+for each one, and uv records them under `[tool] requirements` in
+`~/.local/share/uv/tools/<pkg>/uv-receipt.toml`. `install-cli-tool.sh` reads
+that receipt and passes every extra editable requirement back as
+`--with-editable` on reinstall, and it resolves a symlinked tool directory
+(`<cli-tools-root>/coursecraft` -> the CourseCraft checkout) to its real path
+so the health check matches the receipt. If the error still appears, the uv
+venv has no receipt (first install): run the tool README's documented
+`uv tool install ... --with-editable ...` command once, then use the installer.
+
 ### Reinstall picks a Python that fails `test_cli_uses_system_python`
 
 A bare `uv tool install -e <dir> --force --refresh` lets uv choose its own
@@ -175,7 +188,7 @@ env | grep -i MYSERVICE
 # Check the profile .env managed by BaseConfig
 cat ~/.local/share/cli-tools/myservice/authentication_profiles/default/.env
 
-# Check reusable CLI secrets before asking Adam for the value; see references/secrets.md
+# Check reusable CLI secrets, then LastPass; never ask Adam for the value; see references/secrets.md
 
 # Verify the installed CLI resolves the intended profile
 launcher="$(command -v myservice)"
@@ -744,6 +757,40 @@ specific TCC permission) to the **launching app**, not the interpreter — and r
 that app afterward. The interpreter binary is the correct target ONLY for headless
 launchers with no responsible app. A `*_accessible: false` field in `auth status` is
 a TCC grant gap, not a CLI bug — do not "fix" it in code.
+
+---
+
+## CLI Help/Error Tests Pass in a Terminal but Fail Only in Agent Sessions
+
+### Symptom
+
+Tests that assert on `--help` or error output pass in a normal terminal but fail
+inside an agent session. A substring check such as `"--clip " in result.output`
+misses because the option name comes back in pieces.
+
+### Cause
+
+The agent harness exports `FORCE_COLOR=0`. Typer/Rich treat ANY `FORCE_COLOR`
+value, including `0`, as "force terminal", so Rich emits styling codes and splits
+option names (e.g. `--clip` rendered as separate styled pieces).
+
+### Fix
+
+In the CLI's `tests/conftest.py`, set this BEFORE Typer is imported:
+
+```python
+import os
+os.environ["_TYPER_FORCE_DISABLE_TERMINAL"] = "1"
+```
+
+(Done in CourseCraft's `coursecraft` CLI, commit `34147e37`.) Alternative: strip
+ANSI codes from the output before matching.
+
+### Related Trap: Cached Config/Client Singleton
+
+A test that points `HOME` at a temp folder and invokes the app can leave a cached
+config/client singleton behind that later tests reuse, pointing at the wrong
+profile. Reset those caches in an autouse fixture so every test starts clean.
 
 ---
 

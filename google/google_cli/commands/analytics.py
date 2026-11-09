@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
+from ..properties import parse_properties
 from ..config import get_config
 from cli_tools_shared.filters import apply_filters
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_error
@@ -165,6 +166,7 @@ def analytics_accounts(
 ):
     """List GA4 accounts and properties."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_analytics_admin_service()
 
@@ -204,6 +206,7 @@ def analytics_properties(
 ):
     """List GA4 properties."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_analytics_admin_service()
 

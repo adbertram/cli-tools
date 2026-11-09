@@ -11,6 +11,7 @@ import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
+from ..properties import parse_properties
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
 from ..filter_translator import translate_drive_filters
@@ -33,6 +34,7 @@ def drive_list(
 ):
     """List files in Google Drive."""
     try:
+        properties = parse_properties(properties)
         if folder is not None and not _FOLDER_ID_PATTERN.match(folder):
             raise typer.BadParameter(
                 f"Invalid value for '--folder' / '-F': {folder!r} is not a valid "
@@ -131,6 +133,7 @@ def drive_search(
 ):
     """Search for files in Google Drive."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_drive_service()
 

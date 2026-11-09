@@ -2,6 +2,7 @@
 import os
 import sys
 import time
+from enum import Enum
 from typing import Optional, List, Dict, Any, TypeVar, Callable
 from pathlib import Path
 from google import genai
@@ -58,10 +59,17 @@ def _record_response_usage(
     model: str,
     operation: str = "generate",
     config=None,
+    image_count: int = 0,
+    image_size: Optional[str] = None,
 ) -> None:
     """Record usage from a response's usage_metadata."""
     if response.usage_metadata:
         meta = response.usage_metadata
+        image_output_tokens = sum(
+            (detail.token_count or 0)
+            for detail in (meta.candidates_tokens_details or [])
+            if detail.modality == types.MediaModality.IMAGE
+        )
         record_usage(
             model=model,
             prompt_tokens=meta.prompt_token_count or 0,
@@ -70,7 +78,45 @@ def _record_response_usage(
             cached_tokens=meta.cached_content_token_count or 0,
             operation=operation,
             config=config,
+            image_output_tokens=image_output_tokens,
+            image_count=image_count,
+            image_size=image_size,
         )
+
+
+class ThinkingLevel(str, Enum):
+    """thinking_level values accepted by google-genai ThinkingConfig.
+
+    Supported levels vary by model (e.g. gemini-4-argon: low/medium/high;
+    gemini-3.5-flash-lite: minimal/low/medium/high). See
+    https://ai.google.dev/gemini-api/docs/thinking
+    """
+    MINIMAL = "minimal"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+def _build_generate_config(
+    response_schema: Optional[Dict[str, Any]] = None,
+    temperature: Optional[float] = None,
+    thinking_level: Optional[str] = None,
+) -> Optional[types.GenerateContentConfig]:
+    """Build a GenerateContentConfig with only the options that were set.
+
+    Returns None when nothing is set, so model defaults apply unchanged.
+    """
+    kwargs: Dict[str, Any] = {}
+    if response_schema:
+        kwargs["response_mime_type"] = "application/json"
+        kwargs["response_schema"] = response_schema
+    if temperature is not None:
+        kwargs["temperature"] = temperature
+    if thinking_level is not None:
+        kwargs["thinking_config"] = types.ThinkingConfig(
+            thinking_level=ThinkingLevel(thinking_level).value.upper()
+        )
+    return types.GenerateContentConfig(**kwargs) if kwargs else None
 
 
 class ClientError(Exception):
@@ -217,22 +263,26 @@ class GeminiClient:
     def generate_content(
         self,
         prompt: str,
-        model: str = "gemini-3.1-pro-preview",
+        model: str = "gemini-4-argon",
         file_refs: Optional[List[types.File]] = None,
         operation: str = "generate",
         response_schema: Optional[Dict[str, Any]] = None,
-        video_fps: Optional[float] = None
+        video_fps: Optional[float] = None,
+        temperature: Optional[float] = None,
+        thinking_level: Optional[str] = None,
     ) -> str:
         """
         Generate content using Gemini API.
 
         Args:
             prompt: Text prompt for generation
-            model: Model to use (default: gemini-3.1-pro-preview)
+            model: Model to use (default: gemini-4-argon)
             file_refs: Optional list of File objects to include
             operation: Operation type for usage tracking
             response_schema: Optional JSON schema for structured output
             video_fps: Optional FPS for video files (applied to first video file)
+            temperature: Optional sampling temperature (sent only when set)
+            thinking_level: Optional thinking level (minimal/low/medium/high)
 
         Returns:
             Generated text response
@@ -260,13 +310,11 @@ class GeminiClient:
                         contents.append(file_ref)
             contents.append(prompt)
 
-            # Build config for structured output if schema provided
-            config = None
-            if response_schema:
-                config = types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=response_schema
-                )
+            config = _build_generate_config(
+                response_schema=response_schema,
+                temperature=temperature,
+                thinking_level=thinking_level,
+            )
 
             response = _retry_on_transient_api_error(
                 self.client.models.generate_content,
@@ -291,11 +339,13 @@ class GeminiClient:
         self,
         video_path: str,
         prompt: str,
-        model: str = "gemini-3.1-pro-preview",
+        model: str = "gemini-4-argon",
         auto_wait: bool = True,
         additional_files: Optional[List[str]] = None,
         response_schema: Optional[Dict[str, Any]] = None,
-        fps: Optional[float] = None
+        fps: Optional[float] = None,
+        temperature: Optional[float] = None,
+        thinking_level: Optional[str] = None,
     ) -> str:
         """
         Upload and analyze a video file.
@@ -303,13 +353,15 @@ class GeminiClient:
         Args:
             video_path: Path to video file
             prompt: Analysis prompt
-            model: Model to use (default: gemini-3.1-pro-preview)
+            model: Model to use (default: gemini-4-argon)
             auto_wait: Wait for file processing before analysis (default: True)
             additional_files: Optional list of additional file paths to include
             response_schema: Optional JSON schema for structured output
             fps: Frames per second for video sampling (default: 1 FPS by Gemini).
                  Use higher values (2-5) for fast-action or sync detection.
                  Use lower values (<1) for long static videos.
+            temperature: Optional sampling temperature (sent only when set)
+            thinking_level: Optional thinking level (minimal/low/medium/high)
 
         Returns:
             Analysis response text
@@ -339,13 +391,11 @@ class GeminiClient:
                 with open(video_path, 'rb') as f:
                     video_bytes = f.read()
 
-                # Build config for structured output if schema provided
-                config = None
-                if response_schema:
-                    config = types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=response_schema
-                    )
+                config = _build_generate_config(
+                    response_schema=response_schema,
+                    temperature=temperature,
+                    thinking_level=thinking_level,
+                )
 
                 # Build video part with optional FPS metadata
                 video_part = types.Part(
@@ -391,7 +441,9 @@ class GeminiClient:
             prompt, model, all_files,
             operation="video_analyze",
             response_schema=response_schema,
-            video_fps=fps
+            video_fps=fps,
+            temperature=temperature,
+            thinking_level=thinking_level,
         )
 
     # ==================== Image Generation ====================
@@ -399,7 +451,7 @@ class GeminiClient:
     def generate_image(
         self,
         prompt: str,
-        model: str = "gemini-3-pro-image-preview",
+        model: str = "gemini-3-pro-image",
         aspect_ratio: str = "16:9",
         image_size: str = "2K",
         use_search: bool = False,
@@ -410,13 +462,12 @@ class GeminiClient:
 
         Args:
             prompt: Text prompt describing the image to generate
-            model: Model to use (default: gemini-3-pro-image-preview aka Nano Banana Pro)
+            model: Model to use (default: gemini-3-pro-image aka Nano Banana Pro)
             aspect_ratio: Aspect ratio (1:1, 16:9, 9:16, 4:3, 3:4)
             image_size: Output size (1K, 2K, 4K)
             use_search: Enable Google Search grounding for real-time data
             input_images: Optional list of reference image paths for image editing /
-                multi-image composition. Only supported by Nano Banana models
-                (gemini-3-pro-image-preview, gemini-2.5-flash-image).
+                multi-image composition. Supported by the Nano Banana models.
 
         Returns:
             Dict with 'image_data' (base64), 'mime_type', and 'text' (if any)
@@ -468,9 +519,6 @@ class GeminiClient:
                 config=config,
             )
 
-            # Record usage
-            _record_response_usage(response, model, "image_generate", self.config)
-
             # Extract results
             result = {
                 "text": None,
@@ -485,6 +533,13 @@ class GeminiClient:
                         "data": part.inline_data.data,
                         "mime_type": part.inline_data.mime_type
                     })
+
+            # Record usage (image output is priced separately from text)
+            _record_response_usage(
+                response, model, "image_generate", self.config,
+                image_count=len(result["images"]),
+                image_size=image_size,
+            )
 
             if not result["images"]:
                 raise ClientError("No image was generated in the response")

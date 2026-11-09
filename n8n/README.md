@@ -297,6 +297,9 @@ n8n server upgrade 2.10.0
 # Upgrade without restarting
 n8n server upgrade --skip-restart
 
+# Repair installed maintenance commands after relocating the n8n prefix
+n8n server sync-install-prefix
+
 # Check the current server version
 n8n server version
 

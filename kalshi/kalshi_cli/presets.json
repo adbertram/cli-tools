@@ -1,0 +1,9 @@
+{
+  "btc15m": {
+    "series_ticker": "KXBTC15M",
+    "description": "Bitcoin up or down over a 15 minute window; a new market opens every 15 minutes and settles on the CF Benchmarks BRTI.",
+    "reference_index": "BRTI",
+    "yes_label": "up",
+    "no_label": "down"
+  }
+}

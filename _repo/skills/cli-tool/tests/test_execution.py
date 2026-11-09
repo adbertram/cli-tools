@@ -288,6 +288,8 @@ GET_IDENTIFIER_FIELDS = {
     ("ahrefs", "site-audit"): "project_id",
     ("cloudflare", "pages projects"): "name",
     ("facebook", "groups"): "group_id",
+    ("kalshi", "markets"): "ticker",
+    ("kalshi", "presets"): "name",
     ("progress-servicenow", "ticket template"): "key",
     ("venmo", "transactions"): "payment_id",
     ("vyro", "campaigns"): "slug",

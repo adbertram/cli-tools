@@ -378,6 +378,7 @@ facebook messenger list --properties id,name
 facebook messenger get 123456789
 facebook messenger get 123456789 --table
 facebook messenger get 123456789 --limit 20
+facebook messenger get cid.g.1910025477072852
 
 # Send a message
 facebook messenger send 123456789 --text "Hello!"

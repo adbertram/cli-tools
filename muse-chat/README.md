@@ -24,7 +24,14 @@ muse-chat auth logout
 
 Login opens the standard CLI-owned persistent Chrome profile. Complete the Muse
 sign-in once in that window. Later commands use the saved session headlessly.
-`auth status` performs a live check against the Muse message composer.
+`auth status` performs a live check: it reports authenticated only when the Muse
+message composer loads and the logged-out landing pane is absent.
+
+When the Muse web session expires, Muse shows its logged-out landing pane with
+the saved account card. Chat commands click the saved "Log in as ... using
+Facebook" card headlessly in the CLI-owned profile and continue. No password is
+typed. If no saved account card is shown, the command exits 2 and asks you to
+run `muse-chat auth login`.
 
 ## Send messages
 

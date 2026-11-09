@@ -17,7 +17,7 @@ from cli_tools_shared.output import command, print_json, print_success, print_er
 
 app = typer.Typer(help="Deep Research operations using Gemini Deep Research Agent")
 
-DEFAULT_AGENT = "deep-research-pro-preview-12-2025"
+DEFAULT_AGENT = "deep-research-preview-04-2026"
 
 # Interaction.status literals (google.genai >= 2.0.0)
 _TERMINAL_OK = "completed"

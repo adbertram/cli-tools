@@ -21,13 +21,13 @@ from cli_tools_shared.output import print_info, print_warning
 from cli_tools_shared._debug_logging import get_debug_logger
 
 from .config import get_config
+from .messenger_parsers import messenger_thread_url
 from .models import FACEBOOK_BASE_URL, MarketplaceListing, Group, GroupPost, Comment
 
 logger = get_debug_logger("cli_tools.facebook.client")
 
 
 MARKETPLACE_BASE = f"{FACEBOOK_BASE_URL}/marketplace"
-MESSENGER_BASE = f"{FACEBOOK_BASE_URL}/messages/t"
 GROUPS_BASE = f"{FACEBOOK_BASE_URL}/groups"
 DEFAULT_LOCATION = "evansville"
 FACEBOOK_DESKTOP_HEADERS = {
@@ -738,6 +738,28 @@ class FeedExtractionFailed(ClientError):
     never has to guess whether zero posts means "no posts" or "the parser
     missed them".
     """
+
+
+class MessengerLocked(ClientError):
+    """Messenger is asking for the account PIN before it will show chats.
+
+    While the "restore your chats" PIN prompt is up, Messenger renders no
+    thread links, so a listing would come back ``[]`` and look like an empty
+    inbox. Every message starts with ``MESSENGER_LOCKED:``.
+    """
+
+
+MESSENGER_PIN_PROMPT = "Enter your PIN to restore your chats"
+
+
+def assert_messenger_unlocked(snapshot: str) -> None:
+    """Raise MessengerLocked when the snapshot shows Messenger's PIN prompt."""
+    if MESSENGER_PIN_PROMPT in snapshot:
+        raise MessengerLocked(
+            "MESSENGER_LOCKED: Messenger is asking for your PIN to restore your chats. "
+            "Run `facebook auth login --force`, open https://www.facebook.com/messages/ "
+            "in that window, enter the PIN, press Enter in the terminal, then retry."
+        )
 
 
 class GroupNotReadable(ClientError):
@@ -2177,6 +2199,7 @@ class FacebookClient:
         page.wait_for_timeout(1000)  # extra wait for messenger
 
         snapshot = self._snapshot(page)
+        assert_messenger_unlocked(snapshot)
         conversations = extract_conversations_from_snapshot(snapshot)
         logger.debug("list_conversations: total %.2fs, %d conversations",
                      time.monotonic() - t_start, len(conversations))
@@ -2195,12 +2218,13 @@ class FacebookClient:
         from .messenger_parsers import extract_messages_from_snapshot
 
         print_info(f"Loading conversation {conversation_id}...")
-        requested_url = f"{MESSENGER_BASE}/{conversation_id}/"
+        requested_url = messenger_thread_url(conversation_id)
         page = self._get_page(requested_url)
         self._assert_authenticated_page(page, requested_url, f"Messenger conversation {conversation_id}")
         page.wait_for_timeout(1000)  # extra wait for messenger
 
         snapshot = self._snapshot(page)
+        assert_messenger_unlocked(snapshot)
         messages = extract_messages_from_snapshot(snapshot)
 
         return {
@@ -2219,7 +2243,7 @@ class FacebookClient:
             Dict with send status.
         """
         print_info(f"Sending message to conversation {conversation_id}...")
-        requested_url = f"{MESSENGER_BASE}/{conversation_id}/"
+        requested_url = messenger_thread_url(conversation_id)
         page = self._get_page(requested_url)
         self._assert_authenticated_page(page, requested_url, f"Messenger conversation {conversation_id}")
 

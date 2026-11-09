@@ -1,4 +1,6 @@
 import os
+import re
+import subprocess
 import sys
 
 import pytest
@@ -131,11 +133,64 @@ def test_create_app_widens_piped_help_at_build_time(monkeypatch):
     monkeypatch.setattr(sys, "argv", ["demo", "items", "--help"])
     monkeypatch.delenv("COLUMNS", raising=False)
     monkeypatch.setattr(typer_rich_utils, "MAX_WIDTH", None)
+    # Restored after the test so the compacting console does not leak.
+    monkeypatch.setattr(typer_rich_utils, "_get_rich_console", typer_rich_utils._get_rich_console)
 
     create_app(name="demo", help="x", version="1.0.0")
 
     assert os.environ["COLUMNS"] == "200"
     assert typer_rich_utils.MAX_WIDTH == 200
+    assert typer_rich_utils._get_rich_console.compacts_help
+
+
+_PIPED_HELP_SCRIPT = """
+import typer
+from cli_tools_shared.app_factory import create_app, run_app
+
+app = create_app(name="demo", help="Demo tool.", version="1.0.0")
+items = typer.Typer(help="Manage items.")
+app.add_typer(items, name="items")
+
+
+@items.command("list")
+def list_items(
+    include_every_archived_record_variant: bool = typer.Option(
+        False, "--include-every-archived-record-variant", help="Include archived records."
+    ),
+    limit: int = typer.Option(10, "--limit", "-l", help="Max rows"),
+):
+    \"\"\"List items.\"\"\"
+
+
+run_app(app)
+"""
+
+
+@pytest.mark.parametrize("force_color", [None, "1"])
+def test_piped_help_drops_width_padding_and_keeps_content(force_color):
+    """Piped help keeps the 200-column layout and every border the help
+    parsers anchor on, but no line carries Rich's width padding."""
+    env = {k: v for k, v in os.environ.items() if k not in {"FORCE_COLOR", "COLUMNS", "_TYPER_FORCE_DISABLE_TERMINAL"}}
+    if force_color:
+        env["FORCE_COLOR"] = force_color
+
+    result = subprocess.run(
+        [sys.executable, "-c", _PIPED_HELP_SCRIPT, "items", "list", "--help"],
+        capture_output=True, text=True, env=env, check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    if force_color:
+        assert "\x1b[" in result.stdout
+    text = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+    lines = text.splitlines()
+    assert all(line == line.rstrip() for line in lines)
+    assert "╭─ Options ─╮" in lines
+    assert "╰─╯" in lines
+    assert "│ --include-every-archived-record-variant" in text
+    assert "Include archived records. │" in text
+    assert not any(re.search(r"\s{2,}│$", line) for line in lines)
+    assert all(len(line) <= 200 for line in lines)
 
 
 def test_create_app_keeps_interactive_help_width(monkeypatch):

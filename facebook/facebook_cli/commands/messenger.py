@@ -59,7 +59,7 @@ def messenger_list(
 @app.command("get")
 @command
 def messenger_get(
-    conversation_id: str = typer.Argument(..., help="Conversation/thread ID"),
+    conversation_id: str = typer.Argument(..., help="Conversation/thread ID (digits, or cid.g.<digits> for end-to-end-encrypted threads)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
     limit: int = typer.Option(50, "--limit", "-l", help="Maximum number of messages"),
 ):
@@ -69,6 +69,7 @@ def messenger_get(
         facebook messenger get 123456789
         facebook messenger get 123456789 --table
         facebook messenger get 123456789 --limit 20
+        facebook messenger get cid.g.1910025477072852
     """
     with client_session() as client:
         result = client.get_conversation(conversation_id, message_limit=limit)
@@ -86,7 +87,7 @@ def messenger_get(
 @app.command("send")
 @command
 def messenger_send(
-    conversation_id: str = typer.Argument(..., help="Conversation/thread ID"),
+    conversation_id: str = typer.Argument(..., help="Conversation/thread ID (digits, or cid.g.<digits> for end-to-end-encrypted threads)"),
     text: str = typer.Option(..., "--text", "-m", help="Message text to send"),
 ):
     """Send a message to a conversation.

@@ -9,6 +9,7 @@ import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
 from ..client import get_client
+from ..properties import parse_properties
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters
 from ..filter_translator import translate_cloud_project_filters
@@ -42,6 +43,7 @@ def projects_list(
 ):
     """List Google Cloud projects."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_cloud_resource_manager_service()
 
@@ -313,6 +315,7 @@ def credentials_list(
 ):
     """List project credentials."""
     try:
+        properties = parse_properties(properties)
         if cred_type and cred_type not in CREDENTIAL_TYPES:
             print_error(f"Invalid type '{cred_type}'. Must be one of: {', '.join(CREDENTIAL_TYPES)}")
             raise typer.Exit(1)
@@ -583,6 +586,7 @@ def services_list(
 ):
     """List API services for a project."""
     try:
+        properties = parse_properties(properties)
         client = get_client(profile=profile)
         service = client.get_service_usage_service()
 

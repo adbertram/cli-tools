@@ -27,12 +27,17 @@ class ImageSize(str, Enum):
 
 
 class ImageModel(str, Enum):
-    """Available image generation models."""
-    NANO_BANANA_PRO = "gemini-3-pro-image-preview"
-    NANO_BANANA = "gemini-2.5-flash-image"
-    IMAGEN_4 = "imagen-4.0-generate-001"
-    IMAGEN_4_ULTRA = "imagen-4.0-ultra-generate-001"
-    IMAGEN_4_FAST = "imagen-4.0-fast-generate-001"
+    """Available image generation models (Nano Banana family).
+
+    Imagen 4 (shut down 2026-08-17) and the gemini-3-pro-image-preview /
+    gemini-3.1-flash-image-preview previews (shut down 2026-06-25) were removed.
+    See https://ai.google.dev/gemini-api/docs/deprecations
+    """
+    NANO_BANANA_PRO = "gemini-3-pro-image"
+    NANO_BANANA_2_1 = "gemini-nano-banana-2.1"
+    NANO_BANANA_2 = "gemini-3.1-flash-image"
+    NANO_BANANA_2_LITE = "gemini-3.1-flash-lite-image"
+    NANO_BANANA = "gemini-2.5-flash-image"  # shuts down 2027-03-15
 
 
 app = typer.Typer(help="Image generation with Gemini")
@@ -71,8 +76,7 @@ def generate_image(
         None,
         "--input-image", "-i",
         help="Reference image(s) for image editing / multi-image composition. "
-             "Repeatable. Only supported by Nano Banana models "
-             "(gemini-3-pro-image-preview, gemini-2.5-flash-image)."
+             "Repeatable. Supported by all listed Nano Banana models."
     ),
 ):
     """
@@ -82,22 +86,17 @@ def generate_image(
         gemini image generate "A cyberpunk cityscape at sunset"
         gemini image generate "Cloud infrastructure diagram" -o cloud.png -ar 16:9
         gemini image generate "Current weather in Tokyo visualization" --search
-        gemini image generate "Professional blog header" -m nano-banana-pro -s 4K
+        gemini image generate "Professional blog header" -m gemini-nano-banana-2.1 -s 4K
     """
     try:
-        # Validate input image support: only Nano Banana models accept reference images.
+        # Nano Banana 2 Lite only outputs 1K images (ai.google.dev pricing page).
+        if model == ImageModel.NANO_BANANA_2_LITE and size != ImageSize.SMALL:
+            print_error(f"Model '{model.value}' only supports --size 1K.")
+            raise typer.Exit(1)
+
+        # Every remaining ImageModel is a Nano Banana model, so all accept
+        # reference images; only check that the files exist.
         if input_images:
-            nano_banana_models = {
-                ImageModel.NANO_BANANA_PRO.value,
-                ImageModel.NANO_BANANA.value,
-            }
-            if model.value not in nano_banana_models:
-                print_error(
-                    f"Model '{model.value}' does not support input images. "
-                    f"Use --model gemini-3-pro-image-preview or "
-                    f"--model gemini-2.5-flash-image with -i / --input-image."
-                )
-                raise typer.Exit(1)
             for img_path in input_images:
                 if not img_path.exists():
                     print_error(f"Input image not found: {img_path}")
@@ -171,11 +170,11 @@ def list_image_models():
     """
     print_info("Available image generation models:\n")
     models = [
-        ("gemini-3-pro-image-preview", "Nano Banana Pro", "Highest quality, 4K support, grounded generation"),
-        ("gemini-2.5-flash-image", "Nano Banana", "Faster generation, good quality"),
-        ("imagen-4.0-generate-001", "Imagen 4", "Vertex AI image generation"),
-        ("imagen-4.0-ultra-generate-001", "Imagen 4 Ultra", "Ultra quality Imagen"),
-        ("imagen-4.0-fast-generate-001", "Imagen 4 Fast", "Fast Imagen generation"),
+        ("gemini-3-pro-image", "Nano Banana Pro (default)", "Premium quality, thinking, 1K/2K/4K, grounded generation"),
+        ("gemini-nano-banana-2.1", "Nano Banana 2.1", "Primary high-efficiency workhorse, 1K/2K/4K"),
+        ("gemini-3.1-flash-image", "Nano Banana 2", "Previous-gen workhorse, 0.5K-4K"),
+        ("gemini-3.1-flash-lite-image", "Nano Banana 2 Lite", "Fastest and cheapest, 1K only"),
+        ("gemini-2.5-flash-image", "Nano Banana", "Legacy; shuts down 2027-03-15"),
     ]
 
     for model_id, name, description in models:

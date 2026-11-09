@@ -77,6 +77,21 @@ if [ ! -d "$TOOL_DIR" ]; then
     exit 1
 fi
 
+# A tool directory may be a symlink into another repository's checkout (for
+# example coursecraft -> Agents/CourseCraft/tools/coursecraft). uv records the
+# editable project location it was given, so install from the real checkout
+# and compare real paths in the health check below; comparing the symlink
+# spelling against the receipt never matches, and every run then falls
+# through to a full reinstall.
+if [ -L "$TOOL_DIR" ]; then
+    TOOL_DIR="$(cd -P "$TOOL_DIR" && pwd)"
+fi
+real_dir() {
+    # Print the physical path of an existing directory, or the input unchanged
+    # when it does not exist (a stale location must still fail the comparison).
+    (cd -P "$1" 2>/dev/null && pwd) || printf '%s\n' "$1"
+}
+
 PYPROJECT_NAME=""
 if [ -f "$TOOL_DIR/pyproject.toml" ]; then
     PYPROJECT_NAME=$(awk -F'"' '/^name[[:space:]]*=/ { print $2; exit }' "$TOOL_DIR/pyproject.toml")
@@ -135,7 +150,7 @@ if [ "$FORCE_REFRESH" = "false" ] && [ -L "$LAUNCHER" ] && [ -x "$LAUNCHER" ] &&
         PIP_SHOW=$(VIRTUAL_ENV="$UV_VENV" uv pip show "$pkg_try" 2>/dev/null)
         if [ -n "$PIP_SHOW" ]; then
             existing_editable_location=$(echo "$PIP_SHOW" | awk -F': ' '/^Editable project location:/ { print $2; exit }')
-            if [ "$existing_editable_location" = "$TOOL_DIR" ]; then
+            if [ -n "$existing_editable_location" ] && [ "$(real_dir "$existing_editable_location")" = "$(real_dir "$TOOL_DIR")" ]; then
                 existing_editable_install="true"
             fi
             break
@@ -210,7 +225,53 @@ if [ -f "$TOOL_DIR/uv-overrides.txt" ]; then
     OVERRIDE_FLAG=(--overrides "$TOOL_DIR/uv-overrides.txt")
 fi
 
-INSTALL_OUTPUT=$(uv tool install -e "$TOOL_DIR" --force --refresh "${PY_FLAG[@]}" "${OVERRIDE_FLAG[@]}" 2>&1)
+# Preserve the extra editable requirements the existing uv receipt records.
+# A tool installed with `--with-editable <sibling checkout>` (coursecraft pulls
+# ronin, tether, and warden this way) lists each one under
+# `[tool] requirements` in $UV_VENV/uv-receipt.toml. A bare
+# `uv tool install -e` resolves the tool's dependencies from the registry
+# alone and fails with "<name> was not found in the package registry", so
+# every editable requirement other than the tool itself is passed back as
+# `--with-editable`. The receipt is parsed with a regex instead of tomllib for
+# the same reason as resolve_uv_python.py: the system python3 may predate 3.11.
+WITH_EDITABLE_FLAGS=()
+UV_RECEIPT="$UV_VENV/uv-receipt.toml"
+if [ -f "$UV_RECEIPT" ]; then
+    RECEIPT_EXTRAS=$(python3 - "$UV_RECEIPT" "$TOOL_PACKAGE_NAME" <<'PY'
+import re
+import sys
+
+receipt_path, primary = sys.argv[1], sys.argv[2]
+normalize = lambda name: re.sub(r"[-_.]+", "-", name).lower()
+with open(receipt_path, encoding="utf-8") as fh:
+    receipt = fh.read()
+# uv writes `requirements = [...]` either on one line or one inline table per
+# line; `entrypoints = [...]` also carries `name = ...` entries, so only the
+# requirements list is scanned.
+requirements = re.search(r"^\s*requirements\s*=\s*\[([^\]]*)\]", receipt, re.M)
+if requirements is None:
+    sys.exit(f"no requirements list in {receipt_path}")
+for entry in re.findall(r"\{[^}]*\}", requirements.group(1)):
+    name = re.search(r'name\s*=\s*"([^"]+)"', entry)
+    if name is None or normalize(name.group(1)) == normalize(primary):
+        continue
+    editable = re.search(r'editable\s*=\s*"([^"]+)"', entry)
+    if editable is None:
+        sys.exit(f"unsupported non-editable extra requirement in {receipt_path}: {entry}")
+    print(editable.group(1))
+PY
+    )
+    RECEIPT_EXIT=$?
+    if [ $RECEIPT_EXIT -ne 0 ]; then
+        echo '{"error": "Could not read extra editable requirements from '"$UV_RECEIPT"' (exit '"$RECEIPT_EXIT"'). Refusing to reinstall without them."}' >&2
+        exit 1
+    fi
+    while IFS= read -r extra_editable; do
+        [ -n "$extra_editable" ] && WITH_EDITABLE_FLAGS+=(--with-editable "$extra_editable")
+    done <<< "$RECEIPT_EXTRAS"
+fi
+
+INSTALL_OUTPUT=$(uv tool install -e "$TOOL_DIR" "${WITH_EDITABLE_FLAGS[@]}" --force --refresh "${PY_FLAG[@]}" "${OVERRIDE_FLAG[@]}" 2>&1)
 INSTALL_EXIT=$?
 
 # ============================================================================

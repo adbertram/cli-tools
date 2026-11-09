@@ -14,7 +14,9 @@ def test_facebook_browser_keeps_auth_lifecycle_declarative():
     assert FacebookBrowser.AUTH_LOGIN_FORM_SELECTOR == 'input[name="email"], input[name="pass"]'
     assert FacebookBrowser.AUTH_LOGIN_USERNAME_SELECTOR == 'input[name="email"]'
     assert FacebookBrowser.AUTH_LOGIN_PASSWORD_SELECTOR == 'input[name="pass"]'
-    assert FacebookBrowser.AUTH_LOGIN_SUBMIT_SELECTOR == 'button[name="login"]'
+    assert FacebookBrowser.AUTH_LOGIN_SUBMIT_SELECTOR == (
+        'button[name="login"], form [role="button"][aria-label="Log In"]'
+    )
     assert FacebookBrowser.AUTH_LOGIN_USERNAME_SECRET == "facebook-username"
     assert FacebookBrowser.AUTH_LOGIN_PASSWORD_SECRET == "facebook-password"
     assert FacebookBrowser.MANUAL_LOGIN is True

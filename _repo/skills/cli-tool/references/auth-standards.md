@@ -29,23 +29,20 @@ Authentication commands (`auth login`, `auth status`) are **not required for all
 
 ## CLI-Tools Secret Manager
 
-Before asking Adam for CLI credentials, or storing any new reusable CLI credential, follow `references/secrets.md`.
+To obtain CLI credentials (secret manager, then LastPass; never ask Adam), or to store any new reusable CLI credential, follow `references/secrets.md`.
 
 ## Browser-Session Auth Login Runtime
 
 For `browser_session` and browser CLI authentication, first check `auth status`
-using the shaped unauthenticated-status wrapper from the router. Local
-interactive login uses Computer Use to open a visible terminal and run the
-CLI's documented Bash login command. When the current task explicitly
-authorizes a non-interactive demo host or automation runner, invoke that same
-command without stdin or `/dev/tty`; `BrowserAutomation` verifies the live
-browser state directly after launch and continues only when it is authenticated.
+using the shaped unauthenticated-status wrapper from the router. Login runs the CLI's documented Bash login command. For an automation runner or
+non-interactive demo host, invoke that same command without stdin or
+`/dev/tty`; `BrowserAutomation` verifies the live browser state directly after
+launch and continues only when it is authenticated.
 
 Use `--credential-type browser_session` for multi-credential CLIs and `--force`
 only when refreshing a stale or expired session. Retrieve credentials and MFA
-through the available service CLIs and the CLI-tools secret manager per
-`references/secrets.md`; ask Adam only when the required credential, code,
-approval, or local-GUI control is genuinely unavailable. Do not substitute raw
+through the available service CLIs, the `lastpass` CLI and the CLI-tools secret
+manager per `references/secrets.md`; never ask Adam to log in. Do not substitute raw
 browser scripts, direct session-file edits, or another auth path for
 browser-session login.
 

@@ -1,7 +1,7 @@
 {
   "tool": "facebook",
   "description": "Facebook CLI - Marketplace, Messenger, and more via browser automation",
-  "discovered_at": "2026-09-26T23:58:56Z",
+  "discovered_at": "2026-10-30T17:42:24Z",
   "total_commands": 33,
   "global_options": [
     {
@@ -889,14 +889,15 @@
           "examples": [
             "facebook messenger get 123456789",
             "facebook messenger get 123456789 --table",
-            "facebook messenger get 123456789 --limit 20"
+            "facebook messenger get 123456789 --limit 20",
+            "facebook messenger get cid.g.1910025477072852"
           ],
           "arguments": [
             {
               "name": "conversation_id",
               "type": "TEXT",
               "required": true,
-              "help": "Conversation/thread ID"
+              "help": "Conversation/thread ID (digits, or cid.g.<digits> for end-to-end-encrypted threads)"
             }
           ],
           "options": [
@@ -1030,7 +1031,7 @@
               "name": "conversation_id",
               "type": "TEXT",
               "required": true,
-              "help": "Conversation/thread ID"
+              "help": "Conversation/thread ID (digits, or cid.g.<digits> for end-to-end-encrypted threads)"
             }
           ],
           "options": [

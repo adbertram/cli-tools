@@ -63,11 +63,13 @@ heredoc parser inside a single-quoted `bash -lc '...'` command; that quote layer
 can strip Python string literals such as `Path('/tmp/cli-tools.json')` before
 Python starts. Instead invoke the parser as a standalone multiline command and
 pass the JSON file path as argv, for example `python3 - "$json_file" <<'PY'`,
-then read `sys.argv[1]` inside Python. Pass `--markdown` for a compact
-`- name: <first sentence>` list (~2K tokens) suitable for context injection;
-the Claude (`SessionStart` in `~/.claude/settings.json`) and Codex
-(`SessionStart` in `~/.codex/hooks.json`) session-start hooks call it this way
-to preload the CLI-tool roster every session.
+then read `sys.argv[1]` inside Python. Pass `--markdown` for a
+`- name: <description>` list. Pass `--names` for the tool names only,
+comma-separated on one line. The Claude Code `SessionStart` hook
+(`_repo/scripts/session-start-cli-inventory.sh`, wired in
+`~/.claude/settings.json`) injects one header line plus that `--names` list
+(about 1.6K characters) every session; per-tool details come from this script
+through this skill, not from the session-start roster.
 
 Prefer this script over ad hoc `find`/`ls` scans when a task asks which CLI
 tools exist, what they do, or which README describes them.
@@ -193,7 +195,7 @@ Scope CLI-tool investigation searches to bounded source roots such as the target
 </principle>
 
 <principle name="Service Browser Sessions Stay In The CLI">
-For browser-backed service CLIs, the CLI-owned persistent browser profile is the only source of truth after `auth login` succeeds. Do not switch to Codex's in-app browser, Computer Use, a visible local browser, or another browser surface to reuse or repair that saved CLI auth context. Use the service CLI and its saved browser-session profile directly. If a post-login service command still opens a headed/manual browser flow, cannot run against the saved profile headlessly, or only hands the user off to finish the requested operation, treat that as a CLI implementation/documentation defect and fix the service CLI before claiming the operation is done.
+For browser-backed service CLIs, the CLI-owned persistent browser profile is the only source of truth after `auth login` succeeds. Do not switch to another browser surface to reuse or repair that saved CLI auth context. Use the service CLI and its saved browser-session profile directly. If a post-login service command still opens a headed/manual browser flow, cannot run against the saved profile headlessly, or only hands the user off to finish the requested operation, treat that as a CLI implementation/documentation defect and fix the service CLI before claiming the operation is done.
 </principle>
 
 <principle name="Safe printf Formats">
@@ -358,10 +360,8 @@ details.
 
 <principle name="Browser-Session Auth Completion Surface">
 When a CLI operation requires browser automation and `auth status` shows the
-needed `browser_session` profile is unauthenticated, use the browser surface
-authorized for the current host. Local interactive login uses Computer Use to
-open a visible terminal and run the CLI's documented Bash login command. An
-explicitly authorized non-interactive demo host or automation runner may invoke
+needed `browser_session` profile is unauthenticated, run the CLI's documented
+Bash login command. An automation runner or non-interactive demo host may invoke
 the same command without stdin or `/dev/tty`; `BrowserAutomation` then uses the
 live authenticated browser state as the completion signal and fails clearly if
 that state is not authenticated. Use `--credential-type browser_session` for
@@ -385,14 +385,11 @@ engine instead.
 
 Real system Chrome over CDP is a legitimate avoidance surface for managed
 Cloudflare-style challenges because it presents a normal browser fingerprint,
-but launching local real Chrome is a local GUI action. If Adam says not to use a
-headed browser, not to interrupt him, or the host policy blocks local GUI
-control, do not set `HEADLESS=false`, do not invoke Computer Use, and do not
-start or foreground a local Chrome/CDP window. Use only non-interrupting paths:
-an already-authenticated saved browser profile, an internal/API or in-page fetch
-path using the saved session, an already-running approved CDP endpoint, or a
-remote/non-watched browser host. If those paths cannot clear the work, report
-the Cloudflare blocker and the exact browser surface that would need approval.
+so use it through the shared
+backend. Use only non-interrupting paths: an already-authenticated saved browser
+profile, an internal/API or in-page fetch path using the saved session, an
+already-running approved CDP endpoint, or a remote/non-watched browser host. If
+those paths cannot clear the work, report the Cloudflare blocker.
 
 Never solve, click through, refresh around, or pay a service to solve an
 interactive CAPTCHA, Turnstile, or human-verification challenge. A transient
@@ -401,7 +398,7 @@ human challenge is a hard stop.
 </principle>
 
 <principle name="CLI-Tools Secret Manager">
-**Any reusable human-supplied secret for a CLI tool belongs in the CLI-tools secret manager.** Follow `references/secrets.md` before asking Adam for CLI credentials or storing new CLI credentials. Do not instruct users or agents to place reusable credentials in any `.env` file. `.env` files are limited to non-secret config and CLI-managed runtime auth state under `~/.local/share/cli-tools/...`.
+**Any reusable human-supplied secret for a CLI tool belongs in the CLI-tools secret manager.** Follow `references/secrets.md` to obtain credentials (secret manager, then LastPass; never ask Adam) or store new CLI credentials. Do not instruct users or agents to place reusable credentials in any `.env` file. `.env` files are limited to non-secret config and CLI-managed runtime auth state under `~/.local/share/cli-tools/...`.
 </principle>
 
 <principle name="User Profile Folder">
@@ -764,7 +761,7 @@ All domain knowledge in `references/`:
 
 **Output:** output-standards.md (streams, format rules, truncation, field selection, list requirements)
 **Secrets:** secrets.md (CLI-tools secret manager, naming, storage/retrieval rules, prohibited stores)
-**Auth:** auth-standards.md (credential types, multi-auth, OAuth, force flag, wrapper auth, browser-session Computer Use login)
+**Auth:** auth-standards.md (credential types, multi-auth, OAuth, force flag, wrapper auth, browser-session login)
 **Config:** config-standards.md (.env, path resolution, token refresh)
 **Commands:** command-standards.md (naming, options, CRUD patterns, list/get, search, exit codes)
 **Data Shapes:** model-standards.md (when to use local models, plain records, AIInstruction, SerializeAsAny)
@@ -840,7 +837,7 @@ Omit local models when parsed/API records can flow straight to the documented ou
 <domain_knowledge>
 <topic name="Typer Dependency Extras">
 **Context:** Use this when creating or updating Python CLI tool `pyproject.toml` dependencies.
-**Key Facts:** Current Typer releases no longer expose the legacy `all` extra, so CLI tools should depend on `typer>=0.9.0` instead of `typer>=0.9.0`. The stale extra produces `uv` warnings during `uv run` and `uv tool install`, even though installation continues.
+**Key Facts:** Current Typer releases no longer expose the legacy `all` extra, so CLI tools should depend on `typer>=0.9.0` instead of `typer[all]>=0.9.0`. The stale extra produces `uv` warnings during `uv run` and `uv tool install`, even though installation continues.
 **Gotchas:** If the warning appears while installing one CLI, inspect both that CLI and `cli-tools-shared`; transitive package metadata can be the source. After changing shared dependency metadata, refresh the dependent CLI install with `install-cli-tool.sh --force-refresh <name>` so it resolves the new `cli-tools-shared` commit.
 </topic>
 

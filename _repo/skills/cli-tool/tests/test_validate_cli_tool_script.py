@@ -161,8 +161,8 @@ def test_test_script_supports_worktree_executable_override():
     assert "--cli-executable <path>" in script_text
     assert '--cli-executable) CLI_EXECUTABLE="$2"; shift 2 ;;' in script_text
     assert "test_cli_executable_override" in script_text
-    assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --tb=short --junitxml="$JUNIT")' in script_text
-    assert 'if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then\n    PYTEST_ARGS+=(--cli-executable "$CLI_EXECUTABLE")\nfi' in script_text
+    assert 'PYTEST_ARGS=(--cli-name="$CLI_NAME" --tb=short --junitxml="$JUNIT")' in script_text
+    assert 'if [[ "$CLI_EXECUTABLE_OVERRIDE" == true ]]; then\n    PYTEST_ARGS+=(--cli-executable="$CLI_EXECUTABLE")\nfi' in script_text
     assert 'PYTEST_ARGS=(--cli-name "$CLI_NAME" --cli-executable "$CLI_EXECUTABLE"' not in script_text
     assert 'uv run python -m pytest "$SKILL_DIR/tests" "${PYTEST_ARGS[@]}"' in script_text
 
@@ -416,7 +416,14 @@ def test_install_script_requires_launcher_symlink_for_success():
     assert '[ "$existing_python_matches_request" = "true" ]' in script_text
     assert '[ "$metadata_file" -nt "$LAUNCHER" ]' in script_text
     assert 'Existing editable install is healthy; skipped uv tool force refresh.' in script_text
-    assert 'uv tool install -e "$TOOL_DIR" --force --refresh' in script_text
+    # The install command is built from arrays: receipt extras are passed back
+    # as --with-editable, and the interpreter pin and overrides are arrays too.
+    assert (
+        'uv tool install -e "$TOOL_DIR" "${WITH_EDITABLE_FLAGS[@]}" --force --refresh '
+        '"${PY_FLAG[@]}" "${OVERRIDE_FLAG[@]}"'
+    ) in script_text
+    assert 'PY_FLAG=(--python "$PYTHON_REQUEST")' in script_text
+    assert 'WITH_EDITABLE_FLAGS+=(--with-editable "$extra_editable")' in script_text
     assert 'SYMLINK_EXISTS="false"' in script_text
     assert 'SYMLINK_EXISTS="true"' in script_text
     assert "did not create expected launcher" in script_text
@@ -604,6 +611,28 @@ def test_find_cli_tools_summary_flag_compacts_json_and_markdown():
     markdown_lines = [line for line in markdown_result.stdout.splitlines() if line.startswith("- ")]
     assert markdown_lines
     assert all(line.count(". ") == 0 for line in markdown_lines)
+
+
+def test_find_cli_tools_names_mode_and_session_start_hook_stay_compact():
+    script = REPO_ROOT / "_repo/scripts/find-cli-tools.sh"
+    json_result = subprocess.run([str(script), "--json"], capture_output=True, text=True, check=False)
+    assert json_result.returncode == 0, json_result.stderr
+    expected = ", ".join(sorted(record["name"] for record in json.loads(json_result.stdout)))
+
+    names_result = subprocess.run([str(script), "--names"], capture_output=True, text=True, check=False)
+    assert names_result.returncode == 0, names_result.stderr
+    assert names_result.stdout == expected + "\n"
+
+    # The session-start hook injects stdout into every session: one header line
+    # pointing at the cli-tool skill, then the names line, and nothing else
+    # (the finder's "Log:" line must stay on stderr).
+    hook = REPO_ROOT / "_repo/scripts/session-start-cli-inventory.sh"
+    hook_result = subprocess.run(["bash", str(hook)], capture_output=True, text=True, check=False)
+    assert hook_result.returncode == 0, hook_result.stderr
+    header, names_line = hook_result.stdout.splitlines()
+    assert "load the `cli-tool` skill" in header
+    assert "find-cli-tools.sh" in header
+    assert names_line == expected
 
 
 def test_find_cli_tools_accepts_exact_tool_name_filter():

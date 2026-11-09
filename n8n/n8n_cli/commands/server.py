@@ -22,6 +22,7 @@ COMMAND_CREDENTIALS = {
     "upgrade": [
         "api_key"
     ],
+    "sync-install-prefix": ["api_key"],
     "version": [
         "api_key"
     ],
@@ -32,8 +33,23 @@ COMMAND_CREDENTIALS = {
 app.add_typer(logs.app, name="logs", help="Query n8n server logs and configuration")
 app.add_typer(server_config.app, name="config", help="Manage n8n server configuration")
 
-N8N_BIN = "/usr/local/lib/node_modules/n8n/bin/n8n"
-N8N_INSTALL_PREFIX = "/usr/local"
+N8N_INSTALL_PREFIX = "/Users/adam/Services/n8n"
+N8N_BIN = f"{N8N_INSTALL_PREFIX}/lib/node_modules/n8n/bin/n8n"
+
+
+@app.command("sync-install-prefix")
+@command
+def sync_install_prefix():
+    """Repair the installed maintenance tools to use the deployed n8n prefix."""
+    import shlex
+    from pathlib import Path
+    from .. import sync_install_prefix as repair
+
+    script = Path(repair.__file__).read_text()
+    result = run_on_server_raw("python3 -c " + shlex.quote(script) + " " + shlex.quote(N8N_INSTALL_PREFIX), timeout=30)
+    if result.returncode:
+        raise RuntimeError(result.stderr.strip())
+    print_json(json.loads(result.stdout))
 
 
 @app.command("deploy-browser-session")

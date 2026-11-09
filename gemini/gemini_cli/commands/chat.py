@@ -2,7 +2,7 @@
 from typing import Optional
 from pathlib import Path
 import typer
-from ..client import get_client
+from ..client import get_client, ThinkingLevel
 from cli_tools_shared.output import command, print_success, print_error, print_info, handle_error
 from ..file_types import is_supported_file, UnsupportedFileTypeError, get_supported_extensions
 
@@ -14,7 +14,9 @@ app = typer.Typer(help="Chat and content generation")
 def chat_new(
     prompt: str = typer.Argument(..., help="Prompt to start the conversation"),
     file: Optional[Path] = typer.Option(None, "--file", "-f", help="File to attach to the conversation"),
-    model: str = typer.Option("gemini-3.1-pro-preview", "--model", "-m", help="Model to use"),
+    model: str = typer.Option("gemini-4-argon", "--model", "-m", help="Model to use"),
+    temperature: Optional[float] = typer.Option(None, "--temperature", "-T", help="Sampling temperature. Omit to use the model default. gemini-4-argon and Gemini 3.6+ ignore it."),
+    thinking_level: Optional[ThinkingLevel] = typer.Option(None, "--thinking-level", help="Thinking level (thinking_level). Omit to use the model default. Supported levels vary by model, e.g. gemini-4-argon: low|medium|high."),
 ):
     """
     Start a new chat conversation with a prompt.
@@ -22,7 +24,9 @@ def chat_new(
     Example:
         gemini chat new "Explain quantum computing in simple terms"
         gemini chat new "What is in this image?" --file photo.jpg
-        gemini chat new "Summarize this document" -f report.pdf --model gemini-3.1-pro-preview
+        gemini chat new "Summarize this document" -f report.pdf --model gemini-4-argon
+        gemini chat new "Plan a migration" --thinking-level high
+        gemini chat new "Classify: ..." -m gemini-3.5-flash-lite -T 0.2 --thinking-level minimal
     """
     try:
         client = get_client()
@@ -44,7 +48,13 @@ def chat_new(
             file_refs = [processed_file]
 
         print_info(f"Generating with {model}...")
-        result = client.generate_content(prompt=prompt, model=model, file_refs=file_refs)
+        result = client.generate_content(
+            prompt=prompt,
+            model=model,
+            file_refs=file_refs,
+            temperature=temperature,
+            thinking_level=thinking_level.value if thinking_level else None,
+        )
 
         print_success("Generation complete")
         print()

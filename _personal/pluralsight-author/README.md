@@ -135,3 +135,42 @@ pluralsight-author cache clear
 
 `cache clear` removes response-cache files.
 It preserves the imported Author Kit ZIP in the selected profile data.
+
+## Module submission
+
+`pluralsight-author modules inspect 21958 --module-order 1 --profile default` reads
+current portal module, clip and asset IDs without exposing signed download links.
+`pluralsight-author modules submit --manifest /absolute/manifest.json --profile default`
+uploads the approved deck, uploads or replaces edited clips in manifest order, sets
+canonical titles through the Author Dashboard's authoritative content service,
+verifies the remote bytes and displayed names, and submits the module for review.
+Authentication uses the existing CLI browser profile headlessly.
+
+Manifest JSON requires `course_title`, `module_order` (one-based), `module_title`,
+`deck_path` (existing PPTX), and ordered `clips` with `record_id`, `title`, and `path`
+(existing `.edited.mp4`). Optional numeric `course_id` skips title discovery. Without
+it, exactly one in-progress Author Home card must match the course title. Course and
+module titles are confirmed against the portal API before any upload. An existing
+slide deck must have the exact local PPTX filename; a mismatch fails before any
+write, even when the bytes match.
+
+The result contains `ok`, `course_id`, `course_title`, `module_id`, `module_guid`,
+`module_title`, `module_order`, `status`, `deck`, `clips`, `display_titles`, and `already_submitted`.
+Retries inspect existing uploads and compare bytes before creating or replacing
+anything. A module already under review is read-only: exact matches return its
+receipt, while changed bytes, names, or order fail explicitly. Modified modules in
+an update state replace the existing clip instead of adding duplicates. The API
+and selectors were discovered from the production Author Dashboard on November 5,
+2026. No public author-upload API is used; JSON and multipart requests follow the
+portal's internal API. Source footage is never accepted.
+
+Before submission, the complete ordered clip set is renamed through the same
+`PUT /content/api/v1/clip/{guid}` operation used by the portal's Save control,
+with the exact `{title}` payload. Legacy numeric-ID clip writes are not used:
+they can temporarily change the legacy projection without changing the title
+stored by the content service. Module reads use the authoritative content-service
+module endpoint. Verification rereads each clip by GUID and reloads the target
+module's actual table, checking the complete ordered clip IDs and displayed
+names before submitting. After submission, both checks run again and the receipt
+is rebuilt from fresh reads. A post-submission mismatch fails explicitly; it
+never returns cached pre-submission names or changes a locked module.

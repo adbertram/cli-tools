@@ -1,0 +1,1360 @@
+{
+  "tool": "weekly",
+  "description": "CLI interface for weekly",
+  "discovered_at": "2026-11-03T17:43:13Z",
+  "total_commands": 37,
+  "global_options": [],
+  "commands": {
+    "auth": {
+      "help": "Manage weekly authentication",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "import-capture": {
+          "help": "Import and verify a captured Weekly login and refresh.",
+          "arguments": [
+            {
+              "name": "directory",
+              "type": "PATH",
+              "required": true,
+              "help": "Stopped private capture session directory"
+            }
+          ],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "import-export": {
+          "help": "Import transaction export settings from an authorized capture.",
+          "arguments": [
+            {
+              "name": "directory",
+              "type": "PATH",
+              "required": true,
+              "help": "Stopped or active private export capture directory"
+            }
+          ],
+          "options": [
+            {
+              "name": "--flow-file",
+              "type": "TEXT",
+              "required": false,
+              "help": "Flow filename inside capture directory",
+              "default": "wg-export.flows"
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "login": {
+          "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to save credentials to",
+              "short": "-p"
+            },
+            {
+              "name": "--force",
+              "type": "bool",
+              "required": false,
+              "help": "Clear existing ephemeral auth state and re-authenticate",
+              "short": "-F",
+              "takes_value": false
+            }
+          ]
+        },
+        "logout": {
+          "help": "Clear stored credentials.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to clear credentials from",
+              "short": "-p"
+            }
+          ]
+        },
+        "profiles": {
+          "help": "Manage authentication profiles",
+          "arguments": [],
+          "options": [],
+          "commands": {
+            "create": {
+              "help": "Create a new profile from .env.example template.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name (e.g., staging, production)"
+                }
+              ],
+              "options": []
+            },
+            "delete": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "get": {
+              "help": "Get details for a specific profile.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to get details for"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                }
+              ]
+            },
+            "list": {
+              "help": "List all profiles and show their auth types and active state.",
+              "arguments": [],
+              "options": [
+                {
+                  "name": "--table",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Display as table",
+                  "short": "-t",
+                  "takes_value": false
+                },
+                {
+                  "name": "--limit",
+                  "type": "INTEGER",
+                  "required": false,
+                  "help": "Maximum number of profiles to return",
+                  "short": "-l"
+                },
+                {
+                  "name": "--filter",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Filter: field:op:value (e.g., active:eq:True)",
+                  "short": "-f"
+                },
+                {
+                  "name": "--properties",
+                  "type": "TEXT",
+                  "required": false,
+                  "help": "Comma-separated list of fields to include",
+                  "short": "-p"
+                }
+              ]
+            },
+            "remove": {
+              "help": "Delete a profile and its data.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to delete"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "rename": {
+              "help": "Rename a profile, re-keying its secrets to the new profile name.",
+              "arguments": [
+                {
+                  "name": "old",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Existing profile name to rename"
+                },
+                {
+                  "name": "new",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "New profile name (must not already exist)"
+                }
+              ],
+              "options": [
+                {
+                  "name": "--keep-old",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Build and activate the new profile but leave the old profile dir and old secrets intact",
+                  "takes_value": false
+                },
+                {
+                  "name": "--force",
+                  "type": "bool",
+                  "required": false,
+                  "help": "Skip confirmation",
+                  "short": "-F",
+                  "takes_value": false
+                }
+              ]
+            },
+            "select": {
+              "help": "Activate a profile within its auth type.",
+              "arguments": [
+                {
+                  "name": "name",
+                  "type": "TEXT",
+                  "required": true,
+                  "help": "Profile name to activate within its auth type"
+                }
+              ],
+              "options": []
+            }
+          }
+        },
+        "refresh": {
+          "help": "Refresh and verify the saved Weekly session.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "status": {
+          "help": "Check authentication status across profiles. Performs a live round-trip for every configured credential type so the report reflects ground truth — not on-disk belief. Saved credentials whose live verification fails are reported as ``authenticated: false`` with the failure reason in ``api_test``.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name to check (defaults to all profiles)",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            }
+          ]
+        },
+        "test": {
+          "help": "Test authentication by verifying credentials work across profiles.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--verbose",
+              "type": "bool",
+              "required": false,
+              "help": "Show detailed checks",
+              "short": "-v",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name (defaults to all profiles)",
+              "short": "-p"
+            }
+          ]
+        }
+      }
+    },
+    "balances": {
+      "help": "Read linked account balances",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "get": {
+          "help": "Get a saved account balance by ID.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "List saved account balance records.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum results (no limit by default)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields, supports dot notation",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "bills": {
+      "help": "Read and create recurring bills and income",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Create a recurring bill or income item.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recurring bill description"
+            },
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": true,
+              "help": "Positive amount in exact cents"
+            },
+            {
+              "name": "--interval",
+              "type": "TEXT",
+              "required": true,
+              "help": "Intervals: weekly, biweekly, every3weeks, every4weeks, every5weeks, every6weeks, every7weeks, every8weeks, every10weeks, bimonthly, monthly, two_months, quarterly, every4months, every5months, biannually, every7months, annually, every2years"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": true,
+              "help": "Bill categories: utilities, donations, education, health, housing, income, kids, loan, medical, uncategorized, pets, savings, subscriptions, taxes, transportation"
+            },
+            {
+              "name": "--emoji",
+              "type": "TEXT",
+              "required": true,
+              "help": "Bill icon emoji"
+            },
+            {
+              "name": "--emoji-color",
+              "type": "TEXT",
+              "required": true,
+              "help": "Icon background colors: red, orange, yellow, green, blue, purple, gray"
+            },
+            {
+              "name": "--kind",
+              "type": "TEXT",
+              "required": false,
+              "help": "expense or income, independent of category",
+              "default": "expense"
+            },
+            {
+              "name": "--next-date",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional next transaction date YYYY-MM-DD"
+            },
+            {
+              "name": "--hide-from-reports",
+              "type": "bool",
+              "required": false,
+              "help": "Exclude this item from reports",
+              "takes_value": false
+            },
+            {
+              "name": "--archived",
+              "type": "bool",
+              "required": false,
+              "help": "Create archived, without affecting the weekly spending limit",
+              "takes_value": false
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Validate and preview without reading or writing the account",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a saved recurring bill or income item by ID.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Recurring bill or income ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields, supports dot notation",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile"
+            }
+          ]
+        },
+        "list": {
+          "help": "List saved recurring bills and income, preserving their native fields.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum results (no limit by default)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., title:contains:Rent)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields, supports dot notation",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as a table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile"
+            }
+          ]
+        }
+      }
+    },
+    "budget": {
+      "help": "Read Weekly budget records",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "current": {
+          "help": "Read current week, recurring items, funds and budget preferences.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "cache": {
+      "help": "Manage response cache",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "clear": {
+          "help": "Remove all cached responses. Deletes every file in the cache directory ({storage_dir}/cache/) and reports how many files and bytes were freed.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        }
+      }
+    },
+    "categories": {
+      "help": "Manage spending categories",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Create a Safe-to-Spend category, not a savings fund.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Unique spending category name"
+            },
+            {
+              "name": "--color",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category color, for example red"
+            },
+            {
+              "name": "--emoji",
+              "type": "TEXT",
+              "required": true,
+              "help": "Category emoji"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a saved spending category by ID.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "List saved categories available for manual spending.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "funds": {
+      "help": "Read funds and create future weekly savings plans",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Create a future weekly fund without retroactive contribution credits.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--contribution",
+              "type": "TEXT",
+              "required": true,
+              "help": "Weekly contribution amount"
+            },
+            {
+              "name": "--starting-balance",
+              "type": "TEXT",
+              "required": true,
+              "help": "Money already set aside; use zero to start fresh"
+            },
+            {
+              "name": "--emoji",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--color",
+              "type": "TEXT",
+              "required": true,
+              "help": "Fund background: gray"
+            },
+            {
+              "name": "--goal",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional target balance"
+            },
+            {
+              "name": "--replace-bill",
+              "type": "TEXT",
+              "required": false,
+              "help": "Archive an expense bill as this fund replaces its allocation"
+            },
+            {
+              "name": "--settled-transaction",
+              "type": "TEXT",
+              "required": false,
+              "help": "Optional unreviewed bank expense paid against the replaced bill"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "get": {
+          "help": "Get saved fund configuration.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "List fund configuration; balances depend on the contribution and spending ledger.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "transactions": {
+      "help": "Read transactions and manage spending",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Create a manual safe-to-spend entry.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--date",
+              "type": "TEXT",
+              "required": false,
+              "help": "YYYY-MM-DD; defaults to today in account timezone"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": true,
+              "help": "Saved category name"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "get": {
+          "help": "Find one transaction in the selected export range.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Export range: all or month_to_date",
+              "default": "all"
+            },
+            {
+              "name": "--timezone-offset",
+              "type": "bool",
+              "required": false,
+              "help": "<int>",
+              "takes_value": false
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields, supports dot notation",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "ignore": {
+          "help": "Ignore an unreviewed bank transaction; retain its original bank details.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Unreviewed bank transaction ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Preview the change without writing",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "List transactions in the selected export range.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--range",
+              "type": "TEXT",
+              "required": false,
+              "help": "Export range: all or month_to_date",
+              "default": "all"
+            },
+            {
+              "name": "--unreviewed",
+              "type": "bool",
+              "required": false,
+              "help": "List the current-week review queue (requires all range)",
+              "takes_value": false
+            },
+            {
+              "name": "--timezone-offset",
+              "type": "INTEGER",
+              "required": false,
+              "help": "Override the captured timezone offset"
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]  Maximum results (no limit by default)",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., name:eq:value)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields, supports dot notation",
+              "short": "-p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "split": {
+          "help": "Split a bank-linked expense into safe-to-spend categories.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--part",
+              "type": "TEXT",
+              "required": true,
+              "help": "Split part as AMOUNT:CATEGORY; repeat for each part"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved authentication profile name"
+            }
+          ]
+        },
+        "update": {
+          "help": "Update a safe-to-spend category, or manual entry amount and title.",
+          "arguments": [
+            {
+              "name": "transaction_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--amount",
+              "type": "TEXT",
+              "required": false,
+              "help": "Positive spending amount"
+            },
+            {
+              "name": "--title",
+              "type": "TEXT",
+              "required": false,
+              "help": "Spending description"
+            },
+            {
+              "name": "--category",
+              "type": "TEXT",
+              "required": false,
+              "help": "Saved category name"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    },
+    "weeks": {
+      "help": "Read and delete weeks; create completed historical weeks",
+      "arguments": [],
+      "options": [],
+      "commands": {
+        "create": {
+          "help": "Create a completed past week with no rollover; current/future weeks are unsupported.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--start-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inclusive start date YYYY-MM-DD"
+            },
+            {
+              "name": "--end-date",
+              "type": "TEXT",
+              "required": true,
+              "help": "Inclusive end date YYYY-MM-DD"
+            },
+            {
+              "name": "--spending-limit",
+              "type": "TEXT",
+              "required": true,
+              "help": "Explicit weekly spending limit in exact cents"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Return the proposed week without creating it",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete one week budget record; retain transactions and funds.",
+          "arguments": [
+            {
+              "name": "week_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Saved week ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Preview the selected week and deletion effects without deleting",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Delete the selected week budget record",
+              "short": "-y",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a saved week, including its dates and recorded spending limit.",
+          "arguments": [
+            {
+              "name": "item_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        },
+        "list": {
+          "help": "List saved weeks with their inclusive dates and recorded limits.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "[x>=1]",
+              "short": "-l"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., startDate:eq:2026-10-16)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "short": "-p",
+              "takes_value": false
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "bool",
+              "required": false,
+              "help": "<str>",
+              "takes_value": false
+            }
+          ]
+        }
+      }
+    }
+  },
+  "usage_instructions": "Use the `weekly` CLI. Run `weekly --help` to discover command groups and `--help` on any subcommand for its options."
+}

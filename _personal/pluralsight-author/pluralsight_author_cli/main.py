@@ -16,6 +16,7 @@ from cli_tools_shared.output import command, print_error, print_info, print_json
 from . import __version__
 from .client import APPLICATION_FIELD_LABELS, canonical_icon_color, get_client
 from .commands.icons import COMMAND_CREDENTIALS as ICON_CREDENTIALS
+from .commands.modules import COMMAND_CREDENTIALS as MODULE_CREDENTIALS
 from .config import AUTH_METHOD_OPPORTUNITIES, get_config
 
 COLUMNS = ["id", "title", "opportunity_type", "category", "posted_date", "is_new"]
@@ -338,6 +339,44 @@ def download_icon(
     finally:
         client.close()
 
+
+modules_app = typer.Typer(help="Submit and inspect Pluralsight module assets", no_args_is_help=True)
+
+
+@modules_app.command("inspect")
+@command
+def inspect_module(course_id: int = typer.Argument(..., help="Numeric Author Dashboard course ID"),
+                   module_order: int = typer.Option(..., "--module-order", help="One-based module order"),
+                   table: bool = typer.Option(False, "--table", "-t", help="Display as table")):
+    """Read the module and its current uploaded clips and deck."""
+    from .module_submission import ModuleSubmission
+    transport = ModuleSubmission()
+    try:
+        result = transport.inspect(course_id, module_order)
+        # Keep signed downloads and internal synchronization details out of CLI output.
+        result['clips'] = [{k: c[k] for k in ('id', 'guid', 'title', 'index')} for c in result['clips']]
+        result['assets'] = [{k: a[k] for k in ('id', 'fileName', 'type', 'status')} for a in result['assets']]
+        _render_get(result, table, None, "Module not found.")
+    finally:
+        transport.close()
+
+
+@modules_app.command("submit")
+@command
+def submit_module(manifest: Path = typer.Option(..., "--manifest", help="Module and edited-media manifest JSON")):
+    """Upload a module deck and edited clips, verify contents, and submit for review."""
+    import json
+    from .module_submission import ModuleSubmission
+    transport = ModuleSubmission()
+    try:
+        print_json(transport.submit(json.loads(manifest.read_text())))
+    finally:
+        transport.close()
+
+
+register_commands(app, get_config,
+    SimpleNamespace(app=modules_app, COMMAND_CREDENTIALS=MODULE_CREDENTIALS),
+    name='modules', help='Submit and inspect Pluralsight module assets')
 
 register_commands(
     app,

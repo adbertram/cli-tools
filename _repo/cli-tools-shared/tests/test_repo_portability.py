@@ -9,6 +9,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKIP_PARTS = {
     ".git",
+    # Git-ignored agent scratch copies never exist in a fresh clone.
+    "agent_workspaces",
     ".venv",
     "node_modules",
     "templates",

@@ -505,3 +505,18 @@ def test_clear_sensitive_field_with_empty_value_does_not_touch_canonical_secret(
     assert calls == []
     assert "API_KEY=''" in profile.read_text()
     assert config.api_key is None
+
+
+def test_failed_secret_write_reports_status_without_exposing_secret(tmp_path, monkeypatch):
+    value = 'synthetic-private-session'
+    monkeypatch.setattr(
+        config_module, '_run_secret_manager',
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            [], 45, stdout=value, stderr=f'upstream echoed {value}'
+        ),
+    )
+    with pytest.raises(ConfigError) as excinfo:
+        config_module._set_secret_value('weekly-session-data', value, tmp_path / '.env')
+    assert 'secret manager exit 45' in str(excinfo.value)
+    assert 'weekly-session-data' in str(excinfo.value)
+    assert value not in str(excinfo.value)

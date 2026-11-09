@@ -1,8 +1,8 @@
 {
   "tool": "pluralsight-author",
   "description": "CLI interface for Pluralsight Author opportunities",
-  "discovered_at": "2026-10-24T13:39:27Z",
-  "total_commands": 22,
+  "discovered_at": "2026-11-05T16:40:39Z",
+  "total_commands": 24,
   "global_options": [
     {
       "name": "--version",
@@ -515,6 +515,71 @@
               "help": "Display as table",
               "short": "-t",
               "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "modules": {
+      "help": "Submit and inspect Pluralsight module assets",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "inspect": {
+          "help": "Read the module and its current uploaded clips and deck.",
+          "arguments": [
+            {
+              "name": "course_id",
+              "type": "INTEGER",
+              "required": true,
+              "help": "Numeric Author Dashboard course ID"
+            }
+          ],
+          "options": [
+            {
+              "name": "--module-order",
+              "type": "INTEGER",
+              "required": true,
+              "help": "One-based module order"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "Display as table",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "submit": {
+          "help": "Upload a module deck and edited clips, verify contents, and submit for review.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--manifest",
+              "type": "PATH",
+              "required": true,
+              "help": "Module and edited-media manifest JSON"
             },
             {
               "name": "--profile",

@@ -73,16 +73,17 @@ CLI_TOOLS_KEYCHAIN=/path/to/custom.keychain-db \
 
 Use the explicit unlock option instead of running `security unlock-keychain` in a separate SSH command. macOS Keychain access can be session-scoped, so a separate SSH unlock does not reliably apply to the later secret-manager command.
 
+Multi-line values (for example a PEM private key) come back from `get` hex-encoded, not as the stored text, so `read_cli_tool_secret` returns hex for them. Store such a value as one line of base64 (`base64 -i key.pem | tr -d '\n' | secrets.sh set ...`) and decode it in the CLI, as `kalshi` does for its private key.
+
 ## Required Workflow
 
-Before asking Adam for any CLI-tool credential:
+To obtain any CLI-tool credential:
 
 1. Run `list` or `has <name>` against the CLI-tools secret manager.
 2. If the secret exists, retrieve it with `get <name>` and use it.
 3. If the secret is missing, use the `lastpass` CLI tool to look it up (e.g., `lastpass items list --filter "name:like:%<service-name>%" --table`). If found, retrieve the value with the `lastpass` CLI and store it in the CLI-tools secret manager with `set --tool <cli-tool> --type <type>`.
-4. If not found in LastPass, inspect the service's login page using browser automation (e.g., via `playwright-cli` or `ui-web-test-engineer`) to see if it supports third-party authentication providers (like Google, Microsoft, Apple). If it does, ask Adam if he would like to use one of those providers.
-5. Ask Adam for manual credentials only if the credential cannot be found in the secret manager, cannot be found via the `lastpass` CLI, and third-party auth is either unsupported or declined by Adam.
-6. Store any newly provided reusable CLI-tool credential immediately with `set <name>`.
+4. If not found in LastPass, report that exact blocker. Never ask Adam to supply credentials or to log in.
+5. Store any credential retrieved from LastPass immediately with `set <name>`.
 
 Never print secret values in logs, final answers, test output, screenshots, or command examples.
 
@@ -142,7 +143,7 @@ expect {
 }
 ```
 
-Never leave `log_user 1` active while sending passwords, API keys, OAuth client secrets, refresh tokens, recovery codes, or MFA values. Do not paste secrets into Terminal.app or GUI prompts through Computer Use; use the CLI-tools secret manager or the CLI's own non-echoing input path.
+Never leave `log_user 1` active while sending passwords, API keys, OAuth client secrets, refresh tokens, recovery codes, or MFA values. Do not paste secrets into terminal or GUI prompts; use the CLI-tools secret manager or the CLI's own non-echoing input path.
 
 If you write an `expect` helper script to a task workspace, do not execute the
 generated file path directly from Bash. Agent-created helper files are not

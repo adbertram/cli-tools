@@ -43,6 +43,8 @@ Common commands:
 | List subagent launches | `claude-code-sessions subagent-activity list --session-id <session-id> --project <project>` |
 | List update-plan items | `claude-code-sessions todos list --session-id <session-id> --project <project>` |
 | Show a session timeline | `claude-code-sessions timeline consolidated --session-id <session-id> --project <project>` |
+| List Desktop account pairs in every Desktop app store | `claude-code-sessions desktop accounts` |
+| Preview a Desktop session import from a second app store | `claude-code-sessions desktop import '<exact title>' --source-store Claude-3p --source-account <id> --source-organization <id> --destination-store Claude --destination-account <id> --destination-organization <id> --dry-run` |
 </quick_start>
 
 <principles>
@@ -74,6 +76,7 @@ For bounded child recovery, use `tool-calls list --project <project> --session-i
 - `todos` — `update_plan` items captured in transcripts.
 - `skills` — `$skill` or `@agent` mentions in user prompts.
 - `timeline` — chronological event streams for one or more sessions.
+- `desktop` — Claude Desktop session records in every app data directory under `~/Library/Application Support` that holds a `claude-code-sessions` store (`Claude`, plus `Claude-3p` for a second app profile). Rows carry `store`. One account/organization pair can exist in several stores, so `get` takes `--store` and `import` takes `--source-store`/`--destination-store` whenever the pair is ambiguous. A cross-store import also copies the session's `side-session-notes`; run `--dry-run` first.
 </principle>
 </principles>
 

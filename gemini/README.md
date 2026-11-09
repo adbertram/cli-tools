@@ -63,7 +63,7 @@ gemini-api video analyze video.mp4 --prompt "Summarize this video"
 gemini-api video analyze video.mp4 --prompt-file prompts/review.txt
 
 # Analyze with custom model
-gemini-api video analyze lecture.mp4 -p "What are the key topics?" --model gemini-3.1-pro-preview
+gemini-api video analyze lecture.mp4 -p "What are the key topics?" --model gemini-4-argon
 
 # Using short flags: -p for prompt, -f for prompt-file
 gemini-api video analyze demo.mp4 -f analysis_prompt.txt
@@ -79,12 +79,32 @@ gemini-api video analyze large.mp4 -p "Analyze audio quality" --no-wait
 ```bash
 # Start a new chat conversation
 gemini-api chat new "Write a haiku about AI"
-gemini-api chat new "Explain photosynthesis" --model gemini-3.1-pro-preview
+gemini-api chat new "Explain photosynthesis" --model gemini-4-argon
 
 # Chat with a file attachment
 gemini-api chat new "What is in this image?" --file photo.jpg
 gemini-api chat new "Summarize this document" -f report.pdf
 ```
+
+### Image Generation
+
+Generates images with the Nano Banana models through `generateContent`.
+
+```bash
+# Default model: gemini-3-pro-image (Nano Banana Pro), 16:9, 2K
+gemini-api image generate "A cyberpunk cityscape at sunset" -o city.png
+
+# Cheaper workhorse model at 1K
+gemini-api image generate "Blog header" -m gemini-nano-banana-2.1 -s 1K
+
+# Edit or compose from reference images (repeatable)
+gemini-api image generate "Put this logo on a mug" -i logo.png
+
+# List supported models
+gemini-api image models
+```
+
+Supported `-m` values: `gemini-3-pro-image` (default, Nano Banana Pro), `gemini-nano-banana-2.1` (Nano Banana 2.1), `gemini-3.1-flash-image` (Nano Banana 2), `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite, 1K only), and `gemini-2.5-flash-image` (shuts down 2027-03-15). Imagen 4 and the `gemini-3-pro-image-preview` preview are shut down and no longer accepted ([deprecations](https://ai.google.dev/gemini-api/docs/deprecations)).
 
 ### File Operations
 
@@ -251,6 +271,10 @@ MIT
 
 ```bash
 gemini-api research --help
+
+# Default agent: deep-research-preview-04-2026
+gemini-api research start "Compare vector databases" --no-stream
+gemini-api research start -a deep-research-max-preview-04-2026 -f prompt.txt
 ```
 
 ### Cache

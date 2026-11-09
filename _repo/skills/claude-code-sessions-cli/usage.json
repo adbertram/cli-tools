@@ -1,8 +1,8 @@
 {
   "tool": "claude-code-sessions",
   "description": "Query and analyze Claude Code session data from ~/.claude",
-  "discovered_at": "2026-09-15T16:14:34Z",
-  "total_commands": 30,
+  "discovered_at": "2026-11-04T19:21:26Z",
+  "total_commands": 34,
   "global_options": [
     {
       "name": "--version",
@@ -386,6 +386,248 @@
               "type": "TEXT",
               "required": false,
               "help": "Comma-separated fields to include"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "desktop": {
+      "help": "Inspect and import Desktop sessions",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "accounts": {
+          "help": "List account and organization IDs that have saved Desktop sessions in every Desktop app store.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Desktop app data directory name, e.g. Claude or Claude-3p"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., title:eq:Example)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Get a Desktop session record for a specific store, account, and organization.",
+          "arguments": [
+            {
+              "name": "session_id",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            }
+          ],
+          "options": [
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Desktop app data directory name, e.g. Claude or Claude-3p"
+            },
+            {
+              "name": "--account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--organization",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "import": {
+          "help": "Copy a session and linked Desktop records into another local account or Desktop app store.",
+          "arguments": [
+            {
+              "name": "title",
+              "type": "TEXT",
+              "required": true,
+              "help": "Exact, case-sensitive Desktop session title"
+            }
+          ],
+          "options": [
+            {
+              "name": "--source-account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--source-organization",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--destination-account",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--destination-organization",
+              "type": "TEXT",
+              "required": true,
+              "help": ""
+            },
+            {
+              "name": "--source-store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Source Desktop app data directory name, e.g. Claude-3p"
+            },
+            {
+              "name": "--destination-store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Destination Desktop app data directory name, e.g. Claude"
+            },
+            {
+              "name": "--session-id",
+              "type": "TEXT",
+              "required": false,
+              "help": "Exact Desktop session ID to disambiguate the title"
+            },
+            {
+              "name": "--dry-run",
+              "type": "bool",
+              "required": false,
+              "help": "Preview without copying records",
+              "takes_value": false
+            },
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Copy the selected session records",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "list": {
+          "help": "List Desktop records with their store, account, and organization.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--store",
+              "type": "TEXT",
+              "required": false,
+              "help": "Desktop app data directory name, e.g. Claude or Claude-3p"
+            },
+            {
+              "name": "--account",
+              "type": "TEXT",
+              "required": false,
+              "help": "Account ID"
+            },
+            {
+              "name": "--organization",
+              "type": "TEXT",
+              "required": false,
+              "help": "Organization ID"
+            },
+            {
+              "name": "--table",
+              "type": "bool",
+              "required": false,
+              "help": "",
+              "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--limit",
+              "type": "INTEGER",
+              "required": false,
+              "help": "",
+              "short": "-l",
+              "default": "100"
+            },
+            {
+              "name": "--filter",
+              "type": "TEXT",
+              "required": false,
+              "help": "Filter: field:op:value (e.g., title:eq:Example)",
+              "short": "-f"
+            },
+            {
+              "name": "--properties",
+              "type": "TEXT",
+              "required": false,
+              "help": "Comma-separated fields to include",
+              "short": "-p"
             },
             {
               "name": "--profile",
