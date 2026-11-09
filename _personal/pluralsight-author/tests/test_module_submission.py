@@ -490,3 +490,61 @@ def test_deck_filename_readback_change_blocks_submit(submitted):
     with pytest.raises(ClientError, match='deck content verification failed'):
         transport.submit(manifest)
     assert not transport.calls
+
+
+@pytest.mark.parametrize('status', ['updates_required', 'available_for_updates'])
+def test_update_state_plan_writes_nothing_and_reports_new_version(submitted, status):
+    transport, manifest = submitted
+    transport.state['module']['status'] = status
+    transport.state['clips'][0]['numberedVersion'] = 1
+    transport.matches = False
+    result = transport.submit(manifest, plan=True)
+    assert result['ok'] and result['plan']
+    assert result['clips'][0]['action'] == 'new_version' and result['clips'][0]['version'] == 1
+    assert result['deck'] == 'replace'
+    assert not transport.calls
+
+
+def test_plan_reports_unchanged_when_bytes_match(submitted):
+    transport, manifest = submitted
+    transport.state['module']['status'] = 'available_for_updates'
+    result = transport.submit(manifest, plan=True)
+    assert result['clips'][0]['action'] == 'unchanged' and result['deck'] == 'unchanged'
+
+
+@pytest.mark.parametrize('plan', [True, False])
+def test_update_state_never_adds_a_new_clip(submitted, plan):
+    transport, manifest = submitted
+    transport.state['module']['status'] = 'available_for_updates'
+    transport.state['clips'] = []
+    if plan:
+        result = transport.submit(manifest, plan=True)
+        assert result['ok'] is False and result['clips'][0]['action'] == 'new_clip'
+    else:
+        with pytest.raises(ClientError, match='New clips are never added during updates'):
+            transport.submit(manifest)
+    assert not transport.calls
+
+
+def test_update_receipt_reports_version_before_and_after(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'available_for_updates'
+    old.state['assets'] = []
+    old.state['clips'][0]['numberedVersion'] = 1
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = False; transport.video_uploaded = False
+    original_upload = transport.upload_video
+    def upload(path, module, existing=None, index=0):
+        guid = original_upload(path, module, existing, index)
+        transport.state['clips'][0]['numberedVersion'] = 2
+        return guid
+    transport.upload_video = upload
+    original_request = transport.request
+    def request(method, url, **kwargs):
+        result = original_request(method, url, **kwargs)
+        if '/module-assets' in url: transport.deck_uploaded = True
+        return result
+    transport.request = request
+    result = transport.submit(manifest)
+    clip = result['clips'][0]
+    assert (clip['action'], clip['version_before'], clip['version']) == ('new_version', 1, 2)

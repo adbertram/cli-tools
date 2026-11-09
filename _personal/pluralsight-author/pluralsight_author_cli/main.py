@@ -421,7 +421,7 @@ def inspect_module(course_id: int = typer.Argument(..., help="Numeric Author Das
     try:
         result = transport.inspect(course_id, module_order)
         # Keep signed downloads and internal synchronization details out of CLI output.
-        result['clips'] = [{k: c[k] for k in ('id', 'guid', 'title', 'index')} for c in result['clips']]
+        result['clips'] = [{k: c[k] for k in ('id', 'guid', 'title', 'index', 'numberedVersion') if k in c} for c in result['clips']]
         result['assets'] = [{k: a[k] for k in ('id', 'fileName', 'type', 'status')} for a in result['assets']]
         _render_get(result, table, None, "Module not found.")
     finally:
@@ -430,13 +430,14 @@ def inspect_module(course_id: int = typer.Argument(..., help="Numeric Author Das
 
 @modules_app.command("submit")
 @command
-def submit_module(manifest: Path = typer.Option(..., "--manifest", help="Module and edited-media manifest JSON")):
+def submit_module(manifest: Path = typer.Option(..., "--manifest", help="Module and edited-media manifest JSON"),
+                  plan: bool = typer.Option(False, "--plan", help="Write nothing; report per clip whether it is unchanged, gets a new version, or would be a new clip")):
     """Upload a module deck and edited clips, verify contents, and submit for review."""
     import json
     from .module_submission import ModuleSubmission
     transport = ModuleSubmission()
     try:
-        print_json(transport.submit(json.loads(manifest.read_text())))
+        print_json(transport.submit(json.loads(manifest.read_text()), plan=plan))
     finally:
         transport.close()
 

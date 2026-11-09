@@ -13,6 +13,9 @@ from .config import get_config
 API = 'https://authortools-api.pluralsight.com/api/v1/'
 CONTENT = 'https://app.pluralsight.com/content/api/'
 ASSETS = 'https://assets-service.pluralsight.com/'
+# Pluralsight asks for edits in these states; the portal's "Replace clip" makes a new
+# version of an existing clip (PUT v1/clip/{guid}/video) and never adds a clip.
+UPDATE_STATES = ('updates_required', 'available_for_updates')
 
 
 def digest(path):
@@ -236,7 +239,35 @@ class ModuleSubmission:
                 raise ClientError('Pluralsight create clip returned no clip GUID.')
             return created['guid']
 
-    def submit(self, manifest):
+    def portal_clip(self, state, clip):
+        matches = [c for c in state['clips'] if c['title'] == clip['title']
+                   or source_name_matches(c['videoFile']['originalVideoFileName'], clip['path'])]
+        if len(matches) > 1:
+            raise ClientError('More than one portal clip matches a manifest clip.')
+        return matches[0] if matches else None
+
+    def plan(self, state, deck, decks, clips):
+        """Read-only account of what submit would do; compares remote bytes, writes nothing."""
+        module = state['module']
+        updating = module['status'] in UPDATE_STATES
+        deck_same = bool(decks and decks[0]['status'] == 'done'
+                         and self.remote_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck))
+        rows = []
+        for clip in clips:
+            existing = self.portal_clip(state, clip)
+            if existing is None:
+                action = 'new_clip'
+            else:
+                action = 'unchanged' if self.remote_matches(existing['downloadLink'], clip['path']) else 'new_version'
+            rows.append({'record_id': clip['record_id'], 'title': clip['title'],
+                         'portal_clip_guid': existing['guid'] if existing else None, 'action': action,
+                         'version': existing.get('numberedVersion') if existing else None,
+                         'bytes': Path(clip['path']).stat().st_size})
+        refused = updating and any(r['action'] == 'new_clip' for r in rows)
+        return {'ok': not refused, 'plan': True, 'module_status': module['status'],
+                'deck': 'unchanged' if deck_same else ('replace' if decks else 'upload'), 'clips': rows}
+
+    def submit(self, manifest, plan=False):
         required = {'course_title', 'module_order', 'module_title', 'deck_path', 'clips'}
         if not isinstance(manifest, dict) or not required <= manifest.keys():
             raise ClientError('Incomplete module submission manifest.')
@@ -267,6 +298,11 @@ class ModuleSubmission:
             raise ClientError('Pluralsight module has multiple slide decks; resolve before submission.')
         if decks and decks[0]['fileName'] != deck.name:
             raise ClientError('Pluralsight slide deck filename differs from the submission manifest; resolve before submission.')
+        if plan:
+            return self.plan(state, deck, decks, clips)
+        updating = module['status'] in UPDATE_STATES
+        versions_before = {c['guid']: c.get('numberedVersion') for c in state['clips']}
+        actions = {}
         deck_ok = bool(decks and decks[0]['status'] == 'done' and self.existing_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck, pending=not submitted, identity=f'deck {decks[0]["id"]}'))
         if deck_ok and decks[0]['type'] != 'slides':
             if submitted:
@@ -286,12 +322,13 @@ class ModuleSubmission:
             self.request('PUT', ASSETS + f'module-assets/{uploaded_deck["id"]}',
                          params={'source': 'author-tools'}, json={'type': 'slides'})
         for index, clip in enumerate(clips):
-            matches = [c for c in state['clips'] if c['title'] == clip['title'] or source_name_matches(c['videoFile']['originalVideoFileName'], clip['path'])]
-            if len(matches) > 1:
-                raise ClientError('More than one portal clip matches a manifest clip.')
-            existing = matches[0] if matches else None
+            existing = self.portal_clip(state, clip)
+            if existing is None and updating:
+                raise ClientError(f'Pluralsight module is in an update state: clip "{clip["title"]}" has no portal clip to '
+                                  'add a new version to. New clips are never added during updates.')
             same = bool(existing and self.existing_matches(existing['downloadLink'], clip['path'],
                         pending=not submitted, identity=f'clip {existing["guid"]}'))
+            actions[clip['record_id']] = 'unchanged' if same else ('new_version' if existing else 'new_clip')
             if not same:
                 if submitted:
                     raise ClientError('Submitted module video differs from current bytes; cannot modify during review.')
@@ -348,7 +385,9 @@ class ModuleSubmission:
         verified_rows, display_titles = self.verify_names(state, manifest)
         receipts = [{'record_id': clip['record_id'], 'id': row['id'], 'guid': row['guid'],
                      'title': row['title'], 'index': row['index'],
-                     'original_file_name': row['videoFile']['originalVideoFileName']}
+                     'original_file_name': row['videoFile']['originalVideoFileName'],
+                     'action': actions.get(clip['record_id'], 'unchanged'),
+                     'version_before': versions_before.get(row['guid']), 'version': row.get('numberedVersion')}
                     for clip, row in zip(clips, verified_rows)]
         return {'ok': True, 'course_id': course_id, 'course_title': state['course_title'], 'module_order': state['module']['index'], 'module_id': module['id'], 'module_guid': module['guid'],
             'module_title': module['title'], 'status': state['module']['status'], 'already_submitted': submitted,

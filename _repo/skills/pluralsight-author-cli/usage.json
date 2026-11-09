@@ -1,7 +1,7 @@
 {
   "tool": "pluralsight-author",
   "description": "CLI interface for Pluralsight Author opportunities",
-  "discovered_at": "2026-11-09T21:31:05Z",
+  "discovered_at": "2026-11-09T23:24:55Z",
   "total_commands": 27,
   "global_options": [
     {
@@ -580,6 +580,13 @@
               "type": "PATH",
               "required": true,
               "help": "Module and edited-media manifest JSON"
+            },
+            {
+              "name": "--plan",
+              "type": "bool",
+              "required": false,
+              "help": "Write nothing; report per clip whether it is unchanged, gets a new version, or would be a new clip",
+              "takes_value": false
             },
             {
               "name": "--profile",

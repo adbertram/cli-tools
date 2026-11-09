@@ -179,6 +179,20 @@ write, even when the bytes match.
 
 The result contains `ok`, `course_id`, `course_title`, `module_id`, `module_guid`,
 `module_title`, `module_order`, `status`, `deck`, `clips`, `display_titles`, and `already_submitted`.
+`modules submit --manifest ... --plan` writes nothing and reports the deck as
+`unchanged`, `replace`, or `upload`, and each clip as `unchanged`, `new_version`, or
+`new_clip`, with the clip's current portal `version`. Run it before every
+resubmission.
+
+When Pluralsight asks for edits (module status `updates_required` or
+`available_for_updates`), an edited clip is added as a new version of its existing
+portal clip, the same call as the portal's "Replace clip" button
+(`PUT /content/api/v1/clip/{guid}/video`), and the clip's version number goes up by
+one. No clip is ever added in these states: a manifest clip with no matching portal
+clip fails before any write, and `--plan` reports `ok: false` for it. The receipt
+lists each clip's `action`, `version_before`, and `version`, and the module is
+submitted with `updates-submit-move-to-qa`.
+
 Retries inspect existing uploads and compare bytes before creating or replacing
 anything. A module already under review is read-only: exact matches return its
 receipt, while changed bytes, names, or order fail explicitly. Modified modules in
