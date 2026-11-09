@@ -14,6 +14,7 @@ import requests
 
 from cli_tools_shared.data_cache import cached, invalidate
 
+from . import __version__
 from .config import get_config
 from .models import (
     Order,
@@ -189,7 +190,7 @@ class BrickowlClient:
         retry: bool = True,
     ) -> Any:
         """Execute an HTTP request with retry logic."""
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", "User-Agent": f"GeekLife-BrickOwl-CLI/{__version__}"}
         if method == "POST":
             headers["Content-Type"] = "application/x-www-form-urlencoded"
 

@@ -50,6 +50,24 @@ def test_timeout_is_passed_to_requests_request(client):
     assert DEFAULT_TIMEOUT == (10, 60)
 
 
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_api_requests_identify_the_tool(client, method):
+    """Brick Owl requires a tool-specific User-Agent on every API request."""
+    fake_response = MagicMock(spec=requests.Response)
+    fake_response.ok = True
+    fake_response.status_code = 200
+    fake_response.json.return_value = {"ok": True}
+
+    with patch("brickowl_cli.client.requests.request", return_value=fake_response) as mock_request:
+        client._execute_request(method, "https://api.brickowl.com/v1/user/details")
+
+    headers = mock_request.call_args.kwargs["headers"]
+    assert headers["User-Agent"] == "GeekLife-BrickOwl-CLI/0.1.0"
+    assert headers["Accept"] == "application/json"
+    if method == "POST":
+        assert headers["Content-Type"] == "application/x-www-form-urlencoded"
+
+
 def test_connection_error_message_redacts_api_key(client):
     """A ConnectTimeout/ConnectionError whose text contains the live key must
     surface a ClientError without that key anywhere in the message."""
