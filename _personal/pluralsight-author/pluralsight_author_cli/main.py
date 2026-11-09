@@ -17,6 +17,7 @@ from . import __version__
 from .client import APPLICATION_FIELD_LABELS, canonical_icon_color, get_client
 from .commands.icons import COMMAND_CREDENTIALS as ICON_CREDENTIALS
 from .commands.modules import COMMAND_CREDENTIALS as MODULE_CREDENTIALS
+from .commands.slide_deck import COMMAND_CREDENTIALS as SLIDE_DECK_CREDENTIALS
 from .config import AUTH_METHOD_OPPORTUNITIES, get_config
 
 COLUMNS = ["id", "title", "opportunity_type", "category", "posted_date", "is_new"]
@@ -28,6 +29,7 @@ OPPORTUNITY_CREDENTIALS = {
     "apply": [AUTH_METHOD_OPPORTUNITIES, "browser_session"],
 }
 SEARCH_CREDENTIALS = {"query": [AUTH_METHOD_OPPORTUNITIES, "browser_session"]}
+SLIDE_DECK_TARGETS = {"latest"}
 app = create_app(
     name="pluralsight-author",
     help="CLI interface for Pluralsight Author tools",
@@ -36,6 +38,7 @@ app = create_app(
 opportunities_app = typer.Typer(help="List Pluralsight Author opportunities", no_args_is_help=True)
 search_app = typer.Typer(help="Search Pluralsight Author opportunities", no_args_is_help=True)
 icons_app = typer.Typer(help="Import, search, and download Author Kit PNG icons", no_args_is_help=True)
+slide_deck_app = typer.Typer(help="Identify and download the newest Pluralsight slide-deck template", no_args_is_help=True)
 
 
 def _property_fields(properties: str | None) -> list[str] | None:
@@ -340,6 +343,37 @@ def download_icon(
         client.close()
 
 
+@slide_deck_app.command("get")
+@command
+def get_slide_deck(
+    target: str = typer.Argument(..., help="Template to read; supported value: latest"),
+):
+    """Identify the newest whole slide-deck template on the Authors Downloads page."""
+    if target not in SLIDE_DECK_TARGETS:
+        raise typer.BadParameter("supported template is 'latest'", param_hint="target")
+    client = get_client()
+    try:
+        print_json(client.latest_slide_deck())
+    finally:
+        client.close()
+
+
+@slide_deck_app.command("download")
+@command
+def download_slide_deck(
+    target: str = typer.Argument(..., help="Template to download; supported value: latest"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output file path or existing directory"),
+):
+    """Download the newest whole slide-deck template into a .potx/.pptx file."""
+    if target not in SLIDE_DECK_TARGETS:
+        raise typer.BadParameter("supported template is 'latest'", param_hint="target")
+    client = get_client()
+    try:
+        print_json(client.download_slide_deck(output))
+    finally:
+        client.close()
+
+
 modules_app = typer.Typer(help="Submit and inspect Pluralsight module assets", no_args_is_help=True)
 
 
@@ -398,6 +432,13 @@ register_commands(
     SimpleNamespace(app=icons_app, COMMAND_CREDENTIALS=ICON_CREDENTIALS),
     name="icons",
     help="Import, search, and download Author Kit PNG icons",
+)
+register_commands(
+    app,
+    get_config,
+    SimpleNamespace(app=slide_deck_app, COMMAND_CREDENTIALS=SLIDE_DECK_CREDENTIALS),
+    name="slide-deck",
+    help="Identify and download the newest Pluralsight slide-deck template",
 )
 app.add_typer(create_auth_app(get_config, tool_name="pluralsight-author"), name="auth")
 app.add_typer(create_cache_app(get_config), name="cache")

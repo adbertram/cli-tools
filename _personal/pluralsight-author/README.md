@@ -2,8 +2,8 @@
 
 ## DESCRIPTION
 
-A browser-backed CLI for Pluralsight Author opportunities and a local-cache CLI for the Pluralsight Author Kit PNG library.
-Use it to list, search, inspect, and apply for opportunities, or to query and download Author Kit icon assets without launching Chrome.
+A browser-backed CLI for Pluralsight Author opportunities, whole slide-deck templates, and the Pluralsight Author Kit PNG library.
+Use it to inspect opportunities, identify and download the latest authors-portal presentation template, or query and download Author Kit icon assets.
 
 ## Installation
 
@@ -20,7 +20,7 @@ pluralsight-author auth status
 pluralsight-author auth test
 ```
 
-Opportunity commands use persisted browser sessions and an `opportunities` auth profile. Icon commands do not require browser authentication; `--profile` selects the archive namespace only.
+Opportunity commands use persisted browser sessions and an `opportunities` auth profile. Slide-deck download commands use the authenticated `author_kit` profile. Icon commands do not require browser authentication; `--profile` selects the archive namespace only.
 
 ```bash
 pluralsight-author auth profiles create author-kit --auth-type author_kit
@@ -47,6 +47,8 @@ pluralsight-author opportunities apply product-strategy-steering-with-evidence-m
 pluralsight-author search query "security"
 pluralsight-author search query "security" --table
 pluralsight-author search query "security" --properties "id,title,category"
+pluralsight-author slide-deck get latest
+pluralsight-author slide-deck download latest --output ./Pluralsight_Template.potx
 pluralsight-author icons import /path/to/Pluralsight_Icon_library_2026-09.zip
 pluralsight-author icons list
 pluralsight-author icons list --filter "color:eq:Blue"
@@ -57,6 +59,21 @@ pluralsight-author icons search "branch"
 pluralsight-author icons get server-upload_Blue
 pluralsight-author icons download server-upload_Blue --output ./server-upload_Blue.png
 ```
+
+## Slide-deck templates
+
+`slide-deck get latest` reads the authenticated Author Kit Downloads page and returns
+the newest whole PowerPoint template link:
+
+- `version`: normalized `YYYY.MM.<letter>` value
+- `filename`
+- `url`
+- `title`
+
+`slide-deck download latest --output <file-or-directory>` downloads that template,
+validates that it is a PowerPoint package, and returns the same metadata plus
+`output`, `bytes`, and `content_type`. Use `--profile author-kit` when that profile
+is not already active.
 
 ## Opportunity Output
 

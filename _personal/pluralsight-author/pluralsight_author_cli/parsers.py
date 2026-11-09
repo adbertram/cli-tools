@@ -1,5 +1,9 @@
 import re
 
+# The portal filename may use an uppercase suffix; normalize it to CourseCraft's
+# canonical lowercase letter before returning the version.
+SLIDE_DECK_VERSION_RE = re.compile(r"\d{4}\.(?:0[1-9]|1[0-2])\.[a-zA-Z]")
+
 RESULTS_RE = re.compile(r"^\d+\s+results$")
 PAGE_RE = re.compile(r'- button "Page (\d+)(?: is your current page)?"')
 CURRENT_RE = re.compile(r'- button "Page (\d+) is your current page"')
@@ -107,3 +111,36 @@ def extract_learning_objectives_from_snapshot(snapshot_text: str) -> list[str]:
             f"Expected {expected_count} learning objectives, found {len(objectives)} in detail snapshot."
         )
     return objectives
+
+
+def parse_slide_deck_link(link: dict) -> dict | None:
+    """Parse one Authors Downloads anchor into a slide-deck record, or None.
+
+    A deck download is an anchor whose href names a ``.pptx``/``.potx`` file whose
+    stem contains "template" and embeds a ``YYYY.MM.<letter>`` version. The letter
+    is normalized to lowercase to match CourseCraft's canonical version folders.
+    Anchors that are not a whole-deck template return None; a template link whose
+    filename carries no valid version is treated as malformed and also returns
+    None, so callers never choose it as "latest".
+    """
+    href = str((link or {}).get("href") or "").strip()
+    text = str((link or {}).get("text") or "").strip()
+    if not href or not text:
+        return None
+    basename = href.rsplit("/", 1)[-1].split("?", 1)[0].split("#", 1)[0]
+    if not basename.casefold().endswith((".potx", ".pptx")):
+        return None
+    stem = basename.rsplit(".", 1)[0]
+    if "template" not in stem.casefold():
+        return None
+    match = SLIDE_DECK_VERSION_RE.search(stem)
+    if match is None:
+        return None
+    version = match.group(0)
+    version = version[:-1] + version[-1].lower()
+    return {
+        "version": version,
+        "filename": basename,
+        "url": href,
+        "title": text,
+    }

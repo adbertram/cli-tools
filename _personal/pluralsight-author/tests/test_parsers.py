@@ -3,6 +3,7 @@ from pluralsight_author_cli.parsers import (
     extract_learning_objectives_from_snapshot,
     extract_opportunities_from_snapshot,
     extract_total_pages,
+    parse_slide_deck_link,
 )
 
 
@@ -168,3 +169,26 @@ def test_extract_learning_objectives_from_snapshot():
         "3. Defend a strategic call in a roadmap review or exec conversation using a structured evidence argument that holds up against pushback",
         "4. Define success metrics for non-deterministic AI features, separating technical model performance from actual strategic business outcomes. (e.g., Just because the LLM is fast doesn't mean it increased our revenue)",
     ]
+
+
+def test_parse_slide_deck_link_reads_version_and_normalizes_letter():
+    assert parse_slide_deck_link(
+        {
+            "href": "https://authors.pluralsight.com/wp-content/uploads/Pluralsight_Template_2026.10.A.potx?download=1",
+            "text": "PowerPoint Template",
+        }
+    ) == {
+        "version": "2026.10.a",
+        "filename": "Pluralsight_Template_2026.10.A.potx",
+        "url": "https://authors.pluralsight.com/wp-content/uploads/Pluralsight_Template_2026.10.A.potx?download=1",
+        "title": "PowerPoint Template",
+    }
+
+
+def test_parse_slide_deck_link_ignores_non_decks_and_unversioned_decks():
+    assert parse_slide_deck_link(
+        {"href": "https://example.com/icon-library.zip", "text": "Icon library"}
+    ) is None
+    assert parse_slide_deck_link(
+        {"href": "https://example.com/Pluralsight_Template.potx", "text": "PowerPoint Template"}
+    ) is None

@@ -1,8 +1,8 @@
 {
   "tool": "pluralsight-author",
   "description": "CLI interface for Pluralsight Author opportunities",
-  "discovered_at": "2026-11-05T16:40:39Z",
-  "total_commands": 24,
+  "discovered_at": "2026-11-09T21:12:23Z",
+  "total_commands": 26,
   "global_options": [
     {
       "name": "--version",
@@ -82,7 +82,7 @@
                 },
                 {
                   "name": "--auth-param",
-                  "type": "TEXT",
+                  "type": "list[str]",
                   "required": false,
                   "help": "Auth parameter as FIELD=VALUE. Repeat for additional required values"
                 }
@@ -151,7 +151,7 @@
                 },
                 {
                   "name": "--filter",
-                  "type": "TEXT",
+                  "type": "list[str]",
                   "required": false,
                   "help": "Filter: field:op:value (e.g., active:eq:True)",
                   "short": "-f"
@@ -441,7 +441,7 @@
             },
             {
               "name": "--filter",
-              "type": "TEXT",
+              "type": "list[str]",
               "required": false,
               "help": "Filter results by name, category, color, tag, or tags (field:op:value)",
               "short": "-f"
@@ -496,7 +496,7 @@
             },
             {
               "name": "--filter",
-              "type": "TEXT",
+              "type": "list[str]",
               "required": false,
               "help": "Filter results by name, category, color, tag, or tags (field:op:value)",
               "short": "-f"
@@ -688,7 +688,7 @@
             },
             {
               "name": "--filter",
-              "type": "TEXT",
+              "type": "list[str]",
               "required": false,
               "help": "Filter results (field:op:value)",
               "short": "-f"
@@ -751,7 +751,7 @@
             },
             {
               "name": "--filter",
-              "type": "TEXT",
+              "type": "list[str]",
               "required": false,
               "help": "Filter results (field:op:value)",
               "short": "-f"
@@ -771,6 +771,65 @@
               "help": "Comma-separated fields to include",
               "short": "-p"
             },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        }
+      }
+    },
+    "slide-deck": {
+      "help": "Identify and download the newest Pluralsight slide-deck template",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--profile",
+          "type": "TEXT",
+          "required": false,
+          "help": "Auth profile name"
+        }
+      ],
+      "commands": {
+        "download": {
+          "help": "Download the newest whole slide-deck template into a .potx/.pptx file.",
+          "arguments": [
+            {
+              "name": "target",
+              "type": "TEXT",
+              "required": true,
+              "help": "Template to download; supported value: latest"
+            }
+          ],
+          "options": [
+            {
+              "name": "--output",
+              "type": "PATH",
+              "required": true,
+              "help": "Output file path or existing directory",
+              "short": "-o"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "get": {
+          "help": "Identify the newest whole slide-deck template on the Authors Downloads page.",
+          "arguments": [
+            {
+              "name": "target",
+              "type": "TEXT",
+              "required": true,
+              "help": "Template to read; supported value: latest"
+            }
+          ],
+          "options": [
             {
               "name": "--profile",
               "type": "TEXT",

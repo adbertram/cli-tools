@@ -2,12 +2,12 @@
 name: pluralsight-author-cli
 description: >-
   MANDATORY: Execute pluralsight-author operations using the `pluralsight-author` CLI tool.
-  CLI interface for Pluralsight Author opportunities, module submissions, and Author Kit icons
-  Triggers: pluralsight-author, pluralsight-author cli, pluralsight author, pluralsight author opportunities, pluralsight opportunities, list pluralsight author opportunities, get pluralsight author opportunity, search pluralsight author opportunities, pluralsight author icons, author kit icons, icon library, pluralsight author auth, pluralsight author cache
+  CLI interface for Pluralsight Author opportunities, module submissions, whole slide-deck templates, and Author Kit icons
+  Triggers: pluralsight-author, pluralsight-author cli, pluralsight author, pluralsight author opportunities, pluralsight opportunities, list pluralsight author opportunities, get pluralsight author opportunity, search pluralsight author opportunities, pluralsight author slide deck, latest Pluralsight template, download Pluralsight PowerPoint template, pluralsight author icons, author kit icons, icon library, pluralsight author auth, pluralsight author cache
 ---
 
 <objective>
-Execute pluralsight-author operations using the `pluralsight-author` CLI. All Pluralsight Author opportunities and Author Kit icon-library interactions should use this CLI.
+Execute pluralsight-author operations using the `pluralsight-author` CLI. All Pluralsight Author opportunities, whole slide-deck downloads, and Author Kit icon-library interactions should use this CLI.
 </objective>
 
 <project_overrides>
@@ -26,6 +26,8 @@ pluralsight-author <command-group> <action> [arguments] [options]
 | `pluralsight-author opportunities list` | List live Pluralsight Author opportunities. |
 | `pluralsight-author opportunities get <slug>` | Fetch one opportunity by its slug. |
 | `pluralsight-author search query <text>` | Search the opportunity dataset by keyword. |
+| `pluralsight-author slide-deck get latest` | Read the newest whole PowerPoint template from Author Kit Downloads. |
+| `pluralsight-author slide-deck download latest --output <file-or-directory>` | Download and validate the newest whole PowerPoint template. |
 | `pluralsight-author icons import <archive>` | Replace the selected profile archive with an Author Kit PNG archive. |
 | `pluralsight-author icons list` | List Author Kit icon-library records. |
 | `pluralsight-author icons search <query>` | Search icons by a single keyword matched as a case-insensitive substring across id, name, category, color, and tags. The query is not tokenized, so a multi-word phrase usually matches nothing -- search one keyword at a time. |
@@ -49,6 +51,7 @@ After every `pluralsight-author` command, inspect stdout. If it is JSON with `ty
 - `modules`: Inspect uploaded module assets or submit a manifest containing the approved PowerPoint deck and ordered edited clip videos. Follow the exact adjacent `usage.json` command contract and README manifest schema. Submission verifies uploaded bytes, titles, order, and portal status; an already-submitted module is read-only.
 - `opportunities`: Direct list/get access to the live Pluralsight Author opportunities dataset.
 - `search`: Keyword search over the opportunity dataset.
+- `slide-deck`: Read or download the newest whole presentation template from the authenticated Author Kit Downloads page. `get latest` returns `version`, `filename`, `url`, and `title`; `download latest` also returns `output`, `bytes`, and `content_type` after validating the PowerPoint package. These commands use the `author_kit` browser profile.
 - `icons`: Import, search, list, inspect, and download Author Kit PNG assets through profile data. Icon commands do not start Chrome or require browser authentication. `--profile` selects the archive namespace. When the imported archive is absent, icon commands fail fast with an error that names the archive path and the `icons import <archive.zip>` rebuild command; there is no browser fallback.
 - Before refreshing icons, read the current Inky Blue package link on [Author Kit Downloads](https://authors.pluralsight.com/downloads/), download that ZIP, and run `pluralsight-author icons import <downloaded.zip> --profile author-kit`. The September 2026 package uses the supported PNG layout. Re-import after an official update, then rebuild assets from the imported archive.
 - PNG downloads must use a `.png` output filename or an existing directory. The command refuses `.svg` and other mismatched extensions.

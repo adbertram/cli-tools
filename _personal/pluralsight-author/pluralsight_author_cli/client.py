@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import re
 import tempfile
@@ -17,6 +18,7 @@ from .parsers import (
     extract_learning_objectives_from_snapshot,
     extract_opportunities_from_snapshot,
     extract_total_pages,
+    parse_slide_deck_link,
 )
 
 SNAPSHOT_JS = r"""() => {
@@ -114,6 +116,10 @@ FILL_FIELD_BY_SELECTOR_JS = r"""({selector, value}) => {
   return true;
 }"""
 ICON_LIBRARY_URL = "https://authors.pluralsight.com/icon-library/"
+SLIDE_DECK_DOWNLOADS_URL = "https://authors.pluralsight.com/downloads/"
+SLIDE_DECK_LINKS_JS = r"""() => Array.from(document.querySelectorAll('a[href]'))
+  .map(a => ({ href: a.href, text: (a.textContent || '').replace(/\s+/g, ' ').trim() }))
+  .filter(link => link.href && link.text)"""
 ICON_ZIP_CACHE_NAME = "icon-library.zip"
 OBSOLETE_ICON_METADATA_CACHE_NAME = "icon-metadata.json"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -456,12 +462,15 @@ class PluralsightAuthorClient:
                 return item
         raise ClientError(f"Icon not found: {item_id}")
 
-    def _download_target(self, output: Path, item: dict) -> Path:
+    def _file_target(self, output: Path, filename: str) -> Path:
         if output.exists() and output.is_dir():
-            url = item["download_url"] or item["thumbnail_url"]
-            filename = url.removeprefix("zip://").rsplit("/", 1)[-1]
             return output / filename
         return output
+
+    def _download_target(self, output: Path, item: dict) -> Path:
+        url = item["download_url"] or item["thumbnail_url"]
+        filename = url.removeprefix("zip://").rsplit("/", 1)[-1]
+        return self._file_target(output, filename)
 
     def close(self):
         if self._browser_instance is not None:
@@ -533,6 +542,87 @@ class PluralsightAuthorClient:
             "output": str(target),
             "bytes": len(content),
             "content_type": "image/png",
+        }
+
+    def _slide_deck_links(self, page) -> list[dict]:
+        links = page.evaluate(SLIDE_DECK_LINKS_JS)
+        if not isinstance(links, list):
+            raise ClientError("Slide deck download links must be returned as a list.")
+        if not all(
+            isinstance(link, dict)
+            and isinstance(link.get("href"), str)
+            and isinstance(link.get("text"), str)
+            for link in links
+        ):
+            raise ClientError("Slide deck download links must each include string href and text.")
+        return links
+
+    def _fetch_authenticated(self, url: str) -> bytes:
+        """Download bytes with the saved browser session's cookies."""
+        import requests
+
+        session = requests.Session()
+        for cookie in self._browser.live_cookies():
+            session.cookies.set(
+                cookie["name"],
+                cookie["value"],
+                domain=cookie["domain"],
+                path=cookie.get("path", "/"),
+            )
+        response = session.get(url, timeout=300, allow_redirects=True)
+        if not response.ok:
+            raise ClientError(f"Slide deck download failed (HTTP {response.status_code}).")
+        return response.content
+
+    def latest_slide_deck(self) -> dict:
+        """Identify the newest whole slide-deck template on the Authors Downloads page."""
+        self._require_authenticated_session()
+        page = self._get_page(SLIDE_DECK_DOWNLOADS_URL, settle_ms=3000)
+        decks = [
+            deck
+            for link in self._slide_deck_links(page)
+            if (deck := parse_slide_deck_link(link)) is not None
+        ]
+        if not decks:
+            raise ClientError(
+                "No whole slide-deck template download found on the Authors Downloads page."
+            )
+        # Versions are zero-padded YYYY.MM.<letter>, so lexical order is chronological.
+        return sorted(decks, key=lambda deck: deck["version"])[-1]
+
+    def download_slide_deck(self, output: Path) -> dict:
+        """Download the newest whole slide-deck template into a .potx/.pptx file."""
+        latest = self.latest_slide_deck()
+        target = self._file_target(Path(output).expanduser(), latest["filename"])
+        if target.suffix.casefold() not in {".potx", ".pptx"}:
+            raise ClientError("Slide deck output must use a .potx or .pptx extension.")
+        content = self._fetch_authenticated(latest["url"])
+        if not content:
+            raise ClientError(f"Downloaded slide deck is empty: {latest['version']}")
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as deck:
+                required = {"[Content_Types].xml", "ppt/presentation.xml"}
+                missing = sorted(required.difference(deck.namelist()))
+        except zipfile.BadZipFile as exc:
+            raise ClientError(
+                f"Downloaded slide deck is not a valid PowerPoint file: {latest['version']}"
+            ) from exc
+        if missing:
+            raise ClientError(
+                f"Downloaded slide deck is not a valid PowerPoint file: {latest['version']} "
+                f"(missing {', '.join(missing)})"
+            )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content)
+        content_type = {
+            ".potx": "application/vnd.openxmlformats-officedocument.presentationml.template",
+            ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        }[target.suffix.casefold()]
+        return {
+            **latest,
+            "output": str(target),
+            "bytes": len(content),
+            "content_type": content_type,
         }
 
     def apply(self, item_id: str, params: dict[str, str]) -> dict:

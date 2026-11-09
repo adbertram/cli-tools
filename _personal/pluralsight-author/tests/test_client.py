@@ -221,6 +221,26 @@ class FakeSnapshotPage:
         return self.snapshot_data
 
 
+class FakeSlideDeckPage(FakeSnapshotPage):
+    def __init__(self):
+        super().__init__(
+            [
+                {
+                    "href": "https://authors.pluralsight.com/Pluralsight_Template_2026.08.a.potx",
+                    "text": "August template",
+                },
+                {
+                    "href": "https://authors.pluralsight.com/Pluralsight_Template_2026.10.a.potx",
+                    "text": "October template",
+                },
+                {
+                    "href": "https://authors.pluralsight.com/Author_Kit_2026-09.zip",
+                    "text": "Author Kit",
+                },
+            ]
+        )
+
+
 class FakeClickButton:
     def __init__(self, page):
         self.page = page
@@ -623,6 +643,60 @@ def test_apply_fills_required_form_fields_and_submits_application():
         ],
         "post_submit_state": "application_form_closed",
     }
+
+
+def test_client_selects_latest_whole_slide_deck():
+    client = PluralsightAuthorClient()
+    client._browser_instance = FakeBrowser(
+        {"https://authors.pluralsight.com/downloads/": FakeSlideDeckPage()}
+    )
+
+    assert client.latest_slide_deck() == {
+        "version": "2026.10.a",
+        "filename": "Pluralsight_Template_2026.10.a.potx",
+        "url": "https://authors.pluralsight.com/Pluralsight_Template_2026.10.a.potx",
+        "title": "October template",
+    }
+
+
+def _write_powerpoint_zip(path: Path):
+    with zipfile.ZipFile(path, "w") as deck:
+        deck.writestr("[Content_Types].xml", "<Types/>")
+        deck.writestr("ppt/presentation.xml", "<p:presentation/>")
+
+
+def test_client_downloads_latest_slide_deck_and_validates_powerpoint_bytes(tmp_path):
+    client = PluralsightAuthorClient()
+    client._browser_instance = FakeBrowser(
+        {"https://authors.pluralsight.com/downloads/": FakeSlideDeckPage()}
+    )
+    source = tmp_path / "source.potx"
+    _write_powerpoint_zip(source)
+    client._fetch_authenticated = lambda url: source.read_bytes()
+    output = tmp_path / "templates"
+    output.mkdir()
+
+    result = client.download_slide_deck(output)
+
+    target = output / "Pluralsight_Template_2026.10.a.potx"
+    assert target.read_bytes() == source.read_bytes()
+    assert result["output"] == str(target)
+    assert result["version"] == "2026.10.a"
+    assert result["content_type"].endswith("presentationml.template")
+
+
+def test_client_rejects_non_powerpoint_download_before_writing(tmp_path):
+    client = PluralsightAuthorClient()
+    client._browser_instance = FakeBrowser(
+        {"https://authors.pluralsight.com/downloads/": FakeSlideDeckPage()}
+    )
+    client._fetch_authenticated = lambda url: b"not a PowerPoint file"
+    output = tmp_path / "template.potx"
+
+    with pytest.raises(ClientError, match="not a valid PowerPoint file"):
+        client.download_slide_deck(output)
+
+    assert not output.exists()
 
 
 def test_require_authenticated_session_uses_browser_saved_state_check():

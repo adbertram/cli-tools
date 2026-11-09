@@ -98,7 +98,7 @@
 | `photos-app` | The `photos-app` CLI wraps sqlite3 with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
 | `pinterest` | The `pinterest` CLI lets you manage Pinterest account, boards, and pins via API v5. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `pluralsight` | Search the public Pluralsight catalog (courses, paths, labs, certificates) by keyword and return JSON |
-| `pluralsight-author` | The `pluralsight-author` CLI provides browser-session access to Pluralsight Author opportunities and the Author Kit icon library. Use it to list, search, inspect, apply for opportunities, and download authenticated icon assets. |
+| `pluralsight-author` | The `pluralsight-author` CLI provides browser-session access to Pluralsight Author opportunities, whole PowerPoint slide-deck templates, and the Author Kit icon library. Use it to inspect opportunities, identify and download the latest presentation template, and query or download authenticated icon assets. |
 | `podio` | The `podio` CLI provides a command-line interface for Podio API using pypodio2. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `poshmark` | Poshmark marketplace browser CLI - search listings |
 | `powerpoint-slide-recorder` | The `powerpoint-slide-recorder` CLI lets you record narrated PowerPoint slides. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

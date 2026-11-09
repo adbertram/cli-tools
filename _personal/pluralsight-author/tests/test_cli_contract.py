@@ -7,13 +7,14 @@ from typer.testing import CliRunner
 
 from pluralsight_author_cli.client import PluralsightAuthorClient
 from pluralsight_author_cli.commands.icons import COMMAND_CREDENTIALS as ICON_COMMAND_CREDENTIALS
+from pluralsight_author_cli.commands.slide_deck import COMMAND_CREDENTIALS as SLIDE_DECK_COMMAND_CREDENTIALS
 from pluralsight_author_cli.config import (
     AUTH_METHOD_AUTHOR_KIT,
     AUTH_METHOD_OPPORTUNITIES,
     Config,
     get_config,
 )
-from pluralsight_author_cli.main import ICON_CREDENTIALS, app
+from pluralsight_author_cli.main import ICON_CREDENTIALS, SLIDE_DECK_CREDENTIALS, app
 
 TOOL_DIR = Path(__file__).resolve().parents[1]
 
@@ -70,6 +71,14 @@ def test_icon_commands_do_not_require_browser_credentials():
         credential_types == [AUTH_METHOD_AUTHOR_KIT, "no_auth"]
         for credential_types in ICON_CREDENTIALS.values()
     )
+
+
+def test_slide_deck_commands_use_author_kit_browser_profile():
+    assert SLIDE_DECK_CREDENTIALS == {
+        "get": [AUTH_METHOD_AUTHOR_KIT],
+        "download": [AUTH_METHOD_AUTHOR_KIT],
+    }
+    assert SLIDE_DECK_CREDENTIALS == SLIDE_DECK_COMMAND_CREDENTIALS
 
 
 def install_profiles(monkeypatch, auth_types=(AUTH_METHOD_OPPORTUNITIES, AUTH_METHOD_AUTHOR_KIT)):
@@ -173,6 +182,34 @@ def install_client(monkeypatch, auth_types=(AUTH_METHOD_OPPORTUNITIES, AUTH_METH
             "post_submit_state": "application_form_closed",
         },
     )
+    monkeypatch.setattr(
+        PluralsightAuthorClient,
+        "latest_slide_deck",
+        lambda self: {
+            "version": "2026.10.a",
+            "filename": "Pluralsight_Template_2026.10.a.potx",
+            "url": "https://authors.pluralsight.com/Pluralsight_Template_2026.10.a.potx",
+            "title": "PowerPoint Template",
+        },
+    )
+
+    def fake_download_slide_deck(self, output):
+        target = Path(output)
+        if target.is_dir():
+            target = target / "Pluralsight_Template_2026.10.a.potx"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"deck")
+        return {
+            "version": "2026.10.a",
+            "filename": target.name,
+            "url": "https://authors.pluralsight.com/Pluralsight_Template_2026.10.a.potx",
+            "title": "PowerPoint Template",
+            "output": str(target),
+            "bytes": target.stat().st_size,
+            "content_type": "application/vnd.openxmlformats-officedocument.presentationml.template",
+        }
+
+    monkeypatch.setattr(PluralsightAuthorClient, "download_slide_deck", fake_download_slide_deck)
 
 
 def invoke(monkeypatch, args):
@@ -474,6 +511,20 @@ def test_icons_cache_command_is_not_registered(monkeypatch):
     assert result.exit_code == 2
     assert "No such command" in result.stderr
     assert "cache" in result.stderr
+
+
+def test_slide_deck_get_latest_returns_version_metadata(monkeypatch):
+    assert invoke(monkeypatch, ["slide-deck", "get", "latest"])["version"] == "2026.10.a"
+
+
+def test_slide_deck_download_latest_writes_requested_path(monkeypatch, tmp_path):
+    output = tmp_path / "latest.potx"
+
+    result = invoke(monkeypatch, ["slide-deck", "download", "latest", "--output", str(output)])
+
+    assert output.read_bytes() == b"deck"
+    assert result["output"] == str(output)
+    assert result["version"] == "2026.10.a"
 
 
 def test_opportunities_reject_author_kit_profile(monkeypatch):
