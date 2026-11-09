@@ -1,4 +1,5 @@
 import re
+from pathlib import Path
 
 # The portal filename may use an uppercase suffix; normalize it to CourseCraft's
 # canonical lowercase letter before returning the version.
@@ -116,8 +117,9 @@ def extract_learning_objectives_from_snapshot(snapshot_text: str) -> list[str]:
 def parse_slide_deck_link(link: dict) -> dict | None:
     """Parse one Authors Downloads anchor into a slide-deck record, or None.
 
-    A deck download is an anchor whose href names a ``.pptx``/``.potx`` file whose
-    stem contains "template" and embeds a ``YYYY.MM.<letter>`` version. The letter
+    A deck download is an anchor whose href names a PowerPoint ``.pptx``/``.potx``
+    file or a PowerPoint template ``.zip`` archive. Its stem contains "template"
+    and a PowerPoint marker, and embeds a ``YYYY.MM.<letter>`` version. The letter
     is normalized to lowercase to match CourseCraft's canonical version folders.
     Anchors that are not a whole-deck template return None; a template link whose
     filename carries no valid version is treated as malformed and also returns
@@ -128,10 +130,14 @@ def parse_slide_deck_link(link: dict) -> dict | None:
     if not href or not text:
         return None
     basename = href.rsplit("/", 1)[-1].split("?", 1)[0].split("#", 1)[0]
-    if not basename.casefold().endswith((".potx", ".pptx")):
-        return None
     stem = basename.rsplit(".", 1)[0]
-    if "template" not in stem.casefold():
+    stem_casefold = stem.casefold()
+    suffix = Path(basename).suffix.casefold()
+    if suffix not in {".potx", ".pptx", ".zip"}:
+        return None
+    if "template" not in stem_casefold:
+        return None
+    if suffix == ".zip" and "powerpoint" not in stem_casefold:
         return None
     match = SLIDE_DECK_VERSION_RE.search(stem)
     if match is None:

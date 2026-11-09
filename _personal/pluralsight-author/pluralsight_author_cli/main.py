@@ -30,6 +30,7 @@ OPPORTUNITY_CREDENTIALS = {
 }
 SEARCH_CREDENTIALS = {"query": [AUTH_METHOD_OPPORTUNITIES, "browser_session"]}
 SLIDE_DECK_TARGETS = {"latest"}
+SLIDE_DECK_FILTER_FIELDS = {"version", "filename", "title"}
 app = create_app(
     name="pluralsight-author",
     help="CLI interface for Pluralsight Author tools",
@@ -343,17 +344,49 @@ def download_icon(
         client.close()
 
 
+@slide_deck_app.command("list")
+@command
+def list_slide_decks(
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of templates"),
+    filter: list[str] | None = typer.Option(None, "--filter", "-f", help="Filter results (field:op:value)"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: str | None = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
+):
+    """List whole PowerPoint template downloads from the Authors Downloads page."""
+    client = get_client()
+    try:
+        _list(
+            client.list_slide_decks,
+            filter,
+            table,
+            properties,
+            "No slide-deck templates found.",
+            columns=["version", "filename", "title"],
+            allowed_fields=SLIDE_DECK_FILTER_FIELDS,
+        )
+    finally:
+        client.close()
+
+
 @slide_deck_app.command("get")
 @command
 def get_slide_deck(
     target: str = typer.Argument(..., help="Template to read; supported value: latest"),
+    table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    properties: str | None = typer.Option(None, "--properties", "-p", help="Comma-separated fields to include"),
 ):
     """Identify the newest whole slide-deck template on the Authors Downloads page."""
     if target not in SLIDE_DECK_TARGETS:
         raise typer.BadParameter("supported template is 'latest'", param_hint="target")
     client = get_client()
     try:
-        print_json(client.latest_slide_deck())
+        _render_get(
+            client.latest_slide_deck(),
+            table,
+            properties,
+            "No slide-deck template found.",
+            columns=["version", "filename", "title"],
+        )
     finally:
         client.close()
 

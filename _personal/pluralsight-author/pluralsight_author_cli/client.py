@@ -120,6 +120,8 @@ SLIDE_DECK_DOWNLOADS_URL = "https://authors.pluralsight.com/downloads/"
 SLIDE_DECK_LINKS_JS = r"""() => Array.from(document.querySelectorAll('a[href]'))
   .map(a => ({ href: a.href, text: (a.textContent || '').replace(/\s+/g, ' ').trim() }))
   .filter(link => link.href && link.text)"""
+POWERPOINT_SOURCE_SUFFIXES = {".potx", ".pptx"}
+POWERPOINT_ARCHIVE_SUFFIXES = POWERPOINT_SOURCE_SUFFIXES | {".zip"}
 ICON_ZIP_CACHE_NAME = "icon-library.zip"
 OBSOLETE_ICON_METADATA_CACHE_NAME = "icon-metadata.json"
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -558,24 +560,15 @@ class PluralsightAuthorClient:
         return links
 
     def _fetch_authenticated(self, url: str) -> bytes:
-        """Download bytes with the saved browser session's cookies."""
-        import requests
-
-        session = requests.Session()
-        for cookie in self._browser.live_cookies():
-            session.cookies.set(
-                cookie["name"],
-                cookie["value"],
-                domain=cookie["domain"],
-                path=cookie.get("path", "/"),
-            )
-        response = session.get(url, timeout=300, allow_redirects=True)
+        """Download bytes inside the authenticated browser request context."""
+        page = self._browser.get_page(SLIDE_DECK_DOWNLOADS_URL)
+        response = page.context.request.get(url)
         if not response.ok:
-            raise ClientError(f"Slide deck download failed (HTTP {response.status_code}).")
-        return response.content
+            raise ClientError(f"Slide deck download failed (HTTP {response.status}).")
+        return response.body()
 
-    def latest_slide_deck(self) -> dict:
-        """Identify the newest whole slide-deck template on the Authors Downloads page."""
+    def list_slide_decks(self) -> list[dict]:
+        """List whole slide-deck templates on the Authors Downloads page, oldest first."""
         self._require_authenticated_session()
         page = self._get_page(SLIDE_DECK_DOWNLOADS_URL, settle_ms=3000)
         decks = [
@@ -588,19 +581,43 @@ class PluralsightAuthorClient:
                 "No whole slide-deck template download found on the Authors Downloads page."
             )
         # Versions are zero-padded YYYY.MM.<letter>, so lexical order is chronological.
-        return sorted(decks, key=lambda deck: deck["version"])[-1]
+        return sorted(decks, key=lambda deck: deck["version"])
+
+    def latest_slide_deck(self) -> dict:
+        """Identify the newest whole slide-deck template on the Authors Downloads page."""
+        return self.list_slide_decks()[-1]
 
     def download_slide_deck(self, output: Path) -> dict:
-        """Download the newest whole slide-deck template into a .potx/.pptx file."""
+        """Download the newest whole slide-deck template or its ZIP package."""
         latest = self.latest_slide_deck()
         target = self._file_target(Path(output).expanduser(), latest["filename"])
-        if target.suffix.casefold() not in {".potx", ".pptx"}:
-            raise ClientError("Slide deck output must use a .potx or .pptx extension.")
+        if target.suffix.casefold() not in POWERPOINT_ARCHIVE_SUFFIXES:
+            raise ClientError("Slide deck output must use a .potx, .pptx, or .zip extension.")
         content = self._fetch_authenticated(latest["url"])
         if not content:
             raise ClientError(f"Downloaded slide deck is empty: {latest['version']}")
+        powerpoint_content = content
+        if target.suffix.casefold() == ".zip":
+            try:
+                with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                    sources = [
+                        name
+                        for name in archive.namelist()
+                        if Path(name).suffix.casefold() in POWERPOINT_SOURCE_SUFFIXES
+                        and not name.startswith("__MACOSX/")
+                        and not Path(name).name.startswith("._")
+                    ]
+                    if len(sources) != 1:
+                        raise ClientError(
+                            f"Slide deck archive must contain exactly one PowerPoint source; found {len(sources)}."
+                        )
+                    powerpoint_content = archive.read(sources[0])
+            except zipfile.BadZipFile as exc:
+                raise ClientError(
+                    f"Downloaded slide deck archive is not a valid ZIP file: {latest['version']}"
+                ) from exc
         try:
-            with zipfile.ZipFile(io.BytesIO(content)) as deck:
+            with zipfile.ZipFile(io.BytesIO(powerpoint_content)) as deck:
                 required = {"[Content_Types].xml", "ppt/presentation.xml"}
                 missing = sorted(required.difference(deck.namelist()))
         except zipfile.BadZipFile as exc:
@@ -617,6 +634,7 @@ class PluralsightAuthorClient:
         content_type = {
             ".potx": "application/vnd.openxmlformats-officedocument.presentationml.template",
             ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".zip": "application/zip",
         }[target.suffix.casefold()]
         return {
             **latest,

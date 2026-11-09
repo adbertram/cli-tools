@@ -1,4 +1,5 @@
 import json
+import io
 import tempfile
 import zipfile
 from pathlib import Path
@@ -226,12 +227,16 @@ class FakeSlideDeckPage(FakeSnapshotPage):
         super().__init__(
             [
                 {
-                    "href": "https://authors.pluralsight.com/Pluralsight_Template_2026.08.a.potx",
+                    "href": "https://authors.pluralsight.com/Pluralsight_PowerPoint_Template_2026.08.a.zip",
                     "text": "August template",
                 },
                 {
-                    "href": "https://authors.pluralsight.com/Pluralsight_Template_2026.10.a.potx",
+                    "href": "https://authors.pluralsight.com/Pluralsight_PowerPoint_Template_2026.10.a.zip",
                     "text": "October template",
+                },
+                {
+                    "href": "https://authors.pluralsight.com/Pluralsight_Keynote_Template_2026.11.a.zip",
+                    "text": "November Keynote template",
                 },
                 {
                     "href": "https://authors.pluralsight.com/Author_Kit_2026-09.zip",
@@ -239,6 +244,24 @@ class FakeSlideDeckPage(FakeSnapshotPage):
                 },
             ]
         )
+
+
+class FakeRequestResponse:
+    def __init__(self, *, ok=True, status=200, body=b""):
+        self.ok = ok
+        self.status = status
+        self._body = body
+
+    def body(self):
+        return self._body
+
+
+class FakeRequestContext:
+    def __init__(self, response):
+        self.response = response
+
+    def get(self, url):
+        return self.response
 
 
 class FakeClickButton:
@@ -653,10 +676,41 @@ def test_client_selects_latest_whole_slide_deck():
 
     assert client.latest_slide_deck() == {
         "version": "2026.10.a",
-        "filename": "Pluralsight_Template_2026.10.a.potx",
-        "url": "https://authors.pluralsight.com/Pluralsight_Template_2026.10.a.potx",
+        "filename": "Pluralsight_PowerPoint_Template_2026.10.a.zip",
+        "url": "https://authors.pluralsight.com/Pluralsight_PowerPoint_Template_2026.10.a.zip",
         "title": "October template",
     }
+
+
+def test_client_downloads_through_the_authenticated_browser_request_context():
+    client = PluralsightAuthorClient()
+    page = FakeSlideDeckPage()
+    page.context = type(
+        "Context",
+        (),
+        {"request": FakeRequestContext(FakeRequestResponse(body=b"archive"))},
+    )()
+    client._browser_instance = FakeBrowser(
+        {"https://authors.pluralsight.com/downloads/": page}
+    )
+
+    assert client._fetch_authenticated("https://authors.pluralsight.com/template.zip") == b"archive"
+
+
+def test_client_reports_failed_authenticated_download_request():
+    client = PluralsightAuthorClient()
+    page = FakeSlideDeckPage()
+    page.context = type(
+        "Context",
+        (),
+        {"request": FakeRequestContext(FakeRequestResponse(ok=False, status=403))},
+    )()
+    client._browser_instance = FakeBrowser(
+        {"https://authors.pluralsight.com/downloads/": page}
+    )
+
+    with pytest.raises(ClientError, match="HTTP 403"):
+        client._fetch_authenticated("https://authors.pluralsight.com/template.zip")
 
 
 def _write_powerpoint_zip(path: Path):
@@ -665,24 +719,37 @@ def _write_powerpoint_zip(path: Path):
         deck.writestr("ppt/presentation.xml", "<p:presentation/>")
 
 
+def _write_powerpoint_archive(path: Path):
+    deck_bytes = io.BytesIO()
+    with zipfile.ZipFile(deck_bytes, "w") as deck:
+        deck.writestr("[Content_Types].xml", "<Types/>")
+        deck.writestr("ppt/presentation.xml", "<p:presentation/>")
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "Pluralsight_PowerPoint_Template_2026.10.a/2 POWERPOINT TEMPLATE/"
+            "Pluralsight_PowerPoint_Template_2026.10.a.potx",
+            deck_bytes.getvalue(),
+        )
+
+
 def test_client_downloads_latest_slide_deck_and_validates_powerpoint_bytes(tmp_path):
     client = PluralsightAuthorClient()
     client._browser_instance = FakeBrowser(
         {"https://authors.pluralsight.com/downloads/": FakeSlideDeckPage()}
     )
-    source = tmp_path / "source.potx"
-    _write_powerpoint_zip(source)
+    source = tmp_path / "source.zip"
+    _write_powerpoint_archive(source)
     client._fetch_authenticated = lambda url: source.read_bytes()
     output = tmp_path / "templates"
     output.mkdir()
 
     result = client.download_slide_deck(output)
 
-    target = output / "Pluralsight_Template_2026.10.a.potx"
+    target = output / "Pluralsight_PowerPoint_Template_2026.10.a.zip"
     assert target.read_bytes() == source.read_bytes()
     assert result["output"] == str(target)
     assert result["version"] == "2026.10.a"
-    assert result["content_type"].endswith("presentationml.template")
+    assert result["content_type"] == "application/zip"
 
 
 def test_client_rejects_non_powerpoint_download_before_writing(tmp_path):
@@ -691,9 +758,9 @@ def test_client_rejects_non_powerpoint_download_before_writing(tmp_path):
         {"https://authors.pluralsight.com/downloads/": FakeSlideDeckPage()}
     )
     client._fetch_authenticated = lambda url: b"not a PowerPoint file"
-    output = tmp_path / "template.potx"
+    output = tmp_path / "template.zip"
 
-    with pytest.raises(ClientError, match="not a valid PowerPoint file"):
+    with pytest.raises(ClientError, match="not a valid ZIP file"):
         client.download_slide_deck(output)
 
     assert not output.exists()

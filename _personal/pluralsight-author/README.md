@@ -47,8 +47,9 @@ pluralsight-author opportunities apply product-strategy-steering-with-evidence-m
 pluralsight-author search query "security"
 pluralsight-author search query "security" --table
 pluralsight-author search query "security" --properties "id,title,category"
+pluralsight-author slide-deck list
 pluralsight-author slide-deck get latest
-pluralsight-author slide-deck download latest --output ./Pluralsight_Template.potx
+pluralsight-author slide-deck download latest --output ./Pluralsight_PowerPoint_Template.zip
 pluralsight-author icons import /path/to/Pluralsight_Icon_library_2026-09.zip
 pluralsight-author icons list
 pluralsight-author icons list --filter "color:eq:Blue"
@@ -62,6 +63,9 @@ pluralsight-author icons download server-upload_Blue --output ./server-upload_Bl
 
 ## Slide-deck templates
 
+`slide-deck list` returns every whole PowerPoint template download found on the
+authenticated Author Kit Downloads page.
+
 `slide-deck get latest` reads the authenticated Author Kit Downloads page and returns
 the newest whole PowerPoint template link:
 
@@ -70,10 +74,12 @@ the newest whole PowerPoint template link:
 - `url`
 - `title`
 
-`slide-deck download latest --output <file-or-directory>` downloads that template,
-validates that it is a PowerPoint package, and returns the same metadata plus
-`output`, `bytes`, and `content_type`. Use `--profile author-kit` when that profile
-is not already active.
+`slide-deck download latest --output <file-or-directory>` downloads that template.
+Pluralsight currently publishes a ZIP containing the `.potx`; direct `.potx` and
+`.pptx` links remain supported. The command validates the PowerPoint package,
+returns the same metadata plus `output`, `bytes`, and `content_type`, and uses the
+authenticated browser request context so protected download links do not become
+403 responses. Use `--profile author-kit` when that profile is not already active.
 
 ## Opportunity Output
 

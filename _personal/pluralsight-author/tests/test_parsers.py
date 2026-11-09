@@ -185,6 +185,26 @@ def test_parse_slide_deck_link_reads_version_and_normalizes_letter():
     }
 
 
+def test_parse_slide_deck_link_reads_powerpoint_zip_and_ignores_keynote_zip():
+    assert parse_slide_deck_link(
+        {
+            "href": "https://authors.pluralsight.com/wp-content/uploads/Pluralsight_PowerPoint_Template_2026.10.a.zip",
+            "text": "Download the PowerPoint template here",
+        }
+    ) == {
+        "version": "2026.10.a",
+        "filename": "Pluralsight_PowerPoint_Template_2026.10.a.zip",
+        "url": "https://authors.pluralsight.com/wp-content/uploads/Pluralsight_PowerPoint_Template_2026.10.a.zip",
+        "title": "Download the PowerPoint template here",
+    }
+    assert parse_slide_deck_link(
+        {
+            "href": "https://authors.pluralsight.com/wp-content/uploads/Pluralsight_Keynote_Template_2026.11.a.zip",
+            "text": "Download the Keynote template here",
+        }
+    ) is None
+
+
 def test_parse_slide_deck_link_ignores_non_decks_and_unversioned_decks():
     assert parse_slide_deck_link(
         {"href": "https://example.com/icon-library.zip", "text": "Icon library"}

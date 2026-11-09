@@ -75,6 +75,7 @@ def test_icon_commands_do_not_require_browser_credentials():
 
 def test_slide_deck_commands_use_author_kit_browser_profile():
     assert SLIDE_DECK_CREDENTIALS == {
+        "list": [AUTH_METHOD_AUTHOR_KIT],
         "get": [AUTH_METHOD_AUTHOR_KIT],
         "download": [AUTH_METHOD_AUTHOR_KIT],
     }
@@ -184,11 +185,23 @@ def install_client(monkeypatch, auth_types=(AUTH_METHOD_OPPORTUNITIES, AUTH_METH
     )
     monkeypatch.setattr(
         PluralsightAuthorClient,
+        "list_slide_decks",
+        lambda self: [
+            {
+                "version": "2026.10.a",
+                "filename": "Pluralsight_PowerPoint_Template_2026.10.a.zip",
+                "url": "https://authors.pluralsight.com/Pluralsight_PowerPoint_Template_2026.10.a.zip",
+                "title": "PowerPoint Template",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        PluralsightAuthorClient,
         "latest_slide_deck",
         lambda self: {
             "version": "2026.10.a",
-            "filename": "Pluralsight_Template_2026.10.a.potx",
-            "url": "https://authors.pluralsight.com/Pluralsight_Template_2026.10.a.potx",
+            "filename": "Pluralsight_PowerPoint_Template_2026.10.a.zip",
+            "url": "https://authors.pluralsight.com/Pluralsight_PowerPoint_Template_2026.10.a.zip",
             "title": "PowerPoint Template",
         },
     )
@@ -196,17 +209,17 @@ def install_client(monkeypatch, auth_types=(AUTH_METHOD_OPPORTUNITIES, AUTH_METH
     def fake_download_slide_deck(self, output):
         target = Path(output)
         if target.is_dir():
-            target = target / "Pluralsight_Template_2026.10.a.potx"
+            target = target / "Pluralsight_PowerPoint_Template_2026.10.a.zip"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"deck")
         return {
             "version": "2026.10.a",
             "filename": target.name,
-            "url": "https://authors.pluralsight.com/Pluralsight_Template_2026.10.a.potx",
+            "url": "https://authors.pluralsight.com/Pluralsight_PowerPoint_Template_2026.10.a.zip",
             "title": "PowerPoint Template",
             "output": str(target),
             "bytes": target.stat().st_size,
-            "content_type": "application/vnd.openxmlformats-officedocument.presentationml.template",
+            "content_type": "application/zip",
         }
 
     monkeypatch.setattr(PluralsightAuthorClient, "download_slide_deck", fake_download_slide_deck)
@@ -517,8 +530,20 @@ def test_slide_deck_get_latest_returns_version_metadata(monkeypatch):
     assert invoke(monkeypatch, ["slide-deck", "get", "latest"])["version"] == "2026.10.a"
 
 
+def test_slide_deck_list_selects_properties(monkeypatch):
+    assert invoke(
+        monkeypatch,
+        ["slide-deck", "list", "--properties", "version,filename"],
+    ) == [
+        {
+            "version": "2026.10.a",
+            "filename": "Pluralsight_PowerPoint_Template_2026.10.a.zip",
+        }
+    ]
+
+
 def test_slide_deck_download_latest_writes_requested_path(monkeypatch, tmp_path):
-    output = tmp_path / "latest.potx"
+    output = tmp_path / "latest.zip"
 
     result = invoke(monkeypatch, ["slide-deck", "download", "latest", "--output", str(output)])
 
