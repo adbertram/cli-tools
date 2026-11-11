@@ -470,13 +470,14 @@ Input #0, avfoundation, from '3':
             record.capture_crop_plan(1280, 720, 1920, 1080, "3")
 
     def test_parse_display_mode_payload_returns_pixel_dimensions(self):
-        payload = '{"width": 2056, "height": 1329, "pixel_width": 4112, "pixel_height": 2658}'
+        payload = '{"width": 2056, "height": 1329, "pixel_width": 4112, "pixel_height": 2658, "display_id": 13}'
 
         self.assertEqual(record.parse_display_mode_payload(payload), {
             "width": 2056,
             "height": 1329,
             "pixel_width": 4112,
             "pixel_height": 2658,
+            "display_id": 13,
         })
 
     def test_parse_display_modes_payload_returns_mode_list(self):
@@ -571,6 +572,23 @@ Input #0, avfoundation, from '3':
     def test_parse_display_mode_payload_rejects_invalid_payload(self):
         with self.assertRaisesRegex(RuntimeError, "macOS display helper returned invalid JSON"):
             record.parse_display_mode_payload("not-json")
+
+    def test_set_display_resolution_passes_display_id_to_helper(self):
+        with mock.patch.object(record, "run_macos_display_helper") as helper:
+            record.set_display_resolution(960, 540, 13)
+            record.set_display_resolution(1920, 1080)
+
+        self.assertEqual(helper.call_args_list, [mock.call("set", 960, 540, 13), mock.call("set", 1920, 1080)])
+
+    def test_restore_reports_recorded_display_disappeared_instead_of_restoring_main(self):
+        helper_error = RuntimeError("macOS display helper failed: Recorded display 13 disappeared during recording")
+        cleanup_errors = []
+
+        with mock.patch.object(record, "run_macos_display_helper", side_effect=helper_error) as helper:
+            record.run_cleanup(cleanup_errors, "restore display resolution", lambda: record.set_display_resolution(960, 540, 13))
+
+        helper.assert_called_once_with("set", 960, 540, 13)
+        self.assertEqual(cleanup_errors, ["restore display resolution: " + str(helper_error)])
 
     def test_run_macos_display_helper_raises_with_stderr(self):
         completed = subprocess.CompletedProcess(
@@ -1089,7 +1107,7 @@ Input #0, avfoundation, from '3':
         self.assertNotIn("key code 36", script)
 
     def test_screen_point_size_reads_main_display_points_without_apple_events(self):
-        payload = json.dumps({"width": 2056, "height": 1329, "pixel_width": 4112, "pixel_height": 2658})
+        payload = json.dumps({"width": 2056, "height": 1329, "pixel_width": 4112, "pixel_height": 2658, "display_id": 13})
 
         with mock.patch.object(record, "run_macos_display_helper", return_value=payload) as helper, \
                 mock.patch.object(record, "capture_osascript") as capture_osascript, \
@@ -1401,13 +1419,15 @@ Input #0, avfoundation, from '3':
             "height": 1329,
             "pixel_width": 4112,
             "pixel_height": 2658,
+            "display_id": 13,
         }
 
-        def fake_set_display_resolution(width, height):
+        def fake_set_display_resolution(width, height, display_id=None):
             if (width, height) == (1920, 1080):
                 events.append("set_resolution")
                 return
             if (width, height) == (2056, 1329):
+                self.assertEqual(display_id, 13)
                 events.append("restore_resolution")
                 return
             raise AssertionError((width, height))
@@ -1457,17 +1477,19 @@ Input #0, avfoundation, from '3':
             "height": 1329,
             "pixel_width": 4112,
             "pixel_height": 2658,
+            "display_id": 13,
         }
         modes = [
             {"width": 960, "height": 540, "pixel_width": 1920, "pixel_height": 1080},
             {"width": 1728, "height": 972, "pixel_width": 3456, "pixel_height": 1944},
         ]
 
-        def fake_set_display_resolution(width, height):
+        def fake_set_display_resolution(width, height, display_id=None):
             if (width, height) == (3456, 1944):
                 events.append("set_aspect_ratio")
                 return
             if (width, height) == (2056, 1329):
+                self.assertEqual(display_id, 13)
                 events.append("restore_resolution")
                 return
             raise AssertionError((width, height))
@@ -1523,6 +1545,7 @@ Input #0, avfoundation, from '3':
             "height": 1329,
             "pixel_width": 4112,
             "pixel_height": 2658,
+            "display_id": 13,
         }
         # 16:10-only panel modes -- none is exact 16:9.
         modes = [
@@ -1530,11 +1553,12 @@ Input #0, avfoundation, from '3':
             {"width": 1728, "height": 1080, "pixel_width": 3456, "pixel_height": 2160},
         ]
 
-        def fake_set_display_resolution(width, height):
+        def fake_set_display_resolution(width, height, display_id=None):
             if (width, height) == (4112, 2570):
                 events.append("set_aspect_ratio")
                 return
             if (width, height) == (2056, 1329):
+                self.assertEqual(display_id, 13)
                 events.append("restore_resolution")
                 return
             raise AssertionError((width, height))
@@ -1590,13 +1614,15 @@ Input #0, avfoundation, from '3':
             "height": 1329,
             "pixel_width": 4112,
             "pixel_height": 2658,
+            "display_id": 13,
         }
 
-        def fake_set_display_resolution(width, height):
+        def fake_set_display_resolution(width, height, display_id=None):
             if (width, height) == (1920, 1080):
                 events.append("set_resolution")
                 return
             if (width, height) == (2056, 1329):
+                self.assertEqual(display_id, 13)
                 events.append("restore_resolution")
                 return
             raise AssertionError((width, height))

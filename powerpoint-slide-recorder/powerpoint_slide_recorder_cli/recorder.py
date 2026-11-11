@@ -43,6 +43,14 @@ def payload_for_mode(mode):
     }
 
 
+def require_online_display(display_id):
+    error, online_ids, _count = Quartz.CGGetOnlineDisplayList(32, None, None)
+    if error != Quartz.kCGErrorSuccess:
+        raise SystemExit(f"CGGetOnlineDisplayList failed with code {error}")
+    if display_id not in online_ids:
+        raise SystemExit(f"Recorded display {display_id} disappeared during recording")
+
+
 def matching_mode(display_id, width, height):
     options = {Quartz.kCGDisplayShowDuplicateLowResolutionModes: True}
     modes = Quartz.CGDisplayCopyAllDisplayModes(display_id, options)
@@ -52,7 +60,7 @@ def matching_mode(display_id, width, height):
             return mode
         if (mode_payload["width"], mode_payload["height"]) == (width, height):
             return mode
-    raise SystemExit(f"Display mode {width}x{height} is not available on the main display")
+    raise SystemExit(f"Display mode {width}x{height} is not available on display {display_id}")
 
 
 def display_modes(display_id):
@@ -83,7 +91,7 @@ def main():
     display_id = Quartz.CGMainDisplayID()
 
     if action == "current":
-        print(json.dumps(payload_for_mode(Quartz.CGDisplayCopyDisplayMode(display_id))))
+        print(json.dumps({**payload_for_mode(Quartz.CGDisplayCopyDisplayMode(display_id)), "display_id": int(display_id)}))
         return
 
     if action == "modes":
@@ -91,10 +99,13 @@ def main():
         return
 
     if action == "set":
-        if len(sys.argv) != 4:
-            raise SystemExit("set requires width and height")
+        if len(sys.argv) not in (4, 5):
+            raise SystemExit("set requires width, height and optional display id")
         width = int(sys.argv[2])
         height = int(sys.argv[3])
+        if len(sys.argv) == 5:
+            display_id = int(sys.argv[4])
+            require_online_display(display_id)
         set_display_mode(display_id, matching_mode(display_id, width, height))
         return
 
@@ -327,7 +338,7 @@ def parse_display_mode_payload(payload):
     except json.JSONDecodeError as error:
         raise RuntimeError(f"macOS display helper returned invalid JSON: {payload}") from error
 
-    required_keys = ["width", "height", "pixel_width", "pixel_height"]
+    required_keys = ["width", "height", "pixel_width", "pixel_height", "display_id"]
     for key in required_keys:
         if key not in parsed:
             raise RuntimeError(f"macOS display helper payload is missing {key}")
@@ -370,8 +381,9 @@ def available_display_modes():
     return parse_display_modes_payload(run_macos_display_helper("modes"))
 
 
-def set_display_resolution(width, height):
-    run_macos_display_helper("set", width, height)
+def set_display_resolution(width, height, display_id=None):
+    extra = [] if display_id is None else [display_id]
+    run_macos_display_helper("set", width, height, *extra)
 
 
 def parse_resolution(value):
@@ -2621,6 +2633,7 @@ def record(config):
             run_cleanup(cleanup_errors, "restore display resolution", lambda: set_display_resolution(
                 display_restore_mode["width"],
                 display_restore_mode["height"],
+                display_restore_mode["display_id"],
             ))
         for termination_signal, previous_handler in previous_signal_handlers.items():
             signal.signal(termination_signal, previous_handler)
