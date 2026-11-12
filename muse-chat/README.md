@@ -150,11 +150,24 @@ finish. Active replies remain snapshots; use `chat monitor` to wait for final
 content. Browser hydration can change beyond that bounded window, so the CLI
 does not claim an authoritative server-side completion event.
 
-A newly created side chat can replace its temporary user-message ID while it
-saves. Monitoring tolerates a bounded empty-history gap and reanchors only to
-that new chat's unique user turn with the exact normalized submitted text.
-Other user turns or mismatching text still fail correlation. No prompt is
-resent during reconciliation.
+Muse echoes every sent message under a temporary user-message ID and later
+replaces it with the saved server ID, in new side chats and existing chats
+alike, sometimes after a gap where the echo is gone and the saved turn is not
+rendered yet. `--monitor` waits through that gap within its timeout and
+reanchors only to the unique user turn that was absent from the history before
+the send and carries the exact normalized submitted text. An older turn with
+the same text, a different new turn, or two identical new turns fail
+correlation. No prompt is resent during reconciliation.
+
+`chat monitor` lets a freshly opened chat settle before choosing a turn, then
+always follows the newest user turn. Muse renders saved history first and an
+in-flight turn's activity, or the turn itself, after the page loads, so an
+older finished reply is never returned for a newer turn.
+
+Regression verified 2026-11-12 (chat history shapes in
+`tests/test_turn_tracking.py`): `chat send --monitor` on an existing side chat
+refused its own reply after the ID swap, and `chat monitor` returned the first
+turn's reply because the latest turn had not rendered yet.
 
 Regression verified 2026-10-20: a task card previously replaced the prose in
 monitor output because only the last same-turn component was selected. Initial

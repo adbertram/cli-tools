@@ -293,22 +293,3 @@ def test_side_create_monitor_refuses_unprovable_saved_turn(saved_messages):
     page = SideDraftPage(saved_messages)
     with pytest.raises(ClientError, match="refused to match another response"):
         side_client(page).create_side(SIDE_MESSAGE, monitor=True, timeout=10)
-
-
-def test_existing_chat_send_never_reanchors_replaced_turn_id():
-    page = SequencePage([
-        snapshot(),
-        snapshot([saved_user(message_id=DRAFT_TURN_ID)]),
-        snapshot([
-            saved_user(),
-            {"role": "assistant", "text": "reply", "dom_index": 2, "message_id": "a-reply"},
-        ]),
-    ], url=f"https://muse.ai/thread/{SIDE_ID}")
-    with pytest.raises(ClientError, match="refused to match another response"):
-        MuseChatClient._send_on_page(
-            MuseChatClient.__new__(MuseChatClient),
-            page,
-            SIDE_MESSAGE,
-            monitor=True,
-            timeout=10,
-        )

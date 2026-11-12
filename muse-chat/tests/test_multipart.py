@@ -71,7 +71,7 @@ def test_repeated_snapshot_does_not_duplicate_components(monkeypatch):
 def test_draft_id_gap_reanchors_only_unique_exact_saved_user(monkeypatch):
     page=Page([state(),state(USER,PROSE,CARD)])
     clock(monkeypatch,page)
-    result=MuseChatClient._monitor_turn(page,'main',1,10,'draft-user',new_side_message=USER['text'])
+    result=MuseChatClient._monitor_turn(page,'main',1,10,'draft-user',submitted_message=USER['text'])
     assert result['turn_message_id']=='saved-user' and page.clock==1.25
 
 
@@ -89,7 +89,7 @@ def test_empty_save_gap_resets_pre_save_stability(monkeypatch):
     draft=dict(USER,message_id='draft-user')
     page=Page([state(draft,PROSE),state(),state(USER,PROSE)])
     clock(monkeypatch,page)
-    result=MuseChatClient._monitor_turn(page,'main',1,10,'draft-user',new_side_message=USER['text'])
+    result=MuseChatClient._monitor_turn(page,'main',1,10,'draft-user',submitted_message=USER['text'])
     assert result['turn_message_id']=='saved-user' and page.clock==1.75
 
 

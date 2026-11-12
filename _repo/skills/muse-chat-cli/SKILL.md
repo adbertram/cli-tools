@@ -96,8 +96,10 @@ timeout; new text/components or activity reset settling. `chat get` is a
 snapshot, with bounded idle hydration settling (up to five seconds), and may
 show an active partial response. Use monitor for final replies.
 
-Only newly created side chats can reconcile a temporary submitted-message ID:
-a bounded empty-history gap is tolerated, then the unique saved user turn must
-exactly match normalized submitted text. Existing chats never reanchor by text,
-and reconciliation never resends the message.
+Muse swaps every sent message's temporary ID for a saved server ID, in new and
+existing chats. `--monitor` waits through the swap gap within its timeout, then
+reanchors only to the unique user turn absent before the send whose normalized
+text exactly matches; older identical turns never match, and reconciliation
+never resends the message. `chat monitor` settles the freshly loaded history,
+then always follows the newest user turn.
 </response_correlation>

@@ -244,6 +244,29 @@ class MuseChatClient:
             "approvals": raw.get("approvals") if isinstance(raw.get("approvals"), list) else [],
         }
 
+    @staticmethod
+    def _settled_snapshot(page) -> dict:
+        """Snapshot a freshly opened chat after its history hydrates.
+
+        Idle history must stay unchanged for ``RESPONSE_SETTLE_SECONDS``
+        within ``HISTORY_SETTLE_TIMEOUT_SECONDS``. Muse renders saved history
+        first and an in-flight turn's activity about half a second later, so
+        a first snapshot can show an older finished turn as the latest one.
+        """
+        deadline = time.monotonic() + HISTORY_SETTLE_TIMEOUT_SECONDS
+        snapshot = MuseChatClient._snapshot(page)
+        previous = snapshot
+        stable_since = time.monotonic()
+        while not snapshot["typing"] and not snapshot["working"]:
+            now = time.monotonic()
+            if now - stable_since >= RESPONSE_SETTLE_SECONDS or now >= deadline:
+                break
+            page.wait_for_timeout(min(250, max(1, int((deadline - now) * 1000))))
+            snapshot = MuseChatClient._snapshot(page)
+            if snapshot != previous:
+                previous, stable_since = snapshot, time.monotonic()
+        return snapshot
+
     def _open_chat(self, chat_id: str):
         validated = self._validate_chat_id(chat_id)
         page = self._open_page(self._url_for_chat(validated))
@@ -305,43 +328,62 @@ class MuseChatClient:
         turn_dom_index: int,
         timeout: int,
         turn_message_id: str,
-        new_side_message: Optional[str] = None,
+        submitted_message: Optional[str] = None,
+        baseline_ids: frozenset[str] = frozenset(),
+        follow_latest: bool = False,
     ) -> dict:
         """Wait for the response to one user turn.
 
-        ``new_side_message`` is set only for a side chat this process just
-        created. Muse gives the draft's user echo a temporary message ID and
-        replaces it with the server ID once the thread is saved, so the
-        submitted turn is re-anchored to the chat's only user turn when its
-        text matches. Any other history still refuses to match.
+        ``submitted_message`` and ``baseline_ids`` are set when this process
+        just sent the turn. Muse echoes a sent message with a temporary message
+        ID and later replaces it with the saved server ID, sometimes after a
+        gap where the echo is gone and the saved turn is not rendered yet. The
+        turn is re-anchored only to the unique user turn that was absent from
+        the pre-send history and carries the exact normalized submitted text;
+        an older turn with the same text can never match.
+
+        ``follow_latest`` is set by ``chat monitor``: it always watches the
+        newest user turn, so a turn that renders after the page loads replaces
+        an older anchor instead of returning that older turn's reply.
         """
         deadline = time.monotonic() + timeout
         stable_signature = None
         stable_since = None
         while True:
             snapshot = MuseChatClient._snapshot(page)
-            current_turn = next(
-                (row for row in snapshot["messages"] if row["message_id"] == turn_message_id),
-                None,
-            )
-            if current_turn is None and new_side_message is not None:
-                user_turns = [row for row in snapshot["messages"] if row["role"] == "user"]
-                if (
-                    len(user_turns) == 1
-                    and _message_key(user_turns[0]["text"]) == _message_key(new_side_message)
-                ):
-                    current_turn = user_turns[0]
+            user_turns = [row for row in snapshot["messages"] if row["role"] == "user"]
+            if follow_latest:
+                current_turn = user_turns[-1] if user_turns else None
+                if current_turn is not None and current_turn["message_id"] != turn_message_id:
                     activity.info(
-                        "side chat turn re-anchored chat_id=%s from=%s to=%s",
+                        "monitor moved to newer turn chat_id=%s from=%s to=%s",
                         chat_id, turn_message_id, current_turn["message_id"],
                     )
                     turn_message_id = current_turn["message_id"]
-            if current_turn is None and new_side_message is not None and not user_turns:
-                stable_signature, stable_since = None, None
-                remaining = deadline - time.monotonic()
-                if remaining > 0:
-                    page.wait_for_timeout(min(250, max(1, int(remaining * 1000))))
-                    continue
+            else:
+                current_turn = next(
+                    (row for row in snapshot["messages"] if row["message_id"] == turn_message_id),
+                    None,
+                )
+            new_user_turns = [row for row in user_turns if row["message_id"] not in baseline_ids]
+            if current_turn is None and submitted_message is not None:
+                matches = [
+                    row for row in new_user_turns
+                    if _message_key(row["text"]) == _message_key(submitted_message)
+                ]
+                if len(matches) == 1:
+                    current_turn = matches[0]
+                    activity.info(
+                        "submitted turn re-anchored chat_id=%s from=%s to=%s",
+                        chat_id, turn_message_id, current_turn["message_id"],
+                    )
+                    turn_message_id = current_turn["message_id"]
+                elif not new_user_turns:
+                    stable_signature, stable_since = None, None
+                    remaining = deadline - time.monotonic()
+                    if remaining > 0:
+                        page.wait_for_timeout(min(250, max(1, int(remaining * 1000))))
+                        continue
             if current_turn is None:
                 raise ClientError(
                     f"Muse chat {chat_id!r} no longer exposed submitted turn "
@@ -459,15 +501,14 @@ class MuseChatClient:
         turn_message_id = turn["message_id"]
         if side_draft:
             parsed = urlparse(page.url)
-            chat_id = self._chat_id_from_url(page.url)
-            if chat_id is None:
-                if (
-                    parsed.scheme != "https"
-                    or parsed.netloc != "muse.ai"
-                    or parsed.path.rstrip("/") != "/thread/new"
-                ):
-                    raise ClientError(f"Muse opened an unexpected side-chat path: {page.url}")
-                chat_id = "pending"
+            if self._chat_id_from_url(page.url) is None and (
+                parsed.scheme != "https"
+                or parsed.netloc != "muse.ai"
+                or parsed.path.rstrip("/") != "/thread/new"
+            ):
+                raise ClientError(f"Muse opened an unexpected side-chat path: {page.url}")
+            chat_id = self._wait_for_side_id(page)
+            activity.info("side chat created chat_id=%s", chat_id)
         else:
             chat_id = self._current_chat_id(page)
         activity.info("message submitted chat_id=%s monitor=%s chars=%d", chat_id, monitor, len(message))
@@ -484,7 +525,13 @@ class MuseChatClient:
         if not monitor:
             return result
         monitored = self._monitor_turn(
-            page, chat_id, turn_dom_index, timeout, turn_message_id
+            page,
+            chat_id,
+            turn_dom_index,
+            timeout,
+            turn_message_id,
+            submitted_message=message,
+            baseline_ids=frozenset(baseline_ids),
         )
         monitored.update({
             "message": message,
@@ -520,33 +567,14 @@ class MuseChatClient:
         ):
             raise ClientError(f"Muse did not open a new side-chat draft: {page.url}")
         self._require_composer(page)
-        result = self._send_on_page(
-            page, message, monitor=False, timeout=timeout, side_draft=True
+        return self._send_on_page(
+            page, message, monitor=monitor, timeout=timeout, side_draft=True
         )
-        chat_id = self._wait_for_side_id(page)
-        result.update({"chat_id": chat_id, "url": page.url})
-        activity.info("side chat created chat_id=%s monitor=%s", chat_id, monitor)
-        if not monitor:
-            return result
-        monitored = self._monitor_turn(
-            page,
-            chat_id,
-            result["turn_dom_index"],
-            timeout,
-            result["turn_message_id"],
-            new_side_message=message,
-        )
-        monitored.update({
-            "message": message,
-            "turn_dom_index": result["turn_dom_index"],
-            "monitored": True,
-        })
-        return monitored
 
     def monitor(self, chat_id: str, *, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> dict:
         validated = self._validate_chat_id(chat_id)
         page = self._open_chat(validated)
-        snapshot = self._snapshot(page)
+        snapshot = self._settled_snapshot(page)
         user_messages = [row for row in snapshot["messages"] if row["role"] == "user"]
         if not user_messages:
             raise ClientError(f"Chat {validated!r} has no user turn to monitor.")
@@ -558,6 +586,7 @@ class MuseChatClient:
             turn["dom_index"],
             timeout,
             turn["message_id"],
+            follow_latest=True,
         )
 
     @staticmethod
@@ -625,18 +654,7 @@ class MuseChatClient:
     def get_chat(self, chat_id: str) -> dict:
         validated = self._validate_chat_id(chat_id)
         page = self._open_chat(validated)
-        deadline = time.monotonic() + HISTORY_SETTLE_TIMEOUT_SECONDS
-        snapshot = self._snapshot(page)
-        previous = snapshot
-        stable_since = time.monotonic()
-        while not snapshot["typing"] and not snapshot["working"]:
-            now = time.monotonic()
-            if now - stable_since >= RESPONSE_SETTLE_SECONDS or now >= deadline:
-                break
-            page.wait_for_timeout(min(250, max(1, int((deadline - now) * 1000))))
-            snapshot = self._snapshot(page)
-            if snapshot != previous:
-                previous, stable_since = snapshot, time.monotonic()
+        snapshot = self._settled_snapshot(page)
         return normalize_chat(
             {
                 "id": validated,
