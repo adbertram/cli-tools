@@ -22,7 +22,7 @@ def speech_create(
     voice_id: str = typer.Argument(..., help="Voice ID"),
     text: str = typer.Argument(..., help="Text to convert to speech"),
     output: Path = typer.Option(..., "--output", "-o", help="Path to write audio file"),
-    model_id: str = typer.Option("eleven_multilingual_v2", "--model-id", "-m", help="Text-to-speech model ID"),
+    model_id: str = typer.Option("eleven_v4", "--model-id", "-m", help="Text-to-speech model ID"),
     output_format: str = typer.Option("mp3_44100_128", "--output-format", help="Audio output format"),
     language_code: Optional[str] = typer.Option(None, "--language-code", help="ISO 639-1 language code"),
     stability: Optional[float] = typer.Option(None, "--stability", min=0, max=1, help="Voice stability"),

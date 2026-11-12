@@ -113,7 +113,7 @@ elevenlabs models get eleven_multilingual_v2 --table
 elevenlabs speech create VOICE_ID "Hello from ElevenLabs." --output hello.mp3
 
 # Choose model and output format
-elevenlabs speech create VOICE_ID "Hello." --output hello.mp3 --model-id eleven_multilingual_v2 --output-format mp3_44100_128
+elevenlabs speech create VOICE_ID "Hello." --output hello.mp3 --model-id eleven_v4 --output-format mp3_44100_128
 
 # Override voice settings for one request
 elevenlabs speech create VOICE_ID "Hello." --output hello.mp3 --stability 0.5 --similarity-boost 0.75 --style 0 --speaker-boost
