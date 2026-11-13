@@ -1,5 +1,5 @@
 import pytest
-from brickowl_cli.browser import _BrickOwlAutomation
+from brickowl_cli.browser import BrickOwlBrowser, _BrickOwlAutomation
 from brickowl_cli.config import Config
 from cli_tools_shared.auth import AuthResult, BrowserAutomation
 from cli_tools_shared.auth_commands import (
@@ -94,3 +94,27 @@ def test_auth_login_uses_the_noninteractive_login_for_brick_owl(browser, monkeyp
     monkeypatch.setattr(browser, "close", lambda: None)
 
     _handle_browser_login(config, "brickowl", force=False)
+
+
+def test_get_user_id_uses_current_user_links_when_me_route_does_not_redirect(monkeypatch):
+    class AccessDeniedPage:
+        url = "https://www.brickowl.com/user/me/messages"
+
+        def wait_for_timeout(self, milliseconds):
+            assert milliseconds == 1500
+
+        def evaluate(self, script):
+            assert "/user/" in script
+            return "https://www.brickowl.com/user/992223/messages"
+
+    class ApiAccessDeniedClient:
+        def get_user_details(self):
+            raise RuntimeError("Brick Owl API error 403")
+
+    browser = BrickOwlBrowser.__new__(BrickOwlBrowser)
+    browser._user_id = None
+    browser.get_page = lambda url: AccessDeniedPage()
+    monkeypatch.setattr("brickowl_cli.client.BrickowlClient", ApiAccessDeniedClient)
+
+    assert browser.get_user_id() == "992223"
+    assert browser._user_id == "992223"

@@ -214,6 +214,25 @@ class BrickOwlBrowser(_BrickOwlAutomation):
         match = re.search(r"/user/(\d+)", page.url)
         if match:
             self._user_id = match.group(1)
+            return self._user_id
+
+        # Brick Owl does not always redirect /user/me/messages to the numeric
+        # profile URL. The authenticated header still carries the current
+        # user's numeric links (Order History, Store Carts, Messages), so use
+        # one of those instead of reporting access-denied as auth failure.
+        own_user_href = page.evaluate(
+            """() => {
+                const links = Array.from(document.querySelectorAll('a[href*="/user/"]'));
+                const ownLink = links.find((link) =>
+                    /Order History|Store Carts|Messages/i.test(link.textContent || '')
+                );
+                return ownLink ? (ownLink.href || ownLink.getAttribute('href') || null) : null;
+            }"""
+        )
+        if own_user_href:
+            match = re.search(r"/user/(\d+)(?:/|$)", own_user_href)
+            if match:
+                self._user_id = match.group(1)
 
         return self._user_id
 
