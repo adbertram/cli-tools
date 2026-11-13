@@ -77,6 +77,32 @@ def test_referenced_subagent_must_exist(tmp_path):
     assert len(desktop.associated(transcript, 'session')) == 1
 
 
+def test_forked_session_finds_nested_subagent_in_source_session(tmp_path):
+    transcript = tmp_path / 'fork.jsonl'
+    transcript.write_text('{"sessionId":"source","agentId":"aaaa000000000001"}\n')
+    folder = tmp_path / 'fork' / 'subagents'
+    folder.mkdir(parents=True)
+    (folder / 'agent-aaaa000000000001.jsonl').write_text('{"sessionId":"source","agentId":"bbbb000000000002"}\n')
+    try:
+        desktop.associated(transcript, 'fork')
+    except ValueError as exc:
+        assert 'Missing referenced subagent transcript bbbb000000000002' in str(exc)
+    else:
+        raise AssertionError('nested subagent missing everywhere was accepted')
+    (tmp_path / 'unrelated' / 'subagents').mkdir(parents=True)
+    (tmp_path / 'unrelated' / 'subagents' / 'agent-bbbb000000000002.jsonl').write_text('{}\n')
+    try:
+        desktop.associated(transcript, 'fork')
+    except ValueError as exc:
+        assert 'bbbb000000000002' in str(exc)
+    else:
+        raise AssertionError('nested subagent from an unrelated session was accepted')
+    nested = tmp_path / 'source' / 'subagents' / 'agent-bbbb000000000002.jsonl'
+    nested.parent.mkdir(parents=True)
+    nested.write_text('{"sessionId":"source"}\n')
+    assert nested in desktop.associated(transcript, 'fork')
+
+
 def test_duplicate_transcripts_are_inventoried_and_conflicts_rejected(tmp_path, monkeypatch):
     projects = tmp_path / 'projects'
     first = projects / 'one' / 'session.jsonl'; second = projects / 'two' / 'session.jsonl'

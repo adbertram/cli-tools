@@ -97,16 +97,26 @@ def associated(transcript_path, cli_id):
         json_path = path.with_suffix('.json')
         if json_path.is_file(): files.append(json_path)
     subagents = session_dir / 'subagents'
-    for path in [transcript_path] + [p for p in files if p.parent == subagents and p.suffix == '.jsonl']:
+    queue, scanned = [transcript_path] + [p for p in files if p.parent == subagents and p.suffix == '.jsonl'], set()
+    while queue:
+        path = queue.pop()
+        if path in scanned: continue
+        scanned.add(path)
         identities, _, _ = _subagent_identity(path)
-        referenced = set(identities)
+        referenced, sources = set(identities), set()
         for entry in iter_session_lines(path):
+            if isinstance(entry.get('sessionId'), str): sources.add(entry['sessionId'])
             for obj in (entry, entry.get('toolUseResult')):
                 if isinstance(obj, dict):
                     referenced.update(obj[k] for k in ('agentId', 'agent_id') if isinstance(obj.get(k), str))
+        # A forked session keeps its source's sessionId on copied lines; nested subagents may live only there.
+        folders = [subagents] + [transcript_path.parent / s / 'subagents' for s in sorted(sources - {cli_id})]
         for agent_id in referenced:
-            if not (subagents / f'agent-{agent_id}.jsonl').is_file():
+            found = next((f / f'agent-{agent_id}.jsonl' for f in folders if (f / f'agent-{agent_id}.jsonl').is_file()), None)
+            if found is None:
                 raise ValueError(f'Missing referenced subagent transcript {agent_id} in {path}')
+            if found.parent != subagents:
+                files.append(found); queue.append(found)
     return sorted(set(files))
 
 

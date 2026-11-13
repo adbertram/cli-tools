@@ -14,6 +14,11 @@ dependencies = [
     "cli-tools-shared",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+]
+
 [project.scripts]
 claude-code-sessions = "claude_code_sessions_cli.main:app"
 
