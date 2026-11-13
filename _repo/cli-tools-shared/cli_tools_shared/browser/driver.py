@@ -1278,6 +1278,18 @@ class BrowserHarnessService:
         from ._elements import _ServiceElement
         _ServiceElement(self, css=selector).fill(text)
 
+    def check(self, selector: str) -> None:
+        """Check the first element matching ``selector``."""
+        self._require_open()
+        from ._elements import _ServiceElement
+        _ServiceElement(self, css=selector).check()
+
+    def uncheck(self, selector: str) -> None:
+        """Uncheck the first element matching ``selector``."""
+        self._require_open()
+        from ._elements import _ServiceElement
+        _ServiceElement(self, css=selector).uncheck()
+
     def fill_framework_input(self, selector: str, text: str) -> None:
         """Fill a framework-managed editor through existing native key events."""
         self._require_open()

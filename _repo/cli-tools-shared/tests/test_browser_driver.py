@@ -1095,6 +1095,26 @@ def test_page_fill_resolves_selector_and_text(monkeypatch):
     assert "chuchlama" in calls[0]
 
 
+def test_page_check_resolves_selector_and_clicks_unchecked_control(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, [None])
+
+    service.check('input[name="perm_store_orders"]')
+
+    assert "document.querySelector(" in calls[0]
+    assert 'input[name=\\"perm_store_orders\\"]' in calls[0]
+    assert "if (!el.checked)" in calls[0]
+
+
+def test_page_uncheck_resolves_selector_and_clicks_checked_control(monkeypatch):
+    service, calls = _open_service_with_eval(monkeypatch, [None])
+
+    service.uncheck('input[name="perm_store_orders"]')
+
+    assert "document.querySelector(" in calls[0]
+    assert 'input[name=\\"perm_store_orders\\"]' in calls[0]
+    assert "if (el.checked)" in calls[0]
+
+
 def test_page_title_returns_document_title(monkeypatch):
     service, calls = _open_service_with_eval(monkeypatch, ["Coupons - Brick Owl"])
 
