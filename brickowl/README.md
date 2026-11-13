@@ -28,8 +28,8 @@ brickowl --version
 ## Quick Start
 
 ```bash
-# Configure your API key
-brickowl auth login --api-key YOUR_API_KEY
+# Configure the CLI-tools secret named `brickowl-api-key`
+brickowl auth login -c api_key
 
 # List recent orders
 brickowl order list --limit 10 --table
@@ -721,7 +721,8 @@ API_KEY=your_api_key
 ACTIVE=true
 ```
 
-Get your API key from your [Brick Owl account settings](https://www.brickowl.com/account/api).
+Get your API key from Brick Owl's **Profile → API** page
+(`https://www.brickowl.com/user`).
 
 ### Optional
 
