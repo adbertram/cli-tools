@@ -2,9 +2,9 @@
 
 ## DESCRIPTION
 
-The `photos-app` CLI wraps sqlite3 with standardized cli-tools behavior.
+Query and export photos from the macOS Photos library and manage its albums.
 
-Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
+Use it to list, count, read, and download photos, and to list, read, create, delete, move, and auto-enhance albums or add photos to them.
 
 ## Installation
 

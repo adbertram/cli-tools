@@ -2,9 +2,9 @@
 
 ## DESCRIPTION
 
-The `google-lighthouse` CLI wraps lighthouse with standardized cli-tools behavior.
+Run Google Lighthouse audits against a URL and keep the results.
 
-Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
+Use it to audit a page for desktop or mobile, save the JSON and HTML reports, and list or read summaries of saved audits.
 
 ## Prerequisites
 

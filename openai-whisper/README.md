@@ -2,9 +2,9 @@
 
 ## DESCRIPTION
 
-The `openai-whisper` CLI wraps OpenAI Whisper with standardized cli-tools behavior.
+Transcribe audio and video files locally with OpenAI Whisper.
 
-Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
+Use it to create a transcript from a media file, list and read existing transcript JSON files in a folder, and list the available Whisper models.
 
 ## Prerequisites
 

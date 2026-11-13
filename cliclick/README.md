@@ -2,9 +2,9 @@
 
 ## DESCRIPTION
 
-The `cliclick` CLI wraps cliclick with standardized cli-tools behavior.
+Drive macOS mouse and keyboard input through the `cliclick` binary.
 
-Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
+Use it to click, double-click, right-click, move, and drag at screen coordinates, read the pointer position or the screen color at a point, type text and press keys, and save, list, and run reusable automation scripts. It takes over the local desktop, so use it only when foreground control is approved.
 
 ## Prerequisites
 

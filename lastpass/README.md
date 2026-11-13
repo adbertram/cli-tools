@@ -2,9 +2,9 @@
 
 ## DESCRIPTION
 
-The `lastpass` CLI wraps lpass with standardized cli-tools behavior.
+Read and manage the LastPass vault through the `lpass` command-line client.
 
-Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
+Use it to list, read, create, update, and delete vault entries, fetch just an entry's username or password, list an entry's field names without their values, generate passwords, and sync the local vault cache with LastPass.
 
 ## Prerequisites
 

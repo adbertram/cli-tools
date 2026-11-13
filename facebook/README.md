@@ -2,9 +2,9 @@
 
 ## DESCRIPTION
 
-The `facebook` CLI wraps playwright with standardized cli-tools behavior.
+Work with Facebook through browser automation of a signed-in session plus the Graph API for Pages and Reels.
 
-Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
+Use it to search Marketplace listings and check their availability, list and read Messenger conversations, send messages, and review message requests, list joined Groups and read or manage their posts, list managed Pages, and publish, check, or delete Page Reels.
 
 ## Prerequisites
 

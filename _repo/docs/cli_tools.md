@@ -22,9 +22,9 @@
 | `brickstore` | Read BrickStore price guide and catalog data through its local MCP server |
 | `buttondown` | The `buttondown` CLI provides a command-line interface for Buttondown API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `cj` | The `cj` CLI provides a command-line interface for Cj API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `claude-code-sessions` | The `claude-code-sessions` CLI wraps claude with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `claude-code-sessions` | Query and analyze Claude Code session transcripts under `~/.claude/projects` (plus todos under `~/.claude/todos`). Use it to find and time past sessions (created and last-activity timestamps, message and tool-call counts, per-session token totals), read their conversations, tool calls, subagent invocations, skill invocations, todos, and unified timeline, and search keywords across every transcript, instead of parsing the raw `.jsonl` files. It also lists, reads, and imports Claude Desktop session records, with the same command shape as `codex-sessions` and `deepseek-sessions`. |
 | `clickbank` | The `clickbank` CLI provides a command-line interface for Clickbank API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `cliclick` | The `cliclick` CLI wraps cliclick with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `cliclick` | Drive macOS mouse and keyboard input through the `cliclick` binary. Use it to click, double-click, right-click, move, and drag at screen coordinates, read the pointer position or the screen color at a point, type text and press keys, and save, list, and run reusable automation scripts. It takes over the local desktop, so use it only when foreground control is approved. |
 | `clipster` | Clipster creator client: public campaign catalog, unattended email-passcode login, campaign rules and eligibility, linked social accounts, duplicate-safe TikTok submissions, submissions and earnings |
 | `cloudflare` | The `cloudflare` CLI provides a command-line interface for Cloudflare API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `codex-helper` | Codex local app-server helper commands |
@@ -43,7 +43,7 @@
 | `ebay` | The `ebay` CLI provides a command-line interface for eBay Fulfillment API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `elevenlabs` | The `elevenlabs` CLI provides a command-line interface for Elevenlabs API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `envato` | Envato Market API - search CodeCanyon, ThemeForest, and other Envato marketplace items and read sales counts, ratings, prices, and update dates |
-| `facebook` | The `facebook` CLI wraps playwright with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `facebook` | Work with Facebook through browser automation of a signed-in session plus the Graph API for Pages and Reels. Use it to search Marketplace listings and check their availability, list and read Messenger conversations, send messages, and review message requests, list joined Groups and read or manage their posts, list managed Pages, and publish, check, or delete Page Reels. |
 | `facebook-ads` | Wrapper for Meta's official Ads CLI, with complete native command passthrough and upstream-owned authentication |
 | `fedex` | The `fedex` CLI provides a command-line interface for Fedex API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `fitnesspal` | The `fitnesspal` CLI provides a command-line interface for Fitnesspal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
@@ -54,7 +54,7 @@
 | `globiflow` | The `globiflow` CLI provides a command-line interface for Globiflow (browser automation). Use it when you need repeatable access to globiflow workflows that are only available through a signed-in website. |
 | `google` | The `google` CLI provides a command-line interface for Google Workspace APIs (Docs, Drive, Sheets, Gmail, Calendar). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `google-ads` | Full versioned Google Ads API access through official SDK service and request schemas |
-| `google-lighthouse` | The `google-lighthouse` CLI wraps lighthouse with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `google-lighthouse` | Run Google Lighthouse audits against a URL and keep the results. Use it to audit a page for desktop or mobile, save the JSON and HTML reports, and list or read summaries of saved audits. |
 | `grammarly` | The `grammarly` CLI provides a command-line interface for Grammarly API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `grokbot-sessions` | The `grokbot-sessions` CLI reads Grok Bot (Grokbot) session transcripts over the live Cursor-hosted `aiserver.v1.GrokBotService` Connect RPC API, adopting the desktop app's signed-in session. Use it to list agents, page transcripts, group turns, and inspect approvals, tool-card calls, subagent surfaces, and automations with the same command shape as `claude-code-sessions`, `codex-sessions`, and `deepseek-sessions`. |
 | `gumroad` | Inspect Gumroad products, upload existing files, create drafts, update metadata and attachments, and publish selected products through the Gumroad API |
@@ -70,7 +70,7 @@
 | `kalshi` | The `kalshi` CLI watches and trades Kalshi prediction markets, starting with the Bitcoin 15 minute market. Use it when you need fast market data, WebSocket streaming, and orders with demo and production safeguards for agents, automation, or terminal workflows. |
 | `keywords` | The `keywords` CLI provides a command-line interface for Keywords API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `kick` | The `kick` CLI provides a command-line interface for Kick API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `lastpass` | The `lastpass` CLI wraps lpass with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `lastpass` | Read and manage the LastPass vault through the `lpass` command-line client. Use it to list, read, create, update, and delete vault entries, fetch just an entry's username or password, list an entry's field names without their values, generate passwords, and sync the local vault cache with LastPass. |
 | `leanpub` | The `leanpub` CLI provides a command-line interface for Leanpub API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `linkedin` | The `linkedin` CLI lets you create and manage LinkedIn personal and page posts. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `macspeech` | Transcribe local audio on-device via Apple SFSpeechRecognizer with contextual-string vocabulary biasing |
@@ -86,16 +86,16 @@
 | `mychart` | The `mychart` CLI provides command-line access to Epic MyChart SMART on FHIR patient record. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `n8n` | The `n8n` CLI lets you convert standardized CLI tools into n8n community node packages. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `nextdoor` | The `nextdoor` CLI provides browser-session-authenticated access to Nextdoor's GraphQL API (feed, For Sale & Free classifieds with direct listing URLs, me, notifications, content search). Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `notifier` | The `notifier` CLI wraps terminal-notifier with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `notifier` | Send macOS desktop notifications through `terminal-notifier`. Use it to pop a notification with a message, title, subtitle, and sound, optionally bypassing Do Not Disturb, when a script or agent needs to get Adam's attention. |
 | `notion` | The `notion` CLI provides a command-line interface for Notion API with database query filtering. Use it when you need scriptable reads, exports, or evidence collection without opening the service UI. |
 | `ntfy-cli` | Full-capability wrapper for the official ntfy client and server CLI |
 | `offerup` | Search and read OfferUp local marketplace listings |
 | `onedrive` | The `onedrive` CLI provides a command-line interface for Onedrive API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `openai-whisper` | The `openai-whisper` CLI wraps OpenAI Whisper with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `openai-whisper` | Transcribe audio and video files locally with OpenAI Whisper. Use it to create a transcript from a media file, list and read existing transcript JSON files in a folder, and list the available Whisper models. |
 | `outlier` | Outlier AI worker portal - discover queued gig tasks |
 | `partnerstack` | The `partnerstack` CLI provides a command-line interface for Partnerstack API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `paypal` | The `paypal` CLI provides a command-line interface for PayPal API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `photos-app` | The `photos-app` CLI wraps sqlite3 with standardized cli-tools behavior. Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows. |
+| `photos-app` | Query and export photos from the macOS Photos library and manage its albums. Use it to list, count, read, and download photos, and to list, read, create, delete, move, and auto-enhance albums or add photos to them. |
 | `pinterest` | The `pinterest` CLI lets you manage Pinterest account, boards, and pins via API v5. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `pluralsight` | Search the public Pluralsight catalog (courses, paths, labs, certificates) by keyword and return JSON |
 | `pluralsight-author` | The `pluralsight-author` CLI provides browser-session access to Pluralsight Author opportunities, whole PowerPoint slide-deck templates, and the Author Kit icon library. Use it to inspect opportunities, identify and download the latest presentation template, and query or download authenticated icon assets. |

@@ -2,9 +2,9 @@
 
 ## DESCRIPTION
 
-The `notifier` CLI wraps terminal-notifier with standardized cli-tools behavior.
+Send macOS desktop notifications through `terminal-notifier`.
 
-Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
+Use it to pop a notification with a message, title, subtitle, and sound, optionally bypassing Do Not Disturb, when a script or agent needs to get Adam's attention.
 
 ## Prerequisites
 

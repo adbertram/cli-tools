@@ -2,9 +2,9 @@
 
 ## DESCRIPTION
 
-The `claude-code-sessions` CLI wraps claude with standardized cli-tools behavior.
+Query and analyze Claude Code session transcripts under `~/.claude/projects` (plus todos under `~/.claude/todos`).
 
-Use it when you need the underlying command exposed through cli-tools JSON/table conventions for agents, automation, or terminal workflows.
+Use it to find and time past sessions (created and last-activity timestamps, message and tool-call counts, per-session token totals), read their conversations, tool calls, subagent invocations, skill invocations, todos, and unified timeline, and search keywords across every transcript, instead of parsing the raw `.jsonl` files. It also lists, reads, and imports Claude Desktop session records, with the same command shape as `codex-sessions` and `deepseek-sessions`.
 
 ## Prerequisites
 
