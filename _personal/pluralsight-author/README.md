@@ -164,7 +164,7 @@ It preserves the imported Author Kit ZIP in the selected profile data.
 `pluralsight-author modules inspect 21958 --module-order 1 --profile default` reads
 current portal module, clip and asset IDs without exposing signed download links.
 `pluralsight-author modules submit --manifest /absolute/manifest.json --profile default`
-uploads the approved deck, uploads or replaces edited clips in manifest order, sets
+uploads the module deck, uploads or replaces edited clips in manifest order, sets
 canonical titles through the Author Dashboard's authoritative content service,
 verifies the remote bytes and displayed names, and submits the module for review.
 Authentication uses the existing CLI browser profile headlessly.
@@ -173,16 +173,22 @@ Manifest JSON requires `course_title`, `module_order` (one-based), `module_title
 `deck_path` (existing PPTX), and ordered `clips` with `record_id`, `title`, and `path`
 (existing `.edited.mp4`). Optional numeric `course_id` skips title discovery. Without
 it, exactly one in-progress Author Home card must match the course title. Course and
-module titles are confirmed against the portal API before any upload. An existing
-slide deck must have the exact local PPTX filename; a mismatch fails before any
-write, even when the bytes match.
+module titles are confirmed against the portal API before any upload. The module
+holds one slide deck. While the module accepts uploads (`in_progress`,
+`updates_required`, `available_for_updates`), an existing deck under another file
+name (for example `m4_approved.pptx` when the manifest names `m4_print.pptx`) is
+replaced in place with the manifest's deck, even when the bytes match, so the portal
+deck always carries the manifest's file name; no second deck is added. A module under
+review is read-only: a deck file name mismatch there fails before any write.
 
 The result contains `ok`, `course_id`, `course_title`, `module_id`, `module_guid`,
 `module_title`, `module_order`, `status`, `deck`, `clips`, `display_titles`, and `already_submitted`.
 `modules submit --manifest ... --plan` writes nothing and reports the deck as
 `unchanged`, `replace`, or `upload`, and each clip as `unchanged`, `new_version`, or
 `new_clip`, with the clip's current portal `version`. Run it before every
-resubmission.
+resubmission. A plan's `deck_path` may name a deck its submitter builds at
+submission time and that does not exist yet; such a deck is reported as `replace`
+or `upload`, never `unchanged`. A real submission requires the deck on disk.
 
 When Pluralsight asks for edits (module status `updates_required` or
 `available_for_updates`), an edited clip is added as a new version of its existing

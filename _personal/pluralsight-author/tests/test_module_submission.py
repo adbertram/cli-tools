@@ -385,7 +385,7 @@ def test_three_clip_final_pass_renames_both_generated_titles_before_submit(submi
     assert service.display_checks == [names, names]
 
 
-@pytest.mark.parametrize('status', ['in_progress', 'updates_required', 'submitted', 'updates_submitted'])
+@pytest.mark.parametrize('status', ['submitted', 'updates_submitted'])
 def test_equal_bytes_different_deck_filename_rejected_before_any_write(submitted, status):
     transport, manifest = submitted
     transport.state['module']['status'] = status
@@ -395,6 +395,45 @@ def test_equal_bytes_different_deck_filename_rejected_before_any_write(submitted
     with pytest.raises(ClientError, match='slide deck filename differs'):
         transport.submit(manifest)
     assert transport.calls == []
+
+
+@pytest.mark.parametrize('status', ['in_progress', 'updates_required', 'available_for_updates'])
+def test_renamed_deck_replaces_the_one_portal_deck(submitted, status):
+    old, manifest = submitted
+    old.state['module']['status'] = status
+    old.state['assets'][0]['fileName'] = 'm4_approved.pptx'
+    transport = UpdatingSubmission(old.state)
+    # Equal bytes under the old name still replace it: the portal deck must carry the manifest's name.
+    transport.deck_uploaded = True; transport.video_uploaded = True
+    result = transport.submit(manifest)
+    assert result['ok'] and result['deck']['fileName'] == 'deck.pptx'
+    uploads = [c for c in transport.calls if '/module-assets' in c[1] and 'files' in c[2]]
+    assert len(uploads) == 1
+    method, url, kwargs = uploads[0]
+    assert method == 'PUT' and url.endswith('/module-assets/d1')
+    assert kwargs['files']['uri'][0] == 'deck.pptx'
+    assert not any(c[0] == 'POST' and '/module-assets' in c[1] for c in transport.calls)
+
+
+def test_plan_reports_renamed_or_unbuilt_deck_as_replace(submitted, tmp_path):
+    transport, manifest = submitted
+    transport.state['module']['status'] = 'updates_required'
+    transport.state['assets'][0]['fileName'] = 'm4_approved.pptx'
+    assert transport.submit(manifest, plan=True)['deck'] == 'replace'
+    manifest['deck_path'] = str(tmp_path / 'm4_print.pptx')
+    assert transport.submit(manifest, plan=True)['deck'] == 'replace'
+    transport.state['assets'] = []
+    assert transport.submit(manifest, plan=True)['deck'] == 'upload'
+    assert not transport.calls
+
+
+def test_unbuilt_deck_refused_for_a_real_submission(submitted, tmp_path):
+    transport, manifest = submitted
+    transport.state['module']['status'] = 'updates_required'
+    manifest['deck_path'] = str(tmp_path / 'm4_print.pptx')
+    with pytest.raises(ClientError, match='existing PowerPoint deck'):
+        transport.submit(manifest)
+    assert not transport.calls
 
 
 class ReadinessPage:

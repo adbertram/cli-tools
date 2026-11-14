@@ -247,10 +247,14 @@ class ModuleSubmission:
         return matches[0] if matches else None
 
     def plan(self, state, deck, decks, clips):
-        """Read-only account of what submit would do; compares remote bytes, writes nothing."""
+        """Read-only account of what submit would do; compares remote bytes, writes nothing.
+
+        A deck not built yet, or one under another file name than the portal's, cannot be unchanged.
+        """
         module = state['module']
         updating = module['status'] in UPDATE_STATES
-        deck_same = bool(decks and decks[0]['status'] == 'done'
+        deck_same = bool(decks and deck.is_file() and decks[0]['fileName'] == deck.name
+                         and decks[0]['status'] == 'done'
                          and self.remote_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck))
         rows = []
         for clip in clips:
@@ -273,7 +277,8 @@ class ModuleSubmission:
             raise ClientError('Incomplete module submission manifest.')
         deck = Path(manifest['deck_path'])
         clips = manifest['clips']
-        if not deck.is_file() or deck.suffix.lower() != '.pptx' or not clips:
+        # A plan may name a deck its submitter builds at submission time; a submission needs it on disk.
+        if not (deck.is_file() or plan) or deck.suffix.lower() != '.pptx' or not clips:
             raise ClientError('Submission requires an existing PowerPoint deck and edited clips.')
         titles = [c['title'] for c in clips]
         if len(set(titles)) != len(titles):
@@ -296,14 +301,17 @@ class ModuleSubmission:
         decks = [a for a in state['assets'] if a['type'] == 'slides' or a['fileName'] == deck.name]
         if len(decks) > 1:
             raise ClientError('Pluralsight module has multiple slide decks; resolve before submission.')
-        if decks and decks[0]['fileName'] != deck.name:
+        # A deck renamed since the last upload (for example m4_approved.pptx to m4_print.pptx) replaces the
+        # module's one deck while the module accepts uploads; a module under review is read-only.
+        renamed = bool(decks) and decks[0]['fileName'] != deck.name
+        if renamed and submitted:
             raise ClientError('Pluralsight slide deck filename differs from the submission manifest; resolve before submission.')
         if plan:
             return self.plan(state, deck, decks, clips)
         updating = module['status'] in UPDATE_STATES
         versions_before = {c['guid']: c.get('numberedVersion') for c in state['clips']}
         actions = {}
-        deck_ok = bool(decks and decks[0]['status'] == 'done' and self.existing_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck, pending=not submitted, identity=f'deck {decks[0]["id"]}'))
+        deck_ok = bool(decks and not renamed and decks[0]['status'] == 'done' and self.existing_matches(ASSETS + decks[0]['downloadRoute'].lstrip('/'), deck, pending=not submitted, identity=f'deck {decks[0]["id"]}'))
         if deck_ok and decks[0]['type'] != 'slides':
             if submitted:
                 raise ClientError('Submitted module deck has the wrong asset type.')
