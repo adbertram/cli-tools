@@ -33,12 +33,11 @@ cvs <command-group> <action> [arguments] [options]
 browser window with no automation attached and then waits for terminal input so
 the user can confirm that login, OTP, and any CAPTCHA are complete before the
 CLI captures the session. **Do not run `cvs auth login` as a foreground
-non-PTY Hermes terminal command**; without an interactive `/dev/tty` the command
+non-PTY terminal command**; without an interactive `/dev/tty` the command
 can wait until the tool timeout after printing guidance such as `Device not
 configured: '/dev/tty'`.
 
-For Hermes/Codex, use a PTY-capable interactive surface (`terminal(...,
-pty=true)` / `exec_command` with `tty: true`, then send Enter only after the
+Use a PTY-capable interactive surface (`exec_command` with `tty: true`, then send Enter only after the
 user-visible login is complete) or an explicitly approved visible-browser
 handoff that provides terminal input. Do not script CVS credential entry,
 CAPTCHA, OTP, or browser-session capture with browser automation; the safe

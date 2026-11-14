@@ -32,7 +32,6 @@ no_auth_clis = [
     # Read-only local state readers: `auth status` reports whether the local
     # store is readable, and login/logout/profile-write commands are
     # deliberately not exposed.
-    "hermes-sessions",
     "ntfy-cli",
 ]
 
@@ -40,7 +39,6 @@ no_auth_clis = [
 # surface. They own no credentials and deliberately must not mount
 # create_auth_app(), because doing so would add profile/config mutation paths.
 read_only_status_auth_clis = [
-    "hermes-sessions",
     "ntfy-cli",
 ]
 

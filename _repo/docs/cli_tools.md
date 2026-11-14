@@ -59,7 +59,6 @@
 | `grokbot-sessions` | The `grokbot-sessions` CLI reads Grok Bot (Grokbot) session transcripts over the live Cursor-hosted `aiserver.v1.GrokBotService` Connect RPC API, adopting the desktop app's signed-in session. Use it to list agents, page transcripts, group turns, and inspect approvals, tool-card calls, subagent surfaces, and automations with the same command shape as `claude-code-sessions`, `codex-sessions`, and `deepseek-sessions`. |
 | `gumroad` | Inspect Gumroad products, upload existing files, create drafts, update metadata and attachments, and publish selected products through the Gumroad API |
 | `harmony` | The `harmony` CLI lets you manage Logitech Harmony hubs, activities, devices, and commands. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
-| `hermes-sessions` | Query and analyze Hermes Agent session state from the local Hermes home |
 | `humanrail` | CLI interface for HumanRail (browser automation, worker side) |
 | `hyvor` | The `hyvor` CLI provides a command-line interface for Hyvor API. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |
 | `imessage` | The `imessage` CLI provides command-line access for iMessage on macOS. Use it when you need scriptable, JSON-first access from agents, automation, or terminal workflows. |

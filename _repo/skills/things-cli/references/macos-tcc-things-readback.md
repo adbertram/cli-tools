@@ -62,9 +62,6 @@ Add that exact Python executable, enable it, then rerun:
 things todos list --limit 1 --exclude-tag WF
 ```
 
-If the blocked caller is a scheduled Hermes cron run, restart the cron host
-with `hermes gateway restart` before rerunning the probe.
-
 After permissions are correct, the command should return promptly instead of failing with the TCC message.
 
 ## Agent handling rule

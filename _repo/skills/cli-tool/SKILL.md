@@ -332,10 +332,8 @@ tokens such as `{{name}}`, `{{description}}`, or `{{AUTH_IMPORT}}` as regex
 patterns unless every regex metacharacter is intentionally escaped.
 
 Keep CLI skill and `usage.json` inspection searches line-local unless a real
-cross-line match is deliberately required. Do not use Hermes `search_files` or
-plain `rg` with a pattern containing a literal `\n` escape such as
-`"list": \{\n\s+"help"`; ripgrep rejects that without multiline mode, and
-`search_files` has no multiline flag. Prefer separate fixed-string probes for
+cross-line match is deliberately required. Do not use plain `rg` with a
+pattern containing a literal `\n` escape such as `"list": \{\n\s+"help"`; ripgrep rejects that without multiline mode. Prefer separate fixed-string probes for
 single-line anchors, or read the bounded JSON/Markdown section and inspect the
 adjacent lines directly. Use `rg -U` only in a shell probe where multiline
 matching is intentional and explicitly stated.
@@ -447,7 +445,7 @@ When writing a task-workspace Python script that intentionally imports installed
 CLI internals, make the runtime contract visible in the source. Prefer a shebang
 that points at `/usr/bin/env <cli>` only when the CLI itself executes Python
 files; otherwise include a header comment naming the launcher-derived interpreter
-that must run the script. If Hermes/Pyright reports `reportMissingImports` for
+that must run the script. If Pyright reports `reportMissingImports` for
 that intentional CLI-internal import because the editor interpreter is not the
 launcher interpreter, suppress only that import line (for example
 `from <pkg>_cli.client import get_client  # pyright: ignore[reportMissingImports]`).
@@ -771,7 +769,6 @@ All domain knowledge in `references/`:
 **Caching:** caching.md (@cached decorator, cache commands, env config, serialization, integration steps)
 **Troubleshooting:** common-issues.md (quick fixes for common problems)
 **Wrapper Collisions:** wrapper-name-collisions.md (diagnosing a cli-tools wrapper that shares an executable name with an upstream/vendor CLI; gemini/kick/n8n worked examples)
-**Hermes CLI Provider:** hermes-local-cli-provider.md (running a local coding CLI as a Hermes provider without leaking OAuth credentials into Hermes; safe configuration sequence; deferred gateway restart)
 **Agent Output Contract:** output_contract.md (final-response contract for agents whose primary domain skill is `cli-tool`)
 </reference_index>
 

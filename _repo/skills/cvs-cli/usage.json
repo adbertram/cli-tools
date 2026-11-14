@@ -26,7 +26,7 @@
       "commands": {
         "login": {
           "help": "Configure authentication credentials. Prompts for required credentials based on the tool's authentication type. For OAuth authorization code flows, opens a browser for user consent.",
-          "usage_instructions": "Use `cvs auth login` only from an interactive/PTY-capable terminal surface. The command opens a normal browser window with no automation attached, waits for the user to finish login/OTP/CAPTCHA, then requires terminal input (press Enter) to capture the session. In Hermes/Codex, do not run this as a foreground non-PTY terminal command because `/dev/tty` may be unavailable and the process can wait until timeout; use `terminal(..., pty=true)` / `exec_command` with `tty: true`, or an approved visible-browser handoff that can provide terminal input. Do not automate CVS credential entry, OTP/CAPTCHA, or browser-session capture outside the CLI auth handoff.",
+          "usage_instructions": "Use `cvs auth login` only from an interactive/PTY-capable terminal surface. The command opens a normal browser window with no automation attached, waits for the user to finish login/OTP/CAPTCHA, then requires terminal input (press Enter) to capture the session. Do not run this as a foreground non-PTY terminal command because `/dev/tty` may be unavailable and the process can wait until timeout; use `exec_command` with `tty: true`, or an approved visible-browser handoff that can provide terminal input. Do not automate CVS credential entry, OTP/CAPTCHA, or browser-session capture outside the CLI auth handoff.",
           "arguments": [],
           "options": [
             {

@@ -201,7 +201,7 @@ things projects delete <returned-uuid> --yes
 
 **General rule:** When a CLI wraps an external GUI app via AppleScript, every `subprocess.run(['osascript', ...])` call must have a bounded `timeout=`, and multi-step writes that mutate one record must be expressed as a single AppleScript invocation so a hang cannot leave partially-committed state.
 
-**Agent diagnostic rule:** When probing Things3 directly with `osascript` for a suspected hang (for example `tell application "Things3" to count of to dos`), do not rely only on the Hermes/Codex terminal timeout. Wrap `osascript` in an inner watchdog (for example Python `subprocess.run(..., timeout=20)`) and set the terminal timeout higher than that inner timeout. Catch the inner timeout, print an explicit marker such as `APPLESCRIPT_HANG_TIMEOUT_AFTER_20S`, and exit 0 for the expected diagnostic result. A terminal-level `[Command timed out after 40s]` / exit 124 means the diagnostic command was shaped incorrectly and should not be surfaced as the Things finding.
+**Agent diagnostic rule:** When probing Things3 directly with `osascript` for a suspected hang (for example `tell application "Things3" to count of to dos`), do not rely only on the Codex terminal timeout. Wrap `osascript` in an inner watchdog (for example Python `subprocess.run(..., timeout=20)`) and set the terminal timeout higher than that inner timeout. Catch the inner timeout, print an explicit marker such as `APPLESCRIPT_HANG_TIMEOUT_AFTER_20S`, and exit 0 for the expected diagnostic result. A terminal-level `[Command timed out after 40s]` / exit 124 means the diagnostic command was shaped incorrectly and should not be surfaced as the Things finding.
 
 ### 2. `things projects delete` requires `--yes` for non-interactive use
 
@@ -313,8 +313,6 @@ Add/enable that exact Python executable, then rerun a readback smoke test:
 ```bash
 things todos list --limit 1 --exclude-tag WF
 ```
-
-If the blocked caller is a scheduled Hermes cron run, restart the cron host with `hermes gateway restart` before rerunning the probe.
 
 **Agent rule:** Do not retry the write or create duplicate Things tasks when this error appears. Treat it as a local readback permission blocker, report the Full Disk Access action, and resume verification after the permission is granted.
 
