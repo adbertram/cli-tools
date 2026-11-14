@@ -1,8 +1,8 @@
 {
   "tool": "powerpoint-slide-recorder",
   "description": "Record narrated PowerPoint slides",
-  "discovered_at": "2026-09-21T21:31:43Z",
-  "total_commands": 1,
+  "discovered_at": "2026-11-14T01:46:19Z",
+  "total_commands": 2,
   "global_options": [
     {
       "name": "--version",
@@ -13,6 +13,57 @@
     }
   ],
   "commands": {
+    "plan": {
+      "help": "Print the timing plan `record` would use, without recording, opening PowerPoint or touching a screen.",
+      "arguments": [],
+      "options": [
+        {
+          "name": "--deck",
+          "type": "PATH",
+          "required": true,
+          "help": "PowerPoint slide deck path (read for its animation and transition timing only)"
+        },
+        {
+          "name": "--items",
+          "type": "PATH",
+          "required": true,
+          "help": "JSON item manifest path"
+        },
+        {
+          "name": "--work-dir",
+          "type": "PATH",
+          "required": true,
+          "help": "Folder the narration track and timing-plan.json are written to"
+        },
+        {
+          "name": "--click-steps",
+          "type": "TEXT",
+          "required": true,
+          "help": "Comma-separated click steps each slide consumes, one per item in --items order, as record measures them live: its cue markers plus 1 for a media_start item, not counting a terminal after-effect press. Example: 0,3,2"
+        },
+        {
+          "name": "--cue-marker",
+          "type": "TEXT",
+          "required": false,
+          "help": "Transcript marker that triggers a Space keypress",
+          "default": "||"
+        },
+        {
+          "name": "--recording-lead-seconds",
+          "type": "FLOAT",
+          "required": false,
+          "help": "Silence before narration starts",
+          "default": "1.0"
+        },
+        {
+          "name": "--slide-pause-seconds",
+          "type": "FLOAT",
+          "required": false,
+          "help": "Pause inserted between slide items",
+          "default": "0.25"
+        }
+      ]
+    },
     "record": {
       "help": "Record narrated PowerPoint slides.",
       "examples": [

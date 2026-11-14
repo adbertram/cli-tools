@@ -1,4 +1,4 @@
-"""Recording command."""
+"""Recording and planning commands."""
 from pathlib import Path
 from typing import Optional
 
@@ -6,7 +6,7 @@ import typer
 
 from cli_tools_shared.output import handle_error, print_json, print_table
 
-from .client import get_client
+from .client import get_client, plan_slides
 from .recorder import (
     DEFAULT_CUE_MARKER,
     DEFAULT_FRAMERATE,
@@ -79,5 +79,36 @@ def record(
             )
             return
         print_json(result)
+    except Exception as error:
+        raise typer.Exit(handle_error(error))
+
+
+def plan(
+    deck: Path = typer.Option(..., "--deck", help="PowerPoint slide deck path (read for its animation and transition timing only)"),
+    items: Path = typer.Option(..., "--items", help="JSON item manifest path"),
+    work_dir: Path = typer.Option(..., "--work-dir", help="Folder the narration track and timing-plan.json are written to"),
+    click_steps: str = typer.Option(
+        ...,
+        "--click-steps",
+        help=(
+            "Comma-separated click steps each slide consumes, one per item in --items order, as record measures them "
+            "live: its cue markers plus 1 for a media_start item, not counting a terminal after-effect press. Example: 0,3,2"
+        ),
+    ),
+    cue_marker: str = typer.Option(DEFAULT_CUE_MARKER, "--cue-marker", help="Transcript marker that triggers a Space keypress"),
+    recording_lead_seconds: float = typer.Option(DEFAULT_RECORDING_LEAD_SECONDS, "--recording-lead-seconds", help="Silence before narration starts"),
+    slide_pause_seconds: float = typer.Option(DEFAULT_SLIDE_PAUSE_SECONDS, "--slide-pause-seconds", help="Pause inserted between slide items"),
+):
+    """Print the timing plan `record` would use, without recording, opening PowerPoint or touching a screen."""
+    try:
+        print_json(plan_slides(
+            deck=deck,
+            items=items,
+            work_dir=work_dir,
+            click_steps=click_steps,
+            cue_marker=cue_marker,
+            recording_lead_seconds=recording_lead_seconds,
+            slide_pause_seconds=slide_pause_seconds,
+        ))
     except Exception as error:
         raise typer.Exit(handle_error(error))

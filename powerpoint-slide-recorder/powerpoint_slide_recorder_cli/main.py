@@ -10,9 +10,10 @@ app = create_app(
     cache_support=False,
 )
 
-from .commands import record
+from .commands import plan, record
 
 app.command("record")(record)
+app.command("plan")(plan)
 
 
 def main():

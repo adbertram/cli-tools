@@ -33,6 +33,8 @@ powerpoint-slide-recorder <command> [options]
 | `powerpoint-slide-recorder --version` | Show the installed CLI version. |
 | `powerpoint-slide-recorder record --help` | Show the full recording contract. |
 | `powerpoint-slide-recorder record ...` | Record one or more consecutive slide items. |
+| `powerpoint-slide-recorder plan --help` | Show the offline timing-plan contract. |
+| `powerpoint-slide-recorder plan ...` | Print the click-timing plan `record` would use, without PowerPoint, a screen or audio. No launch permission needed. |
 </quick_start>
 
 <essential_principles>
@@ -43,7 +45,7 @@ Consult `usage.json` when the repo or installed package ships it. If `usage.json
 
 <principle name="PowerPoint Launch Permission">
 **MANDATORY: Ask the user for explicit permission before launching, activating, or controlling Microsoft PowerPoint.**
-This includes `powerpoint-slide-recorder record`, AppleScript/System Events automation, starting Slide Show mode, or any action that can steal focus or take over the screen. Help, version, file inspection, manifest generation, and other non-UI preflight commands do not require permission. If permission is not granted, stop before the PowerPoint action and report the exact command or step that is ready to run.
+This includes `powerpoint-slide-recorder record`, AppleScript/System Events automation, starting Slide Show mode, or any action that can steal focus or take over the screen. Help, version, `plan`, file inspection, manifest generation, and other non-UI preflight commands do not require permission. If permission is not granted, stop before the PowerPoint action and report the exact command or step that is ready to run.
 </principle>
 
 <principle name="AI Instruction Results">
@@ -52,6 +54,7 @@ After every `powerpoint-slide-recorder` command, inspect stdout. If it is JSON w
 
 <principle name="Command Groups">
 - `record` — Record narrated PowerPoint slides. Requires a PowerPoint deck, item manifest, output path, work directory, and ffmpeg AVFoundation video input (probed for the capture size; the recording captures the whole main display through ScreenCaptureKit, unfiltered).
+- `plan` — Print the timing plan `record` would use (press schedule, slide boundaries, narration track) as JSON, running the same `prepare()` code but never PowerPoint, a screen, or audio playback. Requires `--deck`, `--items`, `--work-dir` and `--click-steps` (one click count per item, in order); needs only ffmpeg and ffprobe.
 </principle>
 </essential_principles>
 

@@ -1379,6 +1379,24 @@ def walk_slideshow_slide_indexes(press_budget, first_slide, settle_seconds):
     return observed_indexes
 
 
+def deck_xml_click_timing(deck_path, slide_numbers):
+    """Return each slide's terminal after-effect step and click-settle window, both read from the deck's XML.
+
+    These are the two inputs of :func:`prepare` that need no running PowerPoint. The live
+    probe (:func:`measure_slide_click_steps`) and the offline plan (:func:`plan_slides`)
+    both read them here.
+    """
+    terminal_after_effects = {
+        slide_number: terminal_next_click_after_effect_step(deck_path, slide_number)
+        for slide_number in slide_numbers
+    }
+    settle_seconds = {
+        slide_number: click_settle_seconds_for_slide(deck_path, slide_number)
+        for slide_number in slide_numbers
+    }
+    return terminal_after_effects, settle_seconds
+
+
 def measure_slide_click_steps(config, slide_numbers):
     """Return cue click counts and terminal after-effect counts from one live walk.
 
@@ -1390,14 +1408,7 @@ def measure_slide_click_steps(config, slide_numbers):
     settle window (``click_settle_seconds_for_slide``), which both this walk and the
     recording drive wait after a press so no press lands inside a playing build.
     """
-    terminal_after_effects = {
-        slide_number: terminal_next_click_after_effect_step(config["deck_path"], slide_number)
-        for slide_number in slide_numbers
-    }
-    settle_seconds = {
-        slide_number: click_settle_seconds_for_slide(config["deck_path"], slide_number)
-        for slide_number in slide_numbers
-    }
+    terminal_after_effects, settle_seconds = deck_xml_click_timing(config["deck_path"], slide_numbers)
     open_deck(config)
     clear_benign_dialogs_before_slideshow()
     run_osascript(*render_run_slideshow_range(slide_numbers[0], slide_numbers[-1]))
@@ -1453,35 +1464,76 @@ def validate_items(items, cue_marker):
     return prepared_items
 
 
-def build_config(args):
+def build_plan_config(args):
+    """The part of the config :func:`prepare` reads: no display, capture or output settings."""
     deck_path = require_path(args.deck, "PowerPoint deck")
     items = load_items(args.items)
     requested_slide_numbers(items)
     prepared_items = validate_items(items, args.cue_marker)
+    return {
+        "deck_path": str(deck_path),
+        "items": prepared_items,
+        "work_dir": str(Path(args.work_dir).expanduser().resolve()),
+        "recording_lead_seconds": args.recording_lead_seconds,
+        "slide_pause_seconds": args.slide_pause_seconds,
+        "cue_marker": args.cue_marker,
+    }
+
+
+def build_config(args):
+    plan_config = build_plan_config(args)
     ronin_home = None
     if args.ronin_home is not None:
         ronin_home = str(Path(args.ronin_home).expanduser().resolve())
     return {
-        "deck_path": str(deck_path),
-        "items": prepared_items,
+        **plan_config,
         "output_path": str(Path(args.output).expanduser().resolve()),
-        "work_dir": str(Path(args.work_dir).expanduser().resolve()),
         "ffmpeg_video_input": args.video_input,
         "ffmpeg_framerate": args.framerate,
         "output_width": args.output_width,
         "output_height": args.output_height,
         "force_resolution": args.force_resolution,
         "force_aspect_ratio": args.force_aspect_ratio,
-        "recording_lead_seconds": args.recording_lead_seconds,
-        "slide_pause_seconds": args.slide_pause_seconds,
         "slideshow_start_seconds": args.slideshow_start_seconds,
-        "cue_marker": args.cue_marker,
         "ronin_home": ronin_home,
     }
 
 
 def prepared_slide_numbers(prepared_items):
     return [item["identity"]["value"] for item in prepared_items]
+
+
+def parse_click_steps(value, slide_numbers):
+    """Map a comma-separated list of click counts, one per item in items-file order, to its slide numbers."""
+    counts = []
+    for part in value.split(","):
+        part = part.strip()
+        if not part.isascii() or not part.isdigit():
+            raise ValueError(f"--click-steps entries must be whole numbers of at least 0, got {part!r}")
+        counts.append(int(part))
+    if len(counts) != len(slide_numbers):
+        raise ValueError(
+            f"--click-steps has {len(counts)} counts but the items file has {len(slide_numbers)} items; "
+            "give one count per item, in order"
+        )
+    return dict(zip(slide_numbers, counts))
+
+
+def plan_slides(config, click_steps):
+    """Run the planning ``record`` runs before it records, without PowerPoint, a screen or audio playback.
+
+    ``click_steps`` maps each slide number to the click steps the slide consumes, exactly the
+    counts :func:`measure_slide_click_steps` reports for ``record`` (cue clicks plus a media-start
+    click, not the terminal after-effect press). The terminal after-effect step and the settle
+    window come from the deck's XML, the same way ``record`` reads them. Returns what
+    :func:`prepare` returns.
+    """
+    terminal_after_effect_steps, click_settle_seconds = deck_xml_click_timing(
+        config["deck_path"],
+        prepared_slide_numbers(config["items"]),
+    )
+    assert_cue_counts_match_click_steps(config["items"], click_steps)
+    return prepare(config, click_steps, terminal_after_effect_steps, click_settle_seconds)
 
 
 def prepare(config, click_steps, terminal_after_effect_steps, click_settle_seconds):

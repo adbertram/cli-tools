@@ -53,6 +53,45 @@ Optional options:
 - `--ronin-home PATH`; the Ronin checkout holding the demo environment automation module; see Demo Environment Prep. `--coursecraft-repo-root` is a deprecated alias for the same option
 - `--table`
 
+## Plan Command
+
+`plan` runs exactly the planning `record` runs before it starts recording (the same `prepare()` code), then stops. It never opens PowerPoint, never touches a screen or audio device, and needs only `ffmpeg` and `ffprobe` (not `osascript`, `afplay`, or `open`). Use it when another renderer needs the click-timing plan without a real screen recording.
+
+```bash
+powerpoint-slide-recorder plan \
+  --deck /path/to/slides.pptx \
+  --items /path/to/items.json \
+  --work-dir /path/to/work \
+  --click-steps 1,2,1 \
+  --recording-lead-seconds 1.0 \
+  --slide-pause-seconds 0.25
+```
+
+Required options:
+
+- `--deck PATH`: read only for each slide's animation and transition timing (terminal after-effect step, click-settle window), the same way `record` reads them
+- `--items PATH`: the same item manifest `record` takes
+- `--work-dir PATH`: where `narration.wav`, `concat.txt`, `audio/` and `timing-plan.json` are written
+- `--click-steps N,N,...`: the click steps each slide consumes, one count per item in `--items` order (items are consecutive deck slides). `record` measures these from the live slide show; `plan` takes them from the caller. A count is the item's cue markers plus 1 for a `media_start` item, and does not include a terminal after-effect press. A count that disagrees with the item's cue markers fails exactly as it does in `record`.
+
+Optional options (same names and defaults as `record`):
+
+- `--cue-marker MARKER`, default `||`
+- `--recording-lead-seconds 1.0`; must not be negative
+- `--slide-pause-seconds 0.25`; must not be negative
+
+Output: one JSON document on stdout, the plan `record` writes to `timing-plan.json`, plus `timing_plan_path`. A bad input exits 1 with a plain message on stderr and nothing on stdout.
+
+| Key | Meaning |
+| --- | --- |
+| `deck_path` | Resolved deck path |
+| `cue_marker` | Marker used to split transcripts |
+| `narration_audio` | The narration track: lead silence, each item's audio at 44.1 kHz mono, and the silences between slides |
+| `duration_seconds` | Length of `narration_audio` |
+| `actions[]` | The Space presses, in order: `at_seconds` (on the narration clock), `key` (`space`), `item` (label), `slide`, `reason` (`media start`, `action cue`, `terminal after effect`, `next slide`) |
+| `items[]` | One entry per item: `label`, `identity` (`field`, `value`), `cue_count`, `measured_click_steps` (the `--click-steps` value), `terminal_after_effect_steps`, `click_settle_seconds`, `audio`, `duration_seconds` (the audio's length), `audio_start_seconds` (where it starts on the narration clock), `cue_timing_method` (`explicit` or `word-ratio`), and for a media item `media_start` and `media_tail_seconds` |
+| `timing_plan_path` | The `timing-plan.json` written under `--work-dir` (identical to the document without this key) |
+
 ## Demo Environment Prep
 
 Before capture the recorder imports the shared `DemoEnvironmentAutomation` PowerShell module to enable Do Not Disturb and clear notifications. That module has exactly one home: `prep/DemoEnvironmentAutomation/` inside Ronin's checkout, so the recorder resolves the Ronin checkout — never a CourseCraft repo.
