@@ -1,7 +1,7 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-10-19T19:49:38Z",
+  "discovered_at": "2026-11-17T21:36:09Z",
   "total_commands": 111,
   "global_options": [
     {
@@ -1754,7 +1754,7 @@
           ]
         },
         "read": {
-          "help": "Read document content (text only). Extracts 100% of all text from the document including paragraphs, tables, headers, footers, and all other content.",
+          "help": "Read document body text without pending suggestions. Includes paragraphs and tables. Use docs get for the document structure.",
           "usage_instructions": "Read the text content of a Google Doc by DOCUMENT_ID (positional). Returns the document body text.",
           "arguments": [
             {
@@ -1770,6 +1770,13 @@
               "type": "TEXT",
               "required": false,
               "help": "Profile name"
+            },
+            {
+              "name": "--include-suggestions",
+              "type": "bool",
+              "required": false,
+              "help": "Read a preview with all pending suggestions applied without editing the document",
+              "takes_value": false
             }
           ]
         },

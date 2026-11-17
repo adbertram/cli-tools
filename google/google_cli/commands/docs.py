@@ -153,17 +153,26 @@ def _extract_all_text(obj: Any) -> str:
 def docs_read(
     document_id: str = typer.Argument(..., help="Document ID"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+    include_suggestions: bool = typer.Option(
+        False, "--include-suggestions",
+        help="Read a preview with all pending suggestions applied without editing the document",
+    ),
 ):
-    """Read document content (text only).
+    """Read document body text without pending suggestions.
 
-    Extracts 100% of all text from the document including paragraphs,
-    tables, headers, footers, and all other content.
+    Includes paragraphs and tables. Use docs get for the document structure.
     """
     try:
         client = get_client(profile=profile)
         service = client.get_docs_service()
 
-        document = service.documents().get(documentId=document_id).execute()
+        document = service.documents().get(
+            documentId=document_id,
+            suggestionsViewMode=(
+                "PREVIEW_SUGGESTIONS_ACCEPTED" if include_suggestions
+                else "PREVIEW_WITHOUT_SUGGESTIONS"
+            ),
+        ).execute()
 
         # Extract ALL text content recursively from the body
         content = _extract_all_text(document.get('body', {}))

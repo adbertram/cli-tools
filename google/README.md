@@ -131,8 +131,10 @@ google docs list --filter "folder:<folder-id>"
 # Get a document
 google docs get <document-id>
 
-# Read document content (text only)
+# Read document body text without pending suggestions
 google docs read <document-id>
+# Preview pending suggestions as applied
+google docs read <document-id> --include-suggestions
 
 # Create a new document
 google docs create --title "My Document"
