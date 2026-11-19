@@ -487,3 +487,32 @@ def test_noninteractive_login_raises_when_select_account_control_missing(monkeyp
 
     with pytest.raises(Exception, match="select-account"):
         browser._complete_noninteractive_login(page)
+
+
+def test_authenticate_routes_managed_login_without_opening_interactive_browser(monkeypatch):
+    from bricklink_cli.browser import BricklinkBrowser
+
+    browser = BricklinkBrowser(_PersistenceConfig())
+    calls = []
+    monkeypatch.setattr(browser, "_authenticate_noninteractive", lambda force: calls.append(force))
+    monkeypatch.setattr(
+        browser, "_get_service",
+        lambda: pytest.fail("interactive browser must not be opened"),
+    )
+
+    browser.authenticate(force=True)
+
+    assert calls == [True]
+
+
+def test_noninteractive_login_accepts_existing_authenticated_redirect(monkeypatch):
+    from bricklink_cli.browser import BricklinkBrowser
+
+    browser = BricklinkBrowser.__new__(BricklinkBrowser)
+    page = SimpleNamespace(url="https://www.bricklink.com/v2/my.page")
+    monkeypatch.setattr(
+        "bricklink_cli.browser.get_lastpass_credential",
+        lambda _field: pytest.fail("authenticated page must not request credentials"),
+    )
+
+    browser._complete_noninteractive_login(page)

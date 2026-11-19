@@ -98,6 +98,8 @@ class BricklinkBrowser(PlaywrightBrowserAutomation):
 
     def _complete_noninteractive_login(self, page) -> None:
         """Authenticate with managed LastPass credentials and Gmail codes."""
+        if self._check_auth(page):
+            return
         requested_after = int(time.time()) - 10
         # LEGO identity can redirect straight to select-account
         # (prompt=select_account) when an SSO session already exists, in which
@@ -233,6 +235,10 @@ class BricklinkBrowser(PlaywrightBrowserAutomation):
             "Managed BrickLink login did not reach an authenticated state within "
             f"{self.AUTH_LOGIN_AUTOMATION_TIMEOUT} seconds."
         )
+
+    AUTH_LOGIN_HANDLER = staticmethod(
+        lambda browser, page: browser._complete_noninteractive_login(page)
+    )
 
     def _on_authenticated(self, page) -> None:
         """Finalize the BrickLink session on a protected page before closing."""
