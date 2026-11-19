@@ -42,7 +42,8 @@ def test_full_word_mode_preserves_segments_and_original_text(tmp_path):
     lambda d:d['transcription'][0]['tokens'].append(token(' extra',500,600)),
     lambda d:d['transcription'][0]['tokens'][1].pop('offsets'),
     lambda d:d['transcription'][0]['tokens'][1].update(offsets={'from':True,'to':100}),
-    lambda d:d['transcription'][0]['tokens'][1].update(offsets={'from':100,'to':0}),
+    lambda d:d['transcription'][0]['tokens'][1].update(offsets={'from':-1,'to':100}),
+    lambda d:d['transcription'][0]['tokens'][1].update(offsets={'from':0,'to':-1}),
 ])
 def test_missing_or_mismatched_native_word_data_fails_explicitly(mutation):
     value=data();mutation(value)
@@ -54,3 +55,26 @@ def test_word_continues_across_native_segment_boundary_without_added_space():
         {'text':' Cas','tokens':[token(' Cas',10,20)]},
         {'text':'ita. Next','tokens':[token('ita.',20,30),token(' Next',30,30)]}]}
     assert parse_whisper_cpp_words(value)==[{'text':'Casita.','start':0.01,'end':0.03},{'text':'Next','start':0.03,'end':0.03}]
+
+
+def test_reversed_token_run_after_prior_segment_starts_at_previous_token_end():
+    value={'transcription':[
+        {'text':' Done.','tokens':[token('[_BEG_]',0,0),token(' Done',6000,6770),token('.',6770,7000),token('[_TT_350]',7000,7000)]},
+        {'text':' And both const edits','tokens':[token('[_BEG_]',10000,10000),token(' And',10000,7560),token(' both',10000,8310),
+                                                 token(' const',10000,9240),token(' edits',10000,10160)]}]}
+    assert parse_whisper_cpp_words(value)==[
+        {'text':'Done.','start':6.0,'end':7.0},{'text':'And','start':7.0,'end':7.56},{'text':'both','start':7.56,'end':8.31},
+        {'text':'const','start':8.31,'end':9.24},{'text':'edits','start':10.0,'end':10.16}]
+
+
+def test_reversed_continuation_token_joins_word():
+    value={'transcription':[
+        {'text':'. That',"tokens":[token('.',16000,16000),token(' That',17000,16360)]},
+        {'text':"'s a",'tokens':[token("'s",17000,16540),token(' a',17000,16630)]}]}
+    assert parse_whisper_cpp_words(value)==[
+        {'text':'.','start':16.0,'end':16.0},{'text':"That's",'start':16.0,'end':16.54},{'text':'a','start':16.54,'end':16.63}]
+
+
+def test_reversed_first_token_starts_at_its_own_end():
+    value={'transcription':[{'text':' And both','tokens':[token(' And',10000,7560),token(' both',10000,8310)]}]}
+    assert parse_whisper_cpp_words(value)==[{'text':'And','start':7.56,'end':7.56},{'text':'both','start':7.56,'end':8.31}]

@@ -61,9 +61,14 @@ def parse_whisper_cpp_words(data: dict) -> list[dict]:
     Segment text must match speech tokens exactly. Special-token markers are
     omitted only when that equality proves they are not transcript text.
     Every word bound comes from a real constituent token; no interpolation.
+    whisper.cpp stamps the first speech tokens after a segment boundary with
+    the rounded segment start as ``from`` while ``to`` is the real end, so a
+    reversed token takes its start from the previous speech token's end
+    (clamped to its own end), or its own end when there is no previous token.
     """
     words=[]
     current=None
+    prev_end=None
     for entry in data['transcription']:
         tokens=entry.get('tokens')
         if not isinstance(tokens,list):
@@ -83,8 +88,11 @@ def parse_whisper_cpp_words(data: dict) -> list[dict]:
             if not isinstance(offsets,dict):
                 raise ValueError('whisper.cpp token offsets are missing')
             start,end=offsets.get('from'),offsets.get('to')
+            if type(start) is int and type(end) is int and 0<=end<start:
+                start=end if prev_end is None else min(prev_end,end)
             if type(start) is not int or type(end) is not int or not 0<=start<=end:
                 raise ValueError('whisper.cpp token offsets are malformed')
+            prev_end=end
             for part in re.findall(r'\s+|\S+',token['text']):
                 if part.isspace():
                     if current is not None:
