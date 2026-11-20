@@ -11,6 +11,10 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from .config import get_config
 
+# Drive API flags that make files in Shared Drives visible to reads.
+DRIVE_ALL_DRIVES = {"supportsAllDrives": True}
+DRIVE_LIST_ALL_DRIVES = {**DRIVE_ALL_DRIVES, "includeItemsFromAllDrives": True, "corpora": "allDrives"}
+
 # Define scopes for different Google services
 SCOPES = [
     "https://www.googleapis.com/auth/documents",

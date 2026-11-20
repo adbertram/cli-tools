@@ -10,7 +10,7 @@ import re
 import typer
 from typing import Optional, List
 from googleapiclient.errors import HttpError
-from ..client import get_client
+from ..client import get_client, DRIVE_ALL_DRIVES, DRIVE_LIST_ALL_DRIVES
 from ..properties import parse_properties
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
@@ -69,7 +69,8 @@ def drive_list(
                 pageSize=min(1000, limit - len(files)),
                 pageToken=page_token,
                 q=query,
-                fields=fields_str
+                fields=fields_str,
+                **DRIVE_LIST_ALL_DRIVES,
             ).execute()
             files.extend(results.get('files', []))
             page_token = results.get('nextPageToken')
@@ -107,7 +108,8 @@ def drive_get(
 
         file = service.files().get(
             fileId=file_id,
-            fields="id, name, mimeType, createdTime, modifiedTime, size, parents, webViewLink, shortcutDetails"
+            fields="id, name, mimeType, createdTime, modifiedTime, size, parents, webViewLink, shortcutDetails",
+            **DRIVE_ALL_DRIVES,
         ).execute()
 
         if table:
@@ -144,7 +146,8 @@ def drive_search(
         results = service.files().list(
             pageSize=limit,
             q=f"name contains '{query}'",
-            fields=fields_str
+            fields=fields_str,
+            **DRIVE_LIST_ALL_DRIVES,
         ).execute()
 
         files = results.get('files', [])
@@ -183,11 +186,11 @@ def drive_download(
         service = client.get_drive_service()
 
         # Get file metadata
-        file = service.files().get(fileId=file_id).execute()
+        file = service.files().get(fileId=file_id, **DRIVE_ALL_DRIVES).execute()
         file_name = file.get('name')
 
         # Download file
-        request = service.files().get_media(fileId=file_id)
+        request = service.files().get_media(fileId=file_id, **DRIVE_ALL_DRIVES)
         fh = io.BytesIO()
         downloader = MediaIoBaseDownload(fh, request)
 

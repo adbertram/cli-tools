@@ -17,7 +17,7 @@ import json
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 from googleapiclient.errors import HttpError
-from ..client import get_client
+from ..client import get_client, DRIVE_ALL_DRIVES, DRIVE_LIST_ALL_DRIVES
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference, apply_properties_filter
 from ..filter_translator import translate_docs_filters
@@ -64,7 +64,8 @@ def docs_list(
             pageSize=limit,
             q=query,
             fields="files(id, name, createdTime, modifiedTime, webViewLink)",
-            orderBy="modifiedTime desc"
+            orderBy="modifiedTime desc",
+            **DRIVE_LIST_ALL_DRIVES,
         ).execute()
 
         documents = results.get('files', [])
@@ -394,7 +395,7 @@ def docs_export(
 
         if format in binary_formats and not output:
             # Generate default filename
-            file_info = drive_service.files().get(fileId=document_id, fields='name').execute()
+            file_info = drive_service.files().get(fileId=document_id, fields='name', **DRIVE_ALL_DRIVES).execute()
             base_name = file_info.get('name', 'document')
             # Clean filename
             base_name = re.sub(r'[^\w\s-]', '', base_name).strip()

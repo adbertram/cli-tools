@@ -12,7 +12,7 @@ import re
 import typer
 from typing import Optional
 from googleapiclient.errors import HttpError
-from ..client import get_client
+from ..client import get_client, DRIVE_LIST_ALL_DRIVES
 from ..properties import parse_properties
 from cli_tools_shared.output import command, print_json, print_table, handle_error, print_success, print_error
 from cli_tools_shared.filters import apply_filters as _client_side_filter_reference
@@ -52,8 +52,7 @@ def sheets_list(
             q=query,
             fields="files(id, name, createdTime, modifiedTime, webViewLink)",
             orderBy="modifiedTime desc",
-            includeItemsFromAllDrives=True,
-            supportsAllDrives=True
+            **DRIVE_LIST_ALL_DRIVES,
         ).execute()
 
         spreadsheets = results.get('files', [])
