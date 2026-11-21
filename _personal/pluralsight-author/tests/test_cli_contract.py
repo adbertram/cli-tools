@@ -2,6 +2,7 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
 from cli_tools_shared.data_cache import reset_cache_hit
 from typer.testing import CliRunner
 
@@ -574,7 +575,8 @@ def test_icons_reject_opportunities_profile(monkeypatch):
     assert "requires auth type 'author_kit'" in result.output
 
 
-def test_modules_submit_screenshots_into_the_manifest_folder(monkeypatch, tmp_path):
+@pytest.mark.parametrize("plan", [False, True])
+def test_modules_submit_screenshots_into_the_manifest_folder(monkeypatch, tmp_path, plan):
     import pluralsight_author_cli.module_submission as module_submission
 
     install_profiles(monkeypatch)
@@ -595,6 +597,6 @@ def test_modules_submit_screenshots_into_the_manifest_folder(monkeypatch, tmp_pa
     manifest = tmp_path / "manifests" / "submission.json"
     manifest.parent.mkdir()
     manifest.write_text("{}")
-    result = CliRunner().invoke(app, ["modules", "submit", "--manifest", str(manifest), "--profile", AUTH_METHOD_OPPORTUNITIES])
+    result = CliRunner().invoke(app, ["modules", "submit", "--manifest", str(manifest), "--profile", AUTH_METHOD_OPPORTUNITIES, *(["--plan"] if plan else [])])
     assert result.exit_code == 0, result.output
-    assert seen == {"plan": False, "screenshot_dir": manifest.resolve().parent}
+    assert seen == {"plan": plan, "screenshot_dir": manifest.resolve().parent}

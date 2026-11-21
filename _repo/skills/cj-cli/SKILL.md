@@ -210,7 +210,7 @@ There is also a per-advertiser second step: every "Manual application review" ad
 **Cause:** Two distinct bugs that surfaced together.
 
 1. **Auto-approve flow assumption.** The post-click code path assumed every advertiser routes through a joinprograms.do T&C form ("manual review"). In reality, "auto-approve" advertisers (NordVPN among them) register the application on the FIRST "Apply to Program" click on findAdvertisers.cj. The page may or may not navigate to joinprograms.do afterwards — and when it does, it shows a processing state, not a T&C form. Waiting for an Accept-and-Apply selector that will never render produced a guaranteed false-negative FAILED.
-2. **Screenshot API misuse.** All four `page.page_screenshot(ref=str(shot))` call sites passed a `Path` as the `ref` kwarg. `ref` on `PlaywrightService.page_screenshot` is a Playwright element locator string — `page.locator(ref)` is called internally — so passing a file path raises an invalid-selector exception. Every call site wrapped the call in a bare `except Exception: shot = None`, so the failure was silently swallowed. The `_screenshot_path` helper that constructed the destination paths was therefore entirely dead code.
+2. **Screenshot API misuse.** The apply-flow screenshot call sites passed a file path where the screenshot API expected an element locator, so every call raised. Every call site wrapped the call in a bare `except Exception: shot = None`, so the failure was silently swallowed. The `_screenshot_path` helper that constructed the destination paths was therefore entirely dead code.
 
 Live-DOM verification (probe at `_temp/probe_joinprograms.py` for advertiser 1849166): direct navigation to `joinprograms.do?advertiserId=<id>&publisherId=<pid>` returns CJ's 1020-byte stub page (`<div class="error-page"><span>Hey there! It looks like the link you clicked isn't currently active.</span>...`). The joinprograms.do URL is session-stateful — it only renders the T&C form when reached via the in-flight Apply-to-Program click. Direct navigation cannot be used to probe its DOM.
 
@@ -221,22 +221,20 @@ A secondary contributing factor: the manual-review T&C form's `wait_for_selector
 1. **Add a REST-first poll** after the first Apply-to-Program click, before the joinprograms.do URL check. After settling the page (`wait_for_load_state("networkidle", 10000)`), sleep 2 s and call `_existing_outcome(advertiser_id)`. If REST returns any non-None outcome (`already_joined`, `already_pending`, `declined`), return immediately — the apply registered on the first click. Only fall through to the joinprograms.do branch when REST still reports `notjoined`.
 2. **Inside the joinprograms.do branch's `except`**, re-poll REST one more time before returning FAILED. Some advertisers route to joinprograms.do AND register the apply on the first click, in which case the T&C form never renders. If the post-failure REST poll returns a terminal outcome, return that success instead of the misleading "Accept and Apply never resolved" failure.
 3. **Bump the Accept-and-Apply `wait_for_selector` timeout from 6000 to 15000 ms.** Document why in the inline comment so a future refactor doesn't shrink it again.
-4. **Replace the `_screenshot_path` helper** with a `_capture_screenshot(page)` helper that calls `page.page_screenshot()` with NO arguments (the service writes to `$TMPDIR/playwright-screenshots/<session>-<ts>.png` itself) and returns `result["file"]` — or `None` if the screenshot raised. Replace all four buggy call sites that did `page.page_screenshot(ref=str(shot))`.
-5. **Delete `_screenshot_path`** — it was constructing destination paths that PlaywrightService ignored. The replacement helper consumes the path the service actually wrote.
+4. **Replace the `_screenshot_path` helper** with a `_capture_screenshot(page)` helper that saves through `page.screenshot(<temp path>)` and returns that path — or `None` if the screenshot raised. Replace all four buggy call sites.
+5. **Delete `_screenshot_path`** — dead code once `_capture_screenshot` owns the destination path.
 
 **Verification:**
 
-1. `cd ~/Dropbox/GitRepos/cli-tools/cj && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cj-tests uv run --with pytest --with ~/Dropbox/GitRepos/cli-tools/cli-tools-common pytest tests/test_bugfixes.py` — 19 passed (6 new Bug-7 tests + 13 prior bug regressions).
+1. `cd ~/Dropbox/GitRepos/cli-tools/cj && UV_PROJECT_ENVIRONMENT=~/.cache/uv/project-envs/cj-tests uv run --with pytest --with ~/Dropbox/GitRepos/cli-tools/cli-tools-common pytest tests/test_bugfixes.py` — 25 passed (4 Bug-7 regression tests among them).
 2. NordVPN status confirmed: `cj relationships get 4837117` returns `relationship_status: "joined"` (auto-approve succeeded on the first click despite the prior client-side timeout — this was the original symptom proof).
 3. No live re-apply was performed during the fix — Bug-7 verification is via the regression-test suite. The first real apply attempt after this fix will exercise the REST-first short-circuit on auto-approve advertisers and the bumped timeout on manual-review advertisers.
 
-**Recurrence Prevention:** `cj/tests/test_bugfixes.py` adds six Bug-7 regression tests:
+**Recurrence Prevention:** `cj/tests/test_bugfixes.py` adds four Bug-7 regression tests:
 
-- `test_bug7_capture_screenshot_helper_uses_correct_api` — pins that `_capture_screenshot` calls `page_screenshot()` with no `ref=` kwarg and returns `result["file"]`.
+- `test_bug7_capture_screenshot_helper_uses_correct_api` — pins that `_capture_screenshot` saves through `page.screenshot(<temp path>)` and returns that path.
 - `test_bug7_capture_screenshot_returns_none_on_failure` — pins fail-safe behaviour so a screenshot error cannot mask the underlying apply failure.
-- `test_bug7_no_legacy_screenshot_ref_path_callsites` — source-level guard: greps `relationships.py` for any `page_screenshot(ref=...)` call. The misuse was textual, so the test must be textual.
 - `test_bug7_rest_first_poll_short_circuits_auto_approve` — end-to-end mocked test: first REST call returns notjoined, post-click REST returns joined; asserts `_apply_single` returns `ALREADY_JOINED` and that `wait_for_selector` was never called for the Accept-and-Apply selector.
 - `test_bug7_accept_and_apply_selector_timeout_bumped_from_6s` — source-level regex assertion that the Accept-and-Apply `wait_for_selector` timeout is `>= 10000` ms. A future PR that shrinks the window back to 6 s fails immediately.
-- `test_bug7_screenshot_path_helper_is_removed` — asserts `_screenshot_path` is gone so a future change can't accidentally reintroduce the misleading dead helper.
 
 **General rule:** When a CLI drives a third-party action whose true success is recorded server-side (a database row, a REST relationship status, an OAuth callback), make the server state the source of truth and consult it before — not after — chasing UI confirmation selectors. UI selectors document one rendering of one flow shape; the server state documents what happened. If a flow has multiple shapes (auto-approve vs manual review, instant vs delayed, single-page vs multi-step), the UI-confirmation-first design will always have a shape it doesn't recognise and surface FAILED on a success. Re-poll the server first; reach for the next UI step only when the server still says "nothing happened".

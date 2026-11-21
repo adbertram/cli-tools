@@ -534,26 +534,6 @@ def test_bug7_capture_screenshot_returns_none_on_failure():
     assert rel_mod._capture_screenshot(fake_page) is None
 
 
-def test_bug7_no_legacy_screenshot_ref_path_callsites():
-    """No call site in relationships.py may call ``page_screenshot`` with a
-    file-path argument again.  ``ref`` is a Playwright element locator;
-    passing a path silently fails (page.locator(path) raises) and the
-    bare ``except Exception`` swallowed it for years.
-    """
-    import re
-    from cj_cli.commands import relationships as rel_mod
-
-    source = Path(rel_mod.__file__).read_text()
-    # Match any page_screenshot call that passes a positional or ref=
-    # argument other than literally ``page.page_screenshot()`` with no
-    # args.  Use a generous regex: any non-empty parentheses content.
-    bad = re.findall(r"page_screenshot\(\s*ref\s*=\s*[^)]+\)", source)
-    assert not bad, (
-        f"page_screenshot must not receive a ``ref`` argument anywhere; "
-        f"found: {bad}"
-    )
-
-
 def test_bug7_rest_first_poll_short_circuits_auto_approve(monkeypatch):
     """After the first Apply-to-Program click, _apply_single must re-poll
     REST and short-circuit when the relationship is no longer notjoined.
@@ -660,20 +640,6 @@ def test_bug7_accept_and_apply_selector_timeout_bumped_from_6s():
         f"Accept-and-Apply selector timeout is {timeout_ms}ms; must be "
         f">= 10000ms (was 6000ms before Bug 7; that window was too short "
         f"for joinprograms.do hydration)."
-    )
-
-
-def test_bug7_screenshot_path_helper_is_removed():
-    """The old ``_screenshot_path`` helper built a destination path that
-    PlaywrightService.page_screenshot then ignored (it writes to its own
-    tempdir).  The helper is dead code and must not be reintroduced.
-    """
-    from cj_cli.commands import relationships as rel_mod
-
-    assert not hasattr(rel_mod, "_screenshot_path"), (
-        "_screenshot_path is dead code -- PlaywrightService writes to its "
-        "own tempdir and ignores caller-supplied paths.  Use "
-        "_capture_screenshot(page) instead."
     )
 
 

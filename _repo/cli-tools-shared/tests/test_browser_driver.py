@@ -6,7 +6,7 @@ import time
 import pytest
 
 from cli_tools_shared.browser import BrowserHarnessError
-from cli_tools_shared.browser.driver import BrowserHarnessService
+from cli_tools_shared.browser.driver import _HIDE_OVERLAYS_JS, BrowserHarnessService
 from cli_tools_shared.browser._elements import _ServiceElement, _ServiceLocator, _scoped_css_js
 from cli_tools_shared.browser._js_fragments import _check_js, _fill_js
 from cli_tools_shared.browser.processes import (
@@ -2406,6 +2406,7 @@ def _screenshot_service(monkeypatch, calls, box=None):
     monkeypatch.setattr(service, "_require_open", lambda: None)
 
     def evaluate(js, arg=None):
+        calls.append(("evaluate", js, arg))
         return box if "getBoundingClientRect" in js else True
 
     monkeypatch.setattr(service, "evaluate", evaluate)
@@ -2439,6 +2440,7 @@ def test_screenshot_with_selector_clips_to_that_elements_whole_box(tmp_path, mon
 
     service.screenshot(str(tmp_path / "el.png"), selector="ps-course-module")
 
+    assert calls[0] == ("evaluate", _HIDE_OVERLAYS_JS, "ps-course-module")
     assert calls[-1][1]["clip"] == {"x": 10, "y": 900, "width": 700, "height": 2600, "scale": 1}
 
 
