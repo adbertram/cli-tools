@@ -601,6 +601,9 @@ def test_handle_browser_login_keeps_headed_flow_without_declarative_login(
 def test_handle_browser_login_falls_back_to_headed_when_human_needed(
     tmp_path, monkeypatch
 ):
+    monkeypatch.setattr(
+        "cli_tools_shared.auth_commands._interactive_stdio_available", lambda: True
+    )
     browser = _DeclarativeBrowser(_ConfigDouble(tmp_path))
     config = _login_config(browser, has_session=False)
     monkeypatch.setattr(
@@ -674,3 +677,39 @@ def test_handle_browser_login_non_human_refresh_failure_falls_back_on_tty(
     _handle_browser_login(config, "refresh-browser", force=False)
 
     assert login_calls == [False], "an interactive host can still complete login by hand"
+
+
+def test_handle_browser_login_noninteractive_human_gate_never_opens_browser(
+    tmp_path, monkeypatch, capsys
+):
+    browser = _DeclarativeBrowser(_ConfigDouble(tmp_path))
+    config = _login_config(browser, has_session=False)
+    monkeypatch.setattr(
+        browser,
+        "ensure_fresh_session",
+        lambda: AuthResult(
+            authenticated=False,
+            live_check=True,
+            needs_human=True,
+            reason="Cloudflare challenge detected",
+        ),
+    )
+    login_calls = _stub_successful_browser_login(monkeypatch, browser)
+    close = MagicMock()
+    monkeypatch.setattr(browser, "close", close)
+    monkeypatch.setattr(
+        "cli_tools_shared.auth_commands._interactive_stdio_available", lambda: False
+    )
+
+    with pytest.raises(typer.Exit) as exc_info:
+        _handle_browser_login(config, "refresh-browser", force=False)
+
+    assert exc_info.value.exit_code == 1
+    assert login_calls == []
+    close.assert_called_once_with()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "requires human verification" in captured.err
+    assert "Cloudflare challenge detected" in captured.err
+    assert "interactive terminal" in captured.err
+    assert "No interactive browser was opened" in captured.err

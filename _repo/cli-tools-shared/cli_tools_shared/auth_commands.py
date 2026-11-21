@@ -683,7 +683,7 @@ def _handle_browser_login(config, tool_name: str, force: bool):
     non-interactive automation hosts (the 2026-09-04 microworkers incident:
     a stale saved session could not be healed without a TTY). The headed
     interactive flow is preserved as the fallback when a human-verification
-    challenge blocks the headless path, and for CLIs that do not configure
+    challenge blocks the headless path on an interactive terminal, and for CLIs that do not configure
     the declarative login at all.
     """
     logger.debug("_handle_browser_login: tool=%s force=%s", tool_name, force)
@@ -728,6 +728,14 @@ def _handle_browser_login(config, tool_name: str, force: bool):
                 print_success("Browser session authenticated")
                 return
             if outcome.needs_human:
+                if not _interactive_stdio_available():
+                    print_error(
+                        "Browser auth requires human verification: "
+                        f"{outcome.reason or 'unknown challenge'}. "
+                        "Run auth login from an interactive terminal to complete it. "
+                        "No interactive browser was opened."
+                    )
+                    raise typer.Exit(1)
                 print_warning(
                     "Automatic browser login needs a human to complete a challenge "
                     f"({outcome.reason or 'unknown challenge'}); opening the "
