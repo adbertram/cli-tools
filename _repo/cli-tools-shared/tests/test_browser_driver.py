@@ -2404,10 +2404,8 @@ def _screenshot_service(monkeypatch, calls, box=None):
 
     service = BrowserHarnessService("sample-browser-session")
     monkeypatch.setattr(service, "_require_open", lambda: None)
-    scripts = service.scripts = []
 
     def evaluate(js, arg=None):
-        scripts.append(js)
         return box if "getBoundingClientRect" in js else True
 
     monkeypatch.setattr(service, "evaluate", evaluate)
@@ -2451,31 +2449,3 @@ def test_screenshot_selector_without_a_match_raises_and_writes_nothing(tmp_path,
         service.screenshot(str(tmp_path / "none.png"), selector="#missing")
 
     assert not (tmp_path / "none.png").exists()
-
-
-def test_screenshot_hides_fixed_and_sticky_overlays_only_for_the_capture(tmp_path, monkeypatch):
-    calls = []
-    service = _screenshot_service(monkeypatch, calls, box={"x": 0, "y": 0, "width": 700, "height": 900})
-    service.evaluate_order = []
-    original = service.evaluate
-    service.evaluate = lambda js, arg=None: (service.evaluate_order.append(
-        "hide" if js == driver._HIDE_OVERLAYS_JS else "restore" if js == driver._RESTORE_OVERLAYS_JS else "other"),
-        original(js, arg))[1]
-    bh = service._bh.h
-    capture = bh.cdp
-    bh.cdp = lambda method, **params: (service.evaluate_order.append("capture") if method == "Page.captureScreenshot" else None,
-                                       capture(method, **params))[1]
-
-    service.screenshot(str(tmp_path / "o.png"), selector="#module")
-
-    assert service.evaluate_order == ["hide", "other", "capture", "restore"]
-    assert "'fixed'" in driver._HIDE_OVERLAYS_JS and "'sticky'" in driver._HIDE_OVERLAYS_JS
-
-
-def test_screenshot_restores_overlays_when_the_capture_fails(tmp_path, monkeypatch):
-    service = _screenshot_service(monkeypatch, [], box=None)
-
-    with pytest.raises(BrowserHarnessError):
-        service.screenshot(str(tmp_path / "x.png"), selector="#missing")
-
-    assert service.scripts[-1] == driver._RESTORE_OVERLAYS_JS

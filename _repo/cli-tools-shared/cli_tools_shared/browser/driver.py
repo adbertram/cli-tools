@@ -199,22 +199,12 @@ class _BrowserHarness:
 
 _HIDE_OVERLAYS_JS = """(selector) => {
   const target = selector ? document.querySelector(selector) : null;
-  const hidden = [];
   for (const e of document.body.querySelectorAll('*')) {
     const position = getComputedStyle(e).position;
     if ((position === 'fixed' || position === 'sticky') && !(target && (e.contains(target) || target.contains(e)))) {
-      hidden.push([e, e.style.visibility]);
       e.style.visibility = 'hidden';
     }
   }
-  window.__cliToolsHiddenOverlays = hidden;
-  return hidden.length;
-}"""
-
-_RESTORE_OVERLAYS_JS = """() => {
-  for (const [e, visibility] of window.__cliToolsHiddenOverlays || []) e.style.visibility = visibility;
-  window.__cliToolsHiddenOverlays = [];
-  return true;
 }"""
 
 
@@ -1541,36 +1531,32 @@ class BrowserHarnessService:
     def screenshot(self, path: str, *, selector: str = None) -> str:
         """Save a PNG of the whole page, or of the whole box of ``selector``'s first match.
 
-        Captures beyond the viewport (``Page.captureScreenshot`` with a document-space clip),
-        so nothing in the page or element is cut off however tall it is. Fixed and sticky
-        elements outside the target (footer bars, help bubbles) are hidden for the capture and
-        restored after it, because a beyond-the-viewport capture paints them over the content.
-        Headless-safe: it never raises or focuses a window. Returns ``path``.
+        Captures beyond the viewport, so nothing is cut off however tall it is. Fixed and
+        sticky elements outside the target (footer bars, help bubbles) are hidden first and
+        stay hidden: a beyond-the-viewport capture paints them over the content. Headless-safe.
+        Returns ``path``.
         """
         self._require_open()
         self.evaluate(_HIDE_OVERLAYS_JS, selector or "")
-        try:
-            if selector:
-                box = self.evaluate(
-                    """(selector) => {
-                      const e = document.querySelector(selector);
-                      if (!e) return null;
-                      const r = e.getBoundingClientRect();
-                      return {x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height};
-                    }""",
-                    selector,
-                )
-                if not box or not box["width"] or not box["height"]:
-                    raise BrowserHarnessError(f"screenshot: no visible element matches {selector!r}")
-            else:
-                size = self._bh.h.cdp("Page.getLayoutMetrics")["cssContentSize"]
-                box = {"x": 0, "y": 0, "width": size["width"], "height": size["height"]}
-            shot = self._bh.h.cdp(
-                "Page.captureScreenshot", format="png", captureBeyondViewport=True,
-                clip={**box, "scale": 1},
+        if selector:
+            box = self.evaluate(
+                """(selector) => {
+                  const e = document.querySelector(selector);
+                  if (!e) return null;
+                  const r = e.getBoundingClientRect();
+                  return {x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height};
+                }""",
+                selector,
             )
-        finally:
-            self.evaluate(_RESTORE_OVERLAYS_JS)
+            if not box or not box["width"] or not box["height"]:
+                raise BrowserHarnessError(f"screenshot: no visible element matches {selector!r}")
+        else:
+            size = self._bh.h.cdp("Page.getLayoutMetrics")["cssContentSize"]
+            box = {"x": 0, "y": 0, "width": size["width"], "height": size["height"]}
+        shot = self._bh.h.cdp(
+            "Page.captureScreenshot", format="png", captureBeyondViewport=True,
+            clip={**box, "scale": 1},
+        )
         Path(path).write_bytes(base64.b64decode(shot["data"]))
         return str(path)
 

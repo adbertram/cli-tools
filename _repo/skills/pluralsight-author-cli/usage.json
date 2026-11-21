@@ -1,7 +1,7 @@
 {
   "tool": "pluralsight-author",
   "description": "CLI interface for Pluralsight Author opportunities",
-  "discovered_at": "2026-11-21T16:02:20Z",
+  "discovered_at": "2026-11-21T16:42:00Z",
   "total_commands": 27,
   "global_options": [
     {
@@ -572,7 +572,7 @@
           ]
         },
         "submit": {
-          "help": "Upload a module deck and edited clips, verify contents, submit for review, and screenshot the portal's clip list. A real submission always saves a full-height screenshot of the portal page listing the module's clips and returns its absolute path as portal_screenshot. If only the screenshot fails, the command exits non-zero and says the submission succeeded.",
+          "help": "Upload a module deck and edited clips, verify contents, submit for review; saves a portal clip-list screenshot and returns portal_screenshot.",
           "arguments": [],
           "options": [
             {
@@ -587,12 +587,6 @@
               "required": false,
               "help": "Write nothing; report per clip whether it is unchanged, gets a new version, or would be a new clip",
               "takes_value": false
-            },
-            {
-              "name": "--screenshot-dir",
-              "type": "PATH",
-              "required": false,
-              "help": "Folder for the portal validation screenshot module-<order>-portal-clips.png (default: the manifest's folder)"
             },
             {
               "name": "--profile",
