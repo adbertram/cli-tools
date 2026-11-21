@@ -28,6 +28,14 @@ pluralsight-author auth profiles select author-kit
 ```
 
 Opportunity commands validate the saved session before opening the browser page used for pagination and DOM extraction.
+Slide-deck and opportunity commands attempt headless login when their saved sessions have expired, using separately scoped CLI-tools secrets. Set the dashboard credentials in the CLI-tools secret manager using these hidden prompts:
+
+```bash
+python3 -c 'import getpass,sys; sys.stdout.write(getpass.getpass("Pluralsight dashboard email: "))' | /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool pluralsight-author --type dashboard-username
+python3 -c 'import getpass,sys; sys.stdout.write(getpass.getpass("Pluralsight dashboard password: "))' | /Users/adam/Dropbox/GitRepos/cli-tools/_repo/_secret-manager/secrets.sh set --tool pluralsight-author --type dashboard-password
+```
+
+The Author Kit uses separate credentials. If Pluralsight serves a cloud verification page, the live session probe is unavailable until that verification is completed in the CLI-owned browser. Run `pluralsight-author auth login --profile default` and complete the security check yourself. The challenge does not establish that the session is signed out or that the separate dashboard bearer has expired. MFA and SSO require manual completion.
 Icon commands read an Author Kit PNG archive from the selected profile data.
 Run `icons import` to set that archive.
 Refresh it from the current Inky Blue package linked on the Author Kit Downloads page.

@@ -341,7 +341,7 @@ class FakeBrowser:
     def __init__(self, pages_by_url):
         self.pages_by_url = pages_by_url
 
-    def is_authenticated(self):
+    def ensure_fresh_session(self):
         return AuthResult(authenticated=True, live_check=True)
 
     def get_page(self, url):
@@ -766,16 +766,16 @@ def test_client_rejects_non_powerpoint_download_before_writing(tmp_path):
     assert not output.exists()
 
 
-def test_require_authenticated_session_uses_browser_saved_state_check():
+def test_require_authenticated_session_reports_refresh_failure():
     client = PluralsightAuthorClient()
 
     class FakeBrowser:
-        def is_authenticated(self):
-            return AuthResult(authenticated=False, live_check=True)
+        def ensure_fresh_session(self):
+            return AuthResult(authenticated=False, live_check=True, reason="login required")
 
     client._browser_instance = FakeBrowser()
 
-    with pytest.raises(ClientError, match="Saved browser session is not authenticated."):
+    with pytest.raises(ClientError, match="Saved browser session is not authenticated: login required"):
         client._require_authenticated_session()
 
 

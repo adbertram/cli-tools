@@ -8,6 +8,7 @@ from pathlib import Path
 
 import requests
 from cli_tools_shared.exceptions import ClientError
+from .browser import require_authenticated_session
 from .config import get_config
 
 API = 'https://authortools-api.pluralsight.com/api/v1/'
@@ -62,8 +63,7 @@ class ModuleSubmission:
         self.session.close()
 
     def connect(self, course_id):
-        if not self.browser.is_authenticated().authenticated:
-            raise ClientError('Pluralsight Author browser session is not authenticated.')
+        require_authenticated_session(self.browser)
         self.course_id = int(course_id)
         p = self.browser.get_page(f'https://app.pluralsight.com/author-tools/details/{self.course_id}/modules')
         p.wait_for_selector(f'a[href="/author-tools/details/{self.course_id}"]',
@@ -87,6 +87,7 @@ class ModuleSubmission:
         raise ClientError('Author Dashboard did not issue an authenticated API request.')
 
     def resolve_course(self, title):
+        require_authenticated_session(self.browser)
         p = self.browser.get_page('https://app.pluralsight.com/author-home')
         course_cards = """(title) => {
           const found = [];

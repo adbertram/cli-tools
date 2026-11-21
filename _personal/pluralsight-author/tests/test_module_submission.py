@@ -220,6 +220,9 @@ def test_course_resolve_rejects_ambiguous_title():
         def evaluate(self, script, title):
             return ['/author-tools/details/1/modules', '/author-tools/details/2/modules']
     class Browser:
+        def ensure_fresh_session(self):
+            from types import SimpleNamespace
+            return SimpleNamespace(authenticated=True)
         def get_page(self, url): return Page()
     transport.browser = Browser()
     with pytest.raises(ClientError, match='exactly one'):
@@ -469,9 +472,21 @@ def readiness_transport(page):
     transport.session = requests.Session()
     transport.browser = SimpleNamespace(
         get_page=lambda url: page,
-        is_authenticated=lambda: SimpleNamespace(authenticated=True),
+        ensure_fresh_session=lambda: SimpleNamespace(authenticated=True),
         live_cookies=lambda: [{'name': 'session', 'value': 'test', 'domain': 'example.com'}])
     return transport
+
+
+@pytest.mark.parametrize('action', ['resolve_course', 'connect'])
+def test_dashboard_checks_auth_before_opening_course_page(action):
+    from types import SimpleNamespace
+    transport = object.__new__(ModuleSubmission)
+    transport.browser = SimpleNamespace(
+        ensure_fresh_session=lambda: SimpleNamespace(authenticated=False, reason='login not configured'),
+        get_page=lambda url: pytest.fail('must not open a course page'),
+    )
+    with pytest.raises(ClientError, match='auth login'):
+        getattr(transport, action)('Course' if action == 'resolve_course' else 123)
 
 
 def test_ready_course_and_details_have_no_fixed_wait():

@@ -12,6 +12,7 @@ from typing import Optional
 from cli_tools_shared.data_cache import cache_dir_for, cached, invalidate
 from cli_tools_shared.exceptions import ClientError
 
+from .browser import require_authenticated_session
 from .config import get_config
 from .parsers import (
     extract_current_page,
@@ -162,8 +163,7 @@ class PluralsightAuthorClient:
         return self._browser_instance
 
     def _require_authenticated_session(self) -> None:
-        if not self._browser.is_authenticated().authenticated:
-            raise ClientError("Saved browser session is not authenticated.")
+        require_authenticated_session(self._browser)
 
     def _get_page(self, url: str, settle_ms: int = 2000):
         page = self._browser.get_page(url)
