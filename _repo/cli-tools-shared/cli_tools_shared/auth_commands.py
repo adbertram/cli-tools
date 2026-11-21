@@ -686,6 +686,8 @@ def _handle_browser_login(config, tool_name: str, force: bool):
     challenge blocks the headless path on an interactive terminal, and for CLIs that do not configure
     the declarative login at all.
     """
+    from .auth import BrowserHumanVerificationRequired
+
     logger.debug("_handle_browser_login: tool=%s force=%s", tool_name, force)
     browser = config.get_browser()
     if browser is None:
@@ -703,7 +705,16 @@ def _handle_browser_login(config, tool_name: str, force: bool):
             logger.debug("_handle_browser_login: has_saved_session=%s", has_session)
             if has_session:
                 # Live-verify before declaring "already authenticated".
-                live = browser.is_authenticated()
+                try:
+                    live = browser.is_authenticated()
+                except BrowserHumanVerificationRequired as exc:
+                    if not _interactive_stdio_available():
+                        print_error(f"Browser auth requires human verification: {exc}")
+                        raise typer.Exit(1)
+                    print_info("Human verification is required; opening the saved browser profile.")
+                    browser._authenticate_manual()
+                    print_success("Browser session authenticated")
+                    return
                 live_ok = bool(live)
                 logger.debug("_handle_browser_login: live check=%s", live_ok)
                 if live_ok:

@@ -20,6 +20,7 @@ from cli_tools_shared.auth import (
     INTERSTITIAL_SETTLE,
     BrowserAutomation,
     BrowserAutomationError,
+    BrowserHumanVerificationRequired,
     Interstitial,
     classify_interstitial,
 )
@@ -354,7 +355,7 @@ def test_continue_refuses_missing_ambiguous_or_hidden_control(stub_navigate, cou
 def test_real_captcha_after_continue_is_not_reloaded_or_clicked(stub_navigate):
     page = ContinuePage([(PAGE_URL, "Continue shopping"), CAP])
     stub_navigate(page)
-    with pytest.raises(BrowserAutomationError, match="CAPTCHA/human-verification"):
+    with pytest.raises(BrowserHumanVerificationRequired, match="CAPTCHA/human-verification"):
         _browser(ContinuingBrowser).get_page(PAGE_URL)
     assert page.clicks == 1
     assert page.goto_calls == []

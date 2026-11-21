@@ -20,7 +20,9 @@ from unittest.mock import MagicMock
 import pytest
 import typer
 
-from cli_tools_shared.auth import AuthResult, BrowserAutomation, BrowserAutomationError
+from cli_tools_shared.auth import (
+    AuthResult, BrowserAutomation, BrowserAutomationError, BrowserHumanVerificationRequired,
+)
 from cli_tools_shared.auth_commands import _handle_browser_login
 
 
@@ -320,6 +322,18 @@ def test_ensure_fresh_session_refresh_is_throttled_per_window(tmp_path, monkeypa
     assert len(pages) == 1, "a repeat call inside the throttle window must not retry"
 
 
+def test_stale_probe_does_not_reuse_prior_success_within_throttle(tmp_path, monkeypatch):
+    browser = _DeclarativeBrowser(_ConfigDouble(tmp_path))
+    browser._record_refresh_outcome(AuthResult(authenticated=True, live_check=True, refreshed=True))
+    monkeypatch.setattr(browser, "is_authenticated", _stale_session_probe)
+    monkeypatch.setattr(browser, "get_page", lambda url=None: pytest.fail("must not retry"))
+
+    result = browser.ensure_fresh_session()
+
+    assert not result.authenticated
+    assert "throttled" in result.reason
+
+
 # ---------------------------------------------------------------------------
 # _detect_login_challenge data-driven rule matching
 # ---------------------------------------------------------------------------
@@ -533,6 +547,55 @@ def _stub_successful_browser_login(monkeypatch, browser):
     )
     monkeypatch.setattr(browser, "close", lambda: None)
     return login_calls
+
+
+@pytest.mark.parametrize("interactive", [True, False])
+def test_saved_session_human_challenge_requires_explicit_interactive_login(
+    tmp_path, monkeypatch, interactive
+):
+    browser = _PlainBrowser(_ConfigDouble(tmp_path))
+    config = _login_config(browser, has_session=True)
+    monkeypatch.setattr(browser, "is_authenticated", lambda: (_ for _ in ()).throw(
+        BrowserHumanVerificationRequired("human verification required")
+    ))
+    monkeypatch.setattr("cli_tools_shared.auth_commands._interactive_stdio_available", lambda: interactive)
+    calls = []
+    monkeypatch.setattr(browser, "_authenticate_manual", lambda: calls.append("manual"))
+    monkeypatch.setattr(browser, "clear_session", lambda: pytest.fail("profile must be preserved"))
+    monkeypatch.setattr(browser, "close", lambda: None)
+
+    if interactive:
+        _handle_browser_login(config, "plain-browser", force=False)
+        assert calls == ["manual"]
+    else:
+        with pytest.raises(typer.Exit):
+            _handle_browser_login(config, "plain-browser", force=False)
+        assert calls == []
+
+
+def test_saved_session_engine_error_does_not_open_login(tmp_path, monkeypatch):
+    browser = _PlainBrowser(_ConfigDouble(tmp_path))
+    config = _login_config(browser, has_session=True)
+    monkeypatch.setattr(browser, "is_authenticated", lambda: (_ for _ in ()).throw(
+        BrowserAutomationError("browser unavailable")
+    ))
+    monkeypatch.setattr(browser, "_authenticate_manual", lambda: pytest.fail("must not open browser"))
+    monkeypatch.setattr(browser, "clear_session", lambda: pytest.fail("must not clear profile"))
+    monkeypatch.setattr(browser, "close", lambda: None)
+    with pytest.raises(BrowserAutomationError, match="browser unavailable"):
+        _handle_browser_login(config, "plain-browser", force=False)
+
+
+def test_passive_auth_check_propagates_human_challenge(tmp_path, monkeypatch):
+    browser = _PlainBrowser(_ConfigDouble(tmp_path))
+    monkeypatch.setattr(browser, "get_page", lambda url: (_ for _ in ()).throw(
+        BrowserHumanVerificationRequired("human verification required")
+    ))
+    monkeypatch.setattr(browser, "_authenticate_manual", lambda: pytest.fail("status must not open login"))
+    monkeypatch.setattr(browser, "clear_session", lambda: pytest.fail("status must not clear profile"))
+    monkeypatch.setattr(browser, "close", lambda: None)
+    with pytest.raises(BrowserHumanVerificationRequired):
+        browser.is_authenticated()
 
 
 def test_handle_browser_login_headless_refreshes_declarative_login(

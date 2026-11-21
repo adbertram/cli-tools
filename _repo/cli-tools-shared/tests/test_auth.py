@@ -79,6 +79,19 @@ class _TotpCredentialBrowser(_CredentialBrowser):
     AUTH_LOGIN_TOTP_SECRET = "test-browser-totp-secret"
 
 
+class _TwoStepBrowser(_CredentialBrowser):
+    AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR = "#continue"
+    AUTH_LOGIN_ORIGIN = "https://example.com"
+
+
+def test_cloudflare_clearance_cookie_is_not_a_challenge(tmp_path):
+    browser = _TwoStepBrowser(_TestConfig(tmp_path))
+    page = type("Page", (), {"evaluate": lambda self, script: {
+        "matched": [], "title": "Sign In", "text": "", "cookie": "cf_clearance=verified"
+    }})()
+    assert browser._detect_login_challenge(page) is None
+
+
 class _TestConfig:
     """Minimal config double exposing both data dir and persistent-profile dir."""
 
@@ -435,6 +448,66 @@ def test_noninteractive_login_form_link_missing_fails_loudly(tmp_path, monkeypat
 
     with pytest.raises(BrowserAutomationError, match="could not find the login-form link"):
         browser._complete_noninteractive_login(service)
+
+
+@pytest.mark.parametrize("transition,expected_fills,error", [
+    ("normal", ["#username", "#password"], None),
+    ("foreign", ["#username"], "unexpected origin"),
+    ("challenge", ["#username"], "human verification"),
+])
+def test_two_step_login_verifies_origin_and_challenge(tmp_path, monkeypatch, transition, expected_fills, error):
+    browser = _TwoStepBrowser(_TestConfig(tmp_path))
+    page = _Service()
+    page.url = "https://example.com/login"
+    page.phase = "username"
+    fills = []
+
+    class Control:
+        def __init__(self, selector):
+            self.selector = selector
+
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            if self.selector == "#login-error":
+                return 0
+            return int(self.selector in ({"#username", "#continue"} if page.phase == "username" else {"#password", "#submit"}))
+
+        def is_visible(self):
+            return bool(self.count())
+
+        def is_enabled(self):
+            return True
+
+        def click(self):
+            if self.selector == "#continue":
+                page.phase = "password"
+                if transition == "foreign":
+                    page.url = "https://example.com.evil.test/login"
+            else:
+                page.url = "https://example.com/dashboard"
+
+    page.locator = lambda selector: Control(selector)
+    page.fill = lambda selector, value: fills.append(selector)
+    monkeypatch.setattr(browser, "_detect_login_challenge", lambda p: "Cloudflare" if transition == "challenge" and p.phase == "password" else None)
+    monkeypatch.setattr("cli_tools_shared.config.read_cli_tool_secret", lambda name: "test-value")
+    if error:
+        with pytest.raises(BrowserAutomationError, match=error):
+            browser._complete_noninteractive_login(page)
+    else:
+        browser._complete_noninteractive_login(page)
+    assert fills == expected_fills
+
+
+def test_two_step_login_rejects_foreign_origin_before_username(tmp_path, monkeypatch):
+    browser = _TwoStepBrowser(_TestConfig(tmp_path))
+    page = _Service()
+    page.url = "https://example.com.evil.test/login"
+    monkeypatch.setattr(browser, "_detect_login_challenge", lambda p: None)
+    with pytest.raises(BrowserAutomationError, match="unexpected origin"):
+        browser._complete_noninteractive_login(page)
 
 
 def test_generate_totp_code_matches_rfc_6238_vector():

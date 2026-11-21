@@ -68,6 +68,10 @@ class BrowserAutomationError(ClientError):
         super().__init__(message)
 
 
+class BrowserHumanVerificationRequired(BrowserAutomationError):
+    """The service presented a declared human-verification wall."""
+
+
 PORTABLE_SESSION_MAX_BYTES = 16 * 1024 * 1024
 
 
@@ -367,6 +371,8 @@ class BrowserAutomation:
     AUTH_LOGIN_USERNAME_SELECTOR = ""  # Selector for an approved non-interactive username field
     AUTH_LOGIN_PASSWORD_SELECTOR = ""  # Selector for an approved non-interactive password field
     AUTH_LOGIN_SUBMIT_SELECTOR = ""  # Selector for an approved non-interactive submit control
+    AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR = ""  # Optional first-step submit for a two-step login
+    AUTH_LOGIN_ORIGIN = ""  # Exact HTTPS origin required for a two-step login
     AUTH_LOGIN_ERROR_SELECTOR = ""  # Selector visible when submitted credentials are rejected
     AUTH_LOGIN_USERNAME_SECRET = ""  # CLI-tools secret-manager name
     AUTH_LOGIN_PASSWORD_SECRET = ""  # CLI-tools secret-manager name
@@ -467,7 +473,7 @@ class BrowserAutomation:
                 "checking your browser before accessing",
                 "attention required",
             ),
-            ("cf_clearance",),
+            (),
         ),
         (
             "Turnstile",
@@ -760,8 +766,9 @@ class BrowserAutomation:
         failures (the browser could not start, or an HTTP-error / abort wall
         was served instead of the login page). Refresh attempts are throttled
         to at most one per ``AUTH_REFRESH_THROTTLE_SECONDS`` per process;
-        repeat callers inside the window receive the stored outcome instead
-        of logging in again.
+        repeat callers inside the window receive the stored failure instead
+        of logging in again. A stale probe after a prior success returns a
+        throttled failure, never the earlier authenticated result.
         """
         logger.debug("ensure_fresh_session: session=%s", self._session_name())
 
@@ -782,11 +789,16 @@ class BrowserAutomation:
             and self._auth_last_refresh_result is not None
         ):
             logger.debug(
-                "ensure_fresh_session: throttled (attempt %.0fs ago, window=%ss); "
-                "reusing the stored outcome",
+                "ensure_fresh_session: throttled (attempt %.0fs ago, window=%ss)",
                 now - self._auth_refresh_attempted_at,
                 self.AUTH_REFRESH_THROTTLE_SECONDS,
             )
+            if self._auth_last_refresh_result.authenticated:
+                return AuthResult(
+                    authenticated=False,
+                    live_check=result.live_check,
+                    reason="Session is no longer authenticated; automatic login is throttled. Try again shortly.",
+                )
             return self._auth_last_refresh_result
 
         handler = type(self).AUTH_LOGIN_HANDLER
@@ -862,6 +874,11 @@ class BrowserAutomation:
             # completing the form. Re-check for an account block and then a
             # challenge that appeared during the attempt; otherwise report the
             # underlying failure without raising.
+            if isinstance(exc, BrowserHumanVerificationRequired):
+                return self._record_refresh_outcome(AuthResult(
+                    authenticated=False, live_check=True, refreshed=False,
+                    needs_human=True, reason=str(exc),
+                ))
             if page is not None:
                 blocked = self._detect_account_block(page)
                 if blocked is not None:
@@ -1240,26 +1257,35 @@ class BrowserAutomation:
         # touching the form: submitting could extend a ban.
         self._raise_if_account_blocked(page)
 
-        controls = (
-            ("username", page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)),
-            ("password", page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)),
-            ("submit", page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)),
-        )
+        if self.AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR or self.AUTH_LOGIN_ORIGIN:
+            if not self.AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR or not self.AUTH_LOGIN_ORIGIN:
+                raise BrowserAutomationError("Two-step browser login requires a username submit selector and exact origin.")
+            self._complete_username_step(page)
+            controls = (
+                ("password", page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)),
+                ("submit", page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)),
+            )
+        else:
+            controls = (
+                ("username", page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)),
+                ("password", page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)),
+                ("submit", page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)),
+            )
         for label, locator in controls:
             if locator.count() != 1 or not locator.first.is_visible():
                 raise BrowserAutomationError(
                     f"Non-interactive browser login requires one visible {label} control."
                 )
-        if not controls[2][1].first.is_enabled():
+        if not self.AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR and not controls[-1][1].first.is_enabled():
             raise BrowserAutomationError(
                 "Non-interactive browser login submit control is disabled."
             )
 
         from .config import read_cli_tool_secret, secret_manager_set_command
 
-        username = read_cli_tool_secret(self.AUTH_LOGIN_USERNAME_SECRET)
+        username = None if self.AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR else read_cli_tool_secret(self.AUTH_LOGIN_USERNAME_SECRET)
         password = read_cli_tool_secret(self.AUTH_LOGIN_PASSWORD_SECRET)
-        if username is None:
+        if username is None and not self.AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR:
             raise BrowserAutomationError(
                 "Missing browser-login username secret. Set it with: "
                 f"{secret_manager_set_command(self.AUTH_LOGIN_USERNAME_SECRET)}"
@@ -1271,9 +1297,14 @@ class BrowserAutomation:
             )
 
         try:
-            page.fill(self.AUTH_LOGIN_USERNAME_SELECTOR, username)
+            if self.AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR:
+                self._check_two_step_login_page(page)
+            else:
+                page.fill(self.AUTH_LOGIN_USERNAME_SELECTOR, username)
             page.fill(self.AUTH_LOGIN_PASSWORD_SELECTOR, password)
-            controls[2][1].first.click()
+            if not controls[-1][1].first.is_enabled():
+                raise BrowserAutomationError("Non-interactive browser login submit control is disabled.")
+            controls[-1][1].first.click()
         finally:
             username = None
             password = None
@@ -1285,6 +1316,11 @@ class BrowserAutomation:
         self._raise_if_account_blocked(page)
         while time.time() < deadline:
             page.wait_for_timeout(1000)
+            if self.AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR:
+                self._settle_interstitial(page)
+                challenge = self._detect_login_challenge(page)
+                if challenge:
+                    raise BrowserHumanVerificationRequired(f"Browser login requires human verification: {challenge}.")
             # A ban notice is the one state we must never poll past — retries
             # can extend the ban, so abort as soon as it appears.
             self._raise_if_account_blocked(page)
@@ -1327,6 +1363,45 @@ class BrowserAutomation:
             "Non-interactive browser login did not reach an authenticated state "
             f"within {self.AUTH_LOGIN_AUTOMATION_TIMEOUT} seconds."
         )
+
+    def _check_two_step_login_page(self, page) -> None:
+        self._settle_interstitial(page)
+        challenge = self._detect_login_challenge(page)
+        if challenge:
+            raise BrowserHumanVerificationRequired(f"Browser login requires human verification: {challenge}.")
+        origin = urlsplit(self.AUTH_LOGIN_ORIGIN)
+        current = urlsplit(page.url)
+        if (origin.scheme != "https" or not origin.netloc or origin.path or origin.query or origin.fragment
+                or (current.scheme, current.netloc) != (origin.scheme, origin.netloc)):
+            raise BrowserAutomationError("Two-step browser login reached an unexpected origin; credentials were not entered.")
+
+    def _complete_username_step(self, page) -> None:
+        from .config import read_cli_tool_secret, secret_manager_set_command
+
+        self._check_two_step_login_page(page)
+        username_control = page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)
+        submit = page.locator(self.AUTH_LOGIN_USERNAME_SUBMIT_SELECTOR)
+        if username_control.count() != 1 or not username_control.first.is_visible() or submit.count() != 1 or not submit.first.is_visible():
+            raise BrowserAutomationError("Two-step browser login requires one visible username and submit control.")
+        username = read_cli_tool_secret(self.AUTH_LOGIN_USERNAME_SECRET)
+        if username is None:
+            raise BrowserAutomationError(f"Missing browser-login username secret. Set it with: {secret_manager_set_command(self.AUTH_LOGIN_USERNAME_SECRET)}")
+        try:
+            self._check_two_step_login_page(page)
+            page.fill(self.AUTH_LOGIN_USERNAME_SELECTOR, username)
+            if not submit.first.is_enabled():
+                raise BrowserAutomationError("Two-step browser login username submit control is disabled.")
+            submit.first.click()
+        finally:
+            username = None
+        deadline = time.time() + self.AUTH_LOGIN_AUTOMATION_TIMEOUT
+        while time.time() < deadline:
+            self._check_two_step_login_page(page)
+            password = page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)
+            if password.count() == 1 and password.first.is_visible():
+                return
+            page.wait_for_timeout(500)
+        raise BrowserAutomationError("Two-step browser login did not reach the password step.")
 
     # ---- Automation-free login (MANUAL_LOGIN) ----
 
@@ -1715,7 +1790,12 @@ class BrowserAutomation:
             url = page.url or ""
         except Exception:
             url = ""
-        raise BrowserAutomationError(
+        error_type = (
+            BrowserHumanVerificationRequired
+            if rule.kind in ("challenge", "captcha") and rule.strategy == INTERSTITIAL_ABORT
+            else BrowserAutomationError
+        )
+        raise error_type(
             f"Reached a {rule.label} wall at {self._safe_url_for_log(url)}. "
             "This cannot be resolved automatically. Re-run auth login for the "
             "browser session from an interactive shell and complete the "
