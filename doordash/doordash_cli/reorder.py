@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import threading
 import time
 from dataclasses import dataclass, field
@@ -377,8 +376,7 @@ def _dump_debug_artifacts(page, debug_dir: Path, step_id: str) -> None:
     debug_dir.mkdir(parents=True, exist_ok=True)
     (debug_dir / f"{step_id}.url.txt").write_text(page.url + "\n", encoding="utf-8")
     (debug_dir / f"{step_id}.html").write_text(page.content(), encoding="utf-8")
-    shot = page.page_screenshot()
-    shutil.copyfile(shot["file"], debug_dir / f"{step_id}.png")
+    page.screenshot(str(debug_dir / f"{step_id}.png"))
 
 
 def run_reorder_flow(

@@ -18,6 +18,7 @@ during bulk runs.
 from __future__ import annotations
 
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import List, Optional
@@ -368,24 +369,13 @@ def _apply_locator(advertiser_id: str) -> str:
 def _capture_screenshot(page) -> Optional[str]:
     """Capture a diagnostic screenshot for an apply-flow failure.
 
-    ``PlaywrightService.page_screenshot()`` writes the file to its own
-    tempdir (``$TMPDIR/playwright-screenshots/``) and returns
-    ``{'file': <path>, 'page_url': ...}``.  Returns the saved path or
-    ``None`` if the screenshot raised.
-
-    The ``ref`` kwarg on ``page_screenshot`` is a Playwright element
-    locator -- NOT a destination path.  Every prior call site that
-    passed ``ref=str(shot)`` (where ``shot`` was a ``Path``) silently
-    failed because the path was interpreted as an invalid CSS
-    selector, and the bare ``except Exception`` swallowed the error.
+    Saves a PNG to a temp file and returns its path, or ``None`` if the screenshot raised.
     """
     try:
-        result = page.page_screenshot()
+        with tempfile.NamedTemporaryFile(prefix="cj-apply-", suffix=".png", delete=False) as handle:
+            return page.screenshot(handle.name)
     except Exception:
         return None
-    if isinstance(result, dict):
-        return result.get("file")
-    return None
 
 
 # Selectors that confirm the apply succeeded (banner/toast/status pill).

@@ -494,10 +494,9 @@ def test_bug6_apply_single_uses_row_scoped_locator_and_findAdvertisers_url(monke
 # "Reached joinprograms.do but the Accept and Apply button never resolved"
 # even though CJ's REST already reported relationship_status=joined.
 # Two root causes, fixed together:
-#   (a) Screenshot API misuse — ``page.page_screenshot(ref=str(path))`` passes
-#       the destination path as a CSS selector (``ref`` is a Playwright element
-#       locator).  Every call site silently failed; screenshot_path was always
-#       null.
+#   (a) Screenshot API misuse — a screenshot call that treated the destination
+#       path as a CSS selector.  Every call site silently failed; screenshot_path
+#       was always null.
 #   (b) No REST-first poll after the first click — the code blocked waiting
 #       for an Accept-and-Apply form that auto-approve advertisers never
 #       render.  REST is the source of truth and should be consulted before
@@ -505,30 +504,22 @@ def test_bug6_apply_single_uses_row_scoped_locator_and_findAdvertisers_url(monke
 # ---------------------------------------------------------------------------
 
 
-def test_bug7_capture_screenshot_helper_uses_correct_api(monkeypatch):
-    """``_capture_screenshot`` must call ``page.page_screenshot()`` with no
-    ``ref`` argument (ref is a CSS selector, not a destination path) and
-    must return the file path from the result dict.
+def test_bug7_capture_screenshot_helper_uses_correct_api(monkeypatch, tmp_path):
+    """``_capture_screenshot`` must save through ``page.screenshot(path)`` and
+    return the saved path.
     """
+    import tempfile
+
     from cj_cli.commands import relationships as rel_mod
 
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     fake_page = MagicMock()
-    fake_page.page_screenshot.return_value = {
-        "file": "/tmp/playwright-screenshots/cj-1234567890.png",
-        "page_url": "https://members.cj.com/...",
-    }
+    fake_page.screenshot.side_effect = lambda path: path
 
     result = rel_mod._capture_screenshot(fake_page)
 
-    assert result == "/tmp/playwright-screenshots/cj-1234567890.png"
-    fake_page.page_screenshot.assert_called_once_with()
-    # Crucially, no kwargs and no positional args -- passing a Path as
-    # ``ref`` was the prior bug.
-    _, kwargs = fake_page.page_screenshot.call_args
-    assert "ref" not in kwargs, (
-        "page_screenshot must NOT be called with ref=<path>; ref is a "
-        "Playwright element locator, not a destination path."
-    )
+    fake_page.screenshot.assert_called_once_with(result)
+    assert result.endswith(".png")
 
 
 def test_bug7_capture_screenshot_returns_none_on_failure():
@@ -538,7 +529,7 @@ def test_bug7_capture_screenshot_returns_none_on_failure():
     from cj_cli.commands import relationships as rel_mod
 
     fake_page = MagicMock()
-    fake_page.page_screenshot.side_effect = RuntimeError("playwright died")
+    fake_page.screenshot.side_effect = RuntimeError("playwright died")
 
     assert rel_mod._capture_screenshot(fake_page) is None
 
