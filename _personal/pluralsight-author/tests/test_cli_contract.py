@@ -572,3 +572,41 @@ def test_icons_reject_opportunities_profile(monkeypatch):
 
     assert result.exit_code != 0
     assert "requires auth type 'author_kit'" in result.output
+
+
+def _submit_with_fake_transport(monkeypatch, tmp_path, *extra):
+    import pluralsight_author_cli.module_submission as module_submission
+
+    install_profiles(monkeypatch)
+    seen = {}
+
+    class FakeTransport:
+        def __init__(self, profile=None):
+            pass
+
+        def submit(self, manifest, plan=False, screenshot_dir=None):
+            seen.update(plan=plan, screenshot_dir=screenshot_dir)
+            return {"ok": True, "portal_screenshot": str(screenshot_dir / "module-1-portal-clips.png")}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(module_submission, "ModuleSubmission", FakeTransport)
+    manifest = tmp_path / "manifests" / "submission.json"
+    manifest.parent.mkdir()
+    manifest.write_text("{}")
+    result = CliRunner().invoke(app, ["modules", "submit", "--manifest", str(manifest), "--profile", AUTH_METHOD_OPPORTUNITIES, *extra])
+    assert result.exit_code == 0, result.output
+    return manifest, seen, json.loads(result.stdout)
+
+
+def test_modules_submit_screenshots_into_the_manifest_folder_by_default(monkeypatch, tmp_path):
+    manifest, seen, output = _submit_with_fake_transport(monkeypatch, tmp_path)
+    assert seen == {"plan": False, "screenshot_dir": manifest.resolve().parent}
+    assert output["portal_screenshot"] == str(manifest.resolve().parent / "module-1-portal-clips.png")
+
+
+def test_modules_submit_screenshot_dir_option_overrides_the_default(monkeypatch, tmp_path):
+    shots = tmp_path / "shots"
+    _, seen, _ = _submit_with_fake_transport(monkeypatch, tmp_path, "--screenshot-dir", str(shots))
+    assert seen["screenshot_dir"] == shots

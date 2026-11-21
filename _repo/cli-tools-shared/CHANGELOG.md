@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- `BrowserHarnessService.screenshot(path, selector=None)`: headless PNG of the whole
+  page, or of the whole box of the first element matching `selector`, captured
+  beyond the viewport so tall content is never cut off. pluralsight-author's
+  module submission uses it for its portal validation screenshot. Tests:
+  `tests/test_browser_driver.py`.
 - `BrowserAutomation.AUTH_LOGIN_FORM_LINK_SELECTOR`: a declarative hook for
   services whose `LOGIN_URL` lands on a page that only links to the real
   credential form (e.g. a marketing page whose "LOGIN" link starts an

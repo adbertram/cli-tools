@@ -190,7 +190,19 @@ deck always carries the manifest's file name; no second deck is added. A module 
 review is read-only: a deck file name mismatch there fails before any write.
 
 The result contains `ok`, `course_id`, `course_title`, `module_id`, `module_guid`,
-`module_title`, `module_order`, `status`, `deck`, `clips`, `display_titles`, and `already_submitted`.
+`module_title`, `module_order`, `status`, `deck`, `clips`, `display_titles`,
+`already_submitted`, and `portal_screenshot`.
+
+Every real submission ends with a validation screenshot. After the post-submit readback
+succeeds, the headless CLI browser reloads the module's Author Dashboard modules page,
+waits until the module section shows every submitted clip row, and saves a full-height
+PNG of that section (nothing cut off however many clips it holds) as
+`module-<order>-portal-clips.png` in `--screenshot-dir` (default: the manifest's folder;
+the folder is created, and checked before anything is uploaded). The absolute path is
+`portal_screenshot`. The screenshot is not optional and has no skip flag. If only the
+screenshot fails, the submission has already happened and the command exits non-zero
+with an error that says so; nothing is retried or re-uploaded, and running the same
+command again only verifies the submitted module and retakes the screenshot. `--plan` and `modules inspect` take no screenshot.
 `modules submit --manifest ... --plan` writes nothing and reports the deck as
 `unchanged`, `replace`, or `upload`, and each clip as `unchanged`, `new_version`, or
 `new_clip`, with the clip's current portal `version`. Run it before every

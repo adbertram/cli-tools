@@ -1,3 +1,4 @@
+from typing import Optional
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -431,13 +432,19 @@ def inspect_module(course_id: int = typer.Argument(..., help="Numeric Author Das
 @modules_app.command("submit")
 @command
 def submit_module(manifest: Path = typer.Option(..., "--manifest", help="Module and edited-media manifest JSON"),
-                  plan: bool = typer.Option(False, "--plan", help="Write nothing; report per clip whether it is unchanged, gets a new version, or would be a new clip")):
-    """Upload a module deck and edited clips, verify contents, and submit for review."""
+                  plan: bool = typer.Option(False, "--plan", help="Write nothing; report per clip whether it is unchanged, gets a new version, or would be a new clip"),
+                  screenshot_dir: Optional[Path] = typer.Option(None, "--screenshot-dir", help="Folder for the portal validation screenshot module-<order>-portal-clips.png (default: the manifest's folder)")):
+    """Upload a module deck and edited clips, verify contents, submit for review, and screenshot the portal's clip list.
+
+    A real submission always saves a full-height screenshot of the portal page listing the module's clips and returns its
+    absolute path as portal_screenshot. If only the screenshot fails, the command exits non-zero and says the submission succeeded.
+    """
     import json
     from .module_submission import ModuleSubmission
     transport = ModuleSubmission()
     try:
-        print_json(transport.submit(json.loads(manifest.read_text()), plan=plan))
+        print_json(transport.submit(json.loads(manifest.read_text()), plan=plan,
+                                    screenshot_dir=screenshot_dir or manifest.resolve().parent))
     finally:
         transport.close()
 

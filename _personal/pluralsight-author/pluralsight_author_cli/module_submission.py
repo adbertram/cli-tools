@@ -167,6 +167,29 @@ class ModuleSubmission:
               index:Number(r.querySelector('td:first-child').textContent.trim())-1}));
         }""", module_id)
 
+    def portal_screenshot(self, state, clip_ids, path):
+        """Save a full-height PNG of the portal module section listing every submitted clip.
+
+        Waits until the section shows exactly the submitted clips, each with a rendered row.
+        """
+        module_id = state['module']['id']
+        section = f'ps-course-module:has(#anchor_{module_id})'
+        page = self.browser.get_page(f'https://app.pluralsight.com/author-tools/details/{state["course_id"]}/modules')
+        page.wait_for_selector(section, state='attached', timeout=15000)
+        rendered = """([section, clipIds]) => {
+          const rows = Array.from(document.querySelector(section).querySelectorAll('tbody tr'))
+            .filter(r => r.querySelector('span[id^="anchor_"]'));
+          return rows.length === clipIds.length && rows.every((r, i) =>
+            r.querySelector('span[id^="anchor_"]').id === 'anchor_' + clipIds[i] && r.getBoundingClientRect().height > 0);
+        }"""
+        for _ in range(75):
+            if page.evaluate(rendered, [section, clip_ids]):
+                break
+            page.wait_for_timeout(200)
+        else:
+            raise ClientError('Portal module page did not render every submitted clip row.')
+        return page.screenshot(str(path), selector=section)
+
     def verify_names(self, state, manifest):
         self.refresh(state)
         rows = sorted(state['clips'], key=lambda c: c['index'])
@@ -272,7 +295,7 @@ class ModuleSubmission:
         return {'ok': not refused, 'plan': True, 'module_status': module['status'],
                 'deck': 'unchanged' if deck_same else ('replace' if decks else 'upload'), 'clips': rows}
 
-    def submit(self, manifest, plan=False):
+    def submit(self, manifest, plan=False, screenshot_dir=None):
         required = {'course_title', 'module_order', 'module_title', 'deck_path', 'clips'}
         if not isinstance(manifest, dict) or not required <= manifest.keys():
             raise ClientError('Incomplete module submission manifest.')
@@ -309,6 +332,11 @@ class ModuleSubmission:
             raise ClientError('Pluralsight slide deck filename differs from the submission manifest; resolve before submission.')
         if plan:
             return self.plan(state, deck, decks, clips)
+        # The validation screenshot is mandatory: a directory that cannot hold it fails before anything is uploaded.
+        if screenshot_dir is None:
+            raise ClientError('A submission requires a screenshot directory for its portal validation screenshot.')
+        screenshot_dir = Path(screenshot_dir).resolve()
+        screenshot_dir.mkdir(parents=True, exist_ok=True)
         updating = module['status'] in UPDATE_STATES
         versions_before = {c['guid']: c.get('numberedVersion') for c in state['clips']}
         actions = {}
@@ -392,6 +420,13 @@ class ModuleSubmission:
                 raise ClientError('Pluralsight has not confirmed submitted status; retry will inspect existing uploads.')
         # Submission can trigger projection updates. Never return cached pre-submit names.
         verified_rows, display_titles = self.verify_names(state, manifest)
+        screenshot = screenshot_dir / f'module-{state["module"]["index"]}-portal-clips.png'
+        try:
+            self.portal_screenshot(state, [row['id'] for row in verified_rows], screenshot)
+        except Exception as error:
+            # The module is already submitted and verified; never retry or resubmit over a screenshot failure.
+            raise ClientError(f'Module {state["module"]["index"]} was submitted successfully and verified; only the portal '
+                              f'validation screenshot failed ({error}). Run the same command again: a submitted module is only verified, never re-uploaded.') from None
         receipts = [{'record_id': clip['record_id'], 'id': row['id'], 'guid': row['guid'],
                      'title': row['title'], 'index': row['index'],
                      'original_file_name': row['videoFile']['originalVideoFileName'],
@@ -400,4 +435,4 @@ class ModuleSubmission:
                     for clip, row in zip(clips, verified_rows)]
         return {'ok': True, 'course_id': course_id, 'course_title': state['course_title'], 'module_order': state['module']['index'], 'module_id': module['id'], 'module_guid': module['guid'],
             'module_title': module['title'], 'status': state['module']['status'], 'already_submitted': submitted,
-            'display_titles': display_titles, 'deck': {k: decks[0][k] for k in ('id', 'fileName', 'type', 'status')}, 'clips': receipts}
+            'display_titles': display_titles, 'portal_screenshot': str(screenshot), 'deck': {k: decks[0][k] for k in ('id', 'fileName', 'type', 'status')}, 'clips': receipts}

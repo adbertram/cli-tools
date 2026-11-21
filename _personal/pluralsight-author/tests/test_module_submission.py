@@ -24,6 +24,12 @@ class FakeSubmission(ModuleSubmission):
         self.canonical = {c['guid']: c['title'] for c in state['clips']}
     def displayed_clips(self, course_id, module_id, clip_ids):
         return [{'id': c['id'], 'title': self.canonical[c['guid']], 'index': c['index']} for c in sorted(self.state['clips'], key=lambda c:c['index'])]
+    def submit(self, manifest, plan=False, screenshot_dir=None):
+        return super().submit(manifest, plan=plan, screenshot_dir=screenshot_dir or Path(manifest['deck_path']).parent)
+    def portal_screenshot(self, state, clip_ids, path):
+        self.shots = getattr(self, 'shots', []) + [(state['module']['id'], clip_ids, Path(path))]
+        Path(path).write_bytes(b'png')
+        return str(path)
     def inspect(self, course_id, module_order):
         return self.state
     def resolve_course(self, title):
@@ -602,3 +608,112 @@ def test_update_receipt_reports_version_before_and_after(submitted):
     result = transport.submit(manifest)
     clip = result['clips'][0]
     assert (clip['action'], clip['version_before'], clip['version']) == ('new_version', 1, 2)
+
+
+def test_submission_returns_the_portal_screenshot_of_every_submitted_clip(submitted, tmp_path):
+    transport, manifest = submitted
+    shots = tmp_path / 'shots'
+    result = transport.submit(manifest, screenshot_dir=shots)
+    expected = shots / 'module-1-portal-clips.png'
+    assert result['portal_screenshot'] == str(expected) and expected.read_bytes() == b'png'
+    assert transport.shots == [(1, [2], expected)]
+
+
+def test_screenshot_follows_the_post_submit_readback(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'in_progress'
+    old.state['assets'] = []
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = False; transport.video_uploaded = False
+    original_request = transport.request
+    def request(method, url, **kwargs):
+        result = original_request(method, url, **kwargs)
+        if '/module-assets' in url: transport.deck_uploaded = True
+        return result
+    transport.request = request
+    original_shot = transport.portal_screenshot
+    def shot(state, clip_ids, path):
+        transport.calls.append(('screenshot', state['module']['status']))
+        return original_shot(state, clip_ids, path)
+    transport.portal_screenshot = shot
+    result = transport.submit(manifest)
+    assert transport.calls[-1] == ('screenshot', 'submitted')
+    assert Path(result['portal_screenshot']).name == 'module-1-portal-clips.png'
+
+
+def test_screenshot_failure_after_submission_names_it_and_never_retries(submitted):
+    old, manifest = submitted
+    old.state['module']['status'] = 'in_progress'
+    old.state['assets'] = []
+    transport = UpdatingSubmission(old.state)
+    transport.deck_uploaded = False; transport.video_uploaded = False
+    original_request = transport.request
+    def request(method, url, **kwargs):
+        result = original_request(method, url, **kwargs)
+        if '/module-assets' in url: transport.deck_uploaded = True
+        return result
+    transport.request = request
+    attempts = []
+    def broken(state, clip_ids, path):
+        attempts.append(path)
+        raise RuntimeError('page never rendered')
+    transport.portal_screenshot = broken
+    with pytest.raises(ClientError) as error:
+        transport.submit(manifest)
+    message = str(error.value)
+    assert 'submitted successfully' in message and 'only the portal validation screenshot failed' in message
+    assert 'page never rendered' in message and 'never re-uploaded' in message
+    assert len(attempts) == 1
+    assert sum(1 for c in transport.calls if c[1:2] and str(c[1]).endswith('submit-move-to-qa')) == 1
+
+
+def test_plan_takes_no_screenshot_and_needs_no_directory(submitted):
+    transport, manifest = submitted
+    result = ModuleSubmission.submit(transport, manifest, plan=True)
+    assert 'portal_screenshot' not in result and not hasattr(transport, 'shots')
+
+
+def test_submission_without_a_screenshot_directory_refuses_before_any_write(submitted):
+    transport, manifest = submitted
+    with pytest.raises(ClientError, match='screenshot directory'):
+        ModuleSubmission.submit(transport, manifest)
+    assert not transport.calls
+
+
+class _Page:
+    def __init__(self, renders):
+        self.renders, self.waited, self.shots, self.selectors = renders, 0, [], []
+    def wait_for_selector(self, selector, **kwargs):
+        self.selectors.append(selector)
+    def evaluate(self, js, arg):
+        self.checked = arg
+        return self.renders.pop(0) if len(self.renders) > 1 else self.renders[0]
+    def wait_for_timeout(self, ms):
+        self.waited += 1
+    def screenshot(self, path, selector=None):
+        self.shots.append((path, selector))
+        return path
+
+
+def _portal(page):
+    transport = object.__new__(ModuleSubmission)
+    transport.browser = type('B', (), {'get_page': lambda self, url: page})()
+    return transport, {'course_id': 123, 'module': {'id': 77}}
+
+
+def test_portal_screenshot_waits_for_every_clip_row_then_captures_the_module_section(tmp_path):
+    page = _Page([False, False, True])
+    transport, state = _portal(page)
+    path = tmp_path / 'm.png'
+    assert transport.portal_screenshot(state, [5, 6, 7], path) == str(path)
+    assert page.waited == 2
+    assert page.checked == ['ps-course-module:has(#anchor_77)', [5, 6, 7]]
+    assert page.shots == [(str(path), 'ps-course-module:has(#anchor_77)')]
+
+
+def test_portal_screenshot_fails_when_clip_rows_never_render(tmp_path):
+    page = _Page([False])
+    transport, state = _portal(page)
+    with pytest.raises(ClientError, match='did not render every submitted clip row'):
+        transport.portal_screenshot(state, [5], tmp_path / 'm.png')
+    assert page.shots == []
