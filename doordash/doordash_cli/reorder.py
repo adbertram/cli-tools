@@ -17,128 +17,14 @@ from __future__ import annotations
 
 import json
 import re
-import threading
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 
 class ReorderFlowError(Exception):
     """Raised when a reorder step fails."""
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-# ==================== Network logging (diagnostic-only) ====================
-#
-# Data-driven event recorder. Each Playwright event type is described by a
-# spec dict mapping field-name -> extractor lambda. A single generic handler
-# factory closes over the spec to produce the per-event listener.
-# Adding a new event = adding a dict entry.
-
-_BODY_RESOURCE_TYPES = {"xhr", "fetch", "document"}
-_BODY_MAX_BYTES = 4096
-
-
-def _resp_extras(response) -> Dict[str, Any]:
-    if response.request.resource_type not in _BODY_RESOURCE_TYPES or response.status < 400:
-        return {}
-    body = response.body()
-    return {"body_excerpt": {
-        "bytes": len(body),
-        "truncated": len(body) > _BODY_MAX_BYTES,
-        "text": body[:_BODY_MAX_BYTES].decode("utf-8", errors="replace"),
-    }}
-
-
-_EVENT_SPECS: Dict[str, Dict[str, Callable[[Any], Any]]] = {
-    "request": {
-        "method": lambda r: r.method,
-        "url": lambda r: r.url,
-        "resource_type": lambda r: r.resource_type,
-        "is_navigation": lambda r: getattr(r, "is_navigation_request", lambda: False)(),
-    },
-    "response": {
-        "method": lambda r: r.request.method,
-        "url": lambda r: r.url,
-        "status": lambda r: r.status,
-        "status_text": lambda r: r.status_text,
-        "resource_type": lambda r: r.request.resource_type,
-        # `_extras` returns a dict that's merged into the record (not stored
-        # under the `_extras` key). The handler factory honors this convention.
-        "_extras": _resp_extras,
-    },
-    "requestfailed": {
-        "method": lambda r: r.method,
-        "url": lambda r: r.url,
-        "resource_type": lambda r: r.resource_type,
-        "failure": lambda r: str(r.failure) if getattr(r, "failure", None) else None,
-    },
-}
-
-
-class NetworkLogger:
-    """Append-only JSON-lines network logger backed by a Playwright context.
-
-    Reads `_EVENT_SPECS` to attach one generic handler per event type and
-    writes one JSON line per event to ``<debug_dir>/network.jsonl``. The file
-    is opened in append mode so reruns inside the same debug_dir accumulate,
-    with each run delimited by a `_run_started` event.
-
-    Diagnostic-only: this class does not affect the reorder flow's
-    success/failure decisions.
-    """
-
-    def __init__(self, context, debug_dir: Path) -> None:
-        debug_dir.mkdir(parents=True, exist_ok=True)
-        self._path = debug_dir / "network.jsonl"
-        self._fp = self._path.open("a", encoding="utf-8")
-        self._lock = threading.Lock()
-        self._context = context
-        self._closed = False
-        self._handlers: Dict[str, Callable[[Any], None]] = {
-            event: self._make_handler(event, spec) for event, spec in _EVENT_SPECS.items()
-        }
-        for event, handler in self._handlers.items():
-            context.on(event, handler)
-        self._write({"event": "_run_started", "timestamp": _now(), "log_path": str(self._path)})
-
-    def _write(self, record: Dict[str, Any]) -> None:
-        line = json.dumps(record, ensure_ascii=False)
-        with self._lock:
-            if self._closed:
-                return
-            self._fp.write(line + "\n")
-            self._fp.flush()
-
-    def _make_handler(self, event: str, spec: Dict[str, Callable[[Any], Any]]) -> Callable[[Any], None]:
-        def handler(obj) -> None:
-            record: Dict[str, Any] = {"event": event, "timestamp": _now()}
-            for name, extractor in spec.items():
-                value = extractor(obj)
-                if name == "_extras" and isinstance(value, dict):
-                    record.update(value)
-                else:
-                    record[name] = value
-            self._write(record)
-        return handler
-
-    def mark(self, label: str, **fields: Any) -> None:
-        """Write a marker event so the network log lines up with flow steps."""
-        self._write({"event": "_marker", "timestamp": _now(), "label": label, **fields})
-
-    def flush_close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        for event, handler in self._handlers.items():
-            self._context.remove_listener(event, handler)
-        self._fp.flush()
-        self._fp.close()
 
 
 # ==================== Result types ====================
@@ -371,21 +257,12 @@ _DISPATCH: Dict[str, Callable[..., StepResult]] = {
 }
 
 
-def _dump_debug_artifacts(page, debug_dir: Path, step_id: str) -> None:
-    """Write URL, HTML, and screenshot of the current page on a step failure."""
-    debug_dir.mkdir(parents=True, exist_ok=True)
-    (debug_dir / f"{step_id}.url.txt").write_text(page.url + "\n", encoding="utf-8")
-    (debug_dir / f"{step_id}.html").write_text(page.content(), encoding="utf-8")
-    page.screenshot(str(debug_dir / f"{step_id}.png"))
-
-
 def run_reorder_flow(
     page,
     order_id: str,
     order_uuid: Optional[str],
     confirm: bool,
     log: Optional[Callable[[str], None]] = None,
-    debug_dir: Optional[Path] = None,
     extra_context: Optional[Dict[str, str]] = None,
 ) -> ReorderResult:
     """Run the reorder flow defined in data/reorder_flow.json."""
@@ -402,51 +279,26 @@ def run_reorder_flow(
     result = ReorderResult(order_id=order_id, order_uuid=order_uuid, confirm=confirm, submitted=False)
     _log = log or (lambda _msg: None)
 
-    network_logger: Optional[NetworkLogger] = None
-    if debug_dir is not None:
-        if page._browser_context is None:
-            raise ReorderFlowError("Cannot attach network logger: browser context is not open.")
-        network_logger = NetworkLogger(page._browser_context, debug_dir)
-        _log(f"[debug] network log: {debug_dir / 'network.jsonl'}")
-
-    try:
-        for step in steps:
-            action = step.get("action")
-            step_id = step.get("id", "?")
-            if step.get("confirm_only") and not confirm:
-                _log(f"[skip] {step_id}: confirm_only step skipped (no --confirm)")
-                if network_logger:
-                    network_logger.mark(f"step_skipped:{step_id}", action=action)
-                result.steps.append(StepResult(
-                    step_id=step_id, description=step.get("description", ""), action=action,
-                    status="skipped", detail="confirm_only step; --confirm not passed",
-                ))
-                continue
-            if action not in _DISPATCH:
-                raise ReorderFlowError(
-                    f"Step {step_id}: unknown action '{action}'. Update reorder.py "
-                    f"or fix data/reorder_flow.json."
-                )
-            _log(f"[run]  {step_id}: {action}")
-            if network_logger:
-                network_logger.mark(f"step_started:{step_id}", action=action)
-            try:
-                step_result = _DISPATCH[action](page, step, context)
-            except ReorderFlowError:
-                if network_logger:
-                    network_logger.mark(f"step_failed:{step_id}", action=action)
-                if debug_dir is not None:
-                    _dump_debug_artifacts(page, debug_dir, step_id)
-                    _log(f"[debug] wrote artifacts to {debug_dir}")
-                raise
-            if network_logger:
-                network_logger.mark(f"step_ok:{step_id}", action=action)
-            result.steps.append(step_result)
-            _log(f"[ok]   {step_id}: {step_result.detail or 'done'}")
-            if step_id == "wait_for_confirmation" and step_result.status == "ok":
-                result.submitted = True
-        result.final_url = page.url
-        return result
-    finally:
-        if network_logger is not None:
-            network_logger.flush_close()
+    for step in steps:
+        action = step.get("action")
+        step_id = step.get("id", "?")
+        if step.get("confirm_only") and not confirm:
+            _log(f"[skip] {step_id}: confirm_only step skipped (no --confirm)")
+            result.steps.append(StepResult(
+                step_id=step_id, description=step.get("description", ""), action=action,
+                status="skipped", detail="confirm_only step; --confirm not passed",
+            ))
+            continue
+        if action not in _DISPATCH:
+            raise ReorderFlowError(
+                f"Step {step_id}: unknown action '{action}'. Update reorder.py "
+                f"or fix data/reorder_flow.json."
+            )
+        _log(f"[run]  {step_id}: {action}")
+        step_result = _DISPATCH[action](page, step, context)
+        result.steps.append(step_result)
+        _log(f"[ok]   {step_id}: {step_result.detail or 'done'}")
+        if step_id == "wait_for_confirmation" and step_result.status == "ok":
+            result.submitted = True
+    result.final_url = page.url
+    return result

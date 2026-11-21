@@ -217,7 +217,6 @@ class DoordashClient:
         order_id: str,
         confirm: bool = False,
         log=None,
-        debug_dir: Optional[Path] = None,
     ) -> ReorderResult:
         """Re-place a prior order.
 
@@ -255,7 +254,6 @@ class DoordashClient:
             order_uuid=order_uuid,
             confirm=confirm,
             log=log,
-            debug_dir=debug_dir,
             extra_context={"cart_uuid": cart_uuid},
         )
         result.steps = flow_result.steps

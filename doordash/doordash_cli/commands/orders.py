@@ -5,7 +5,6 @@ COMMAND_CREDENTIALS = {
     "reorder": ["browser_session"],
 }
 
-from pathlib import Path
 from typing import List, Optional
 
 import typer
@@ -70,7 +69,6 @@ def orders_get(
 def orders_reorder(
     order_id: str = typer.Argument(..., help="Order ID or UUID to reorder"),
     confirm: bool = typer.Option(False, "--confirm", help="Actually place the order (charges saved payment)"),
-    debug_dir: Optional[str] = typer.Option(None, "--debug-dir", help="Directory for failure artifacts (confirm mode)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display result as a table"),
 ):
     """Reorder a previous DoorDash order. Default is dry-run (no charge)."""
@@ -78,6 +76,5 @@ def orders_reorder(
         order_id,
         confirm=confirm,
         log=print_info,
-        debug_dir=Path(debug_dir).expanduser() if debug_dir else None,
     )
     emit_rows([result.to_dict()], table=table, properties=None, columns=REORDER_COLUMNS)
