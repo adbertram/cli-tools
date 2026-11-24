@@ -1416,11 +1416,9 @@ class BrowserAutomation:
         cookies that help the manual login pass risk scoring; the fresh login
         overwrites the session cookies regardless.
         """
-        from .browser.desktop_lease import wait_for_desktop_lease
         from .browser.driver import _chrome_binary
 
         chrome = os.environ.get("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
-        wait_for_desktop_lease(chrome)
 
         # Release any CDP browser (e.g. from a pre-login auth check) so the
         # persistent profile is unlocked for the plain browser.

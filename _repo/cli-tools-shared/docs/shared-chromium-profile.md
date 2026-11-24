@@ -38,8 +38,6 @@ Do not copy encrypted Chrome databases between hosts. Transfer service-scoped
 cookies/localStorage through a supported export/import path and let destination
 Chrome encrypt them with that host's key.
 
-On a demo host (one with `~/.tether/venv/bin/warden`), every engine launch of the real `/Applications/Google Chrome.app` first waits while `warden status --provider remote-bare` lists a UI lease in any state, because a demo on that desktop drives Chrome by app name and any Chrome from that bundle, headless included, can answer instead. It polls every 10 seconds and fails after 600 seconds naming the lease; a process inside that lease's own Tether session (`TETHER_SESSION`) is not held. See `cli_tools_shared/browser/desktop_lease.py`.
-
 ## Logout and reset
 
 A per-tool `auth login --force` / `clear_session()` must not delete the shared profile, because that would sign every CLI out of Google/SSO. It closes that CLI's browser and clears tool-local `browser-data/` only.

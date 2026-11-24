@@ -22,7 +22,6 @@ from urllib.parse import parse_qsl, urlsplit, urlunsplit
 
 from . import BrowserHarnessError
 from ._elements import _ServiceElement, _ServiceLocator
-from .desktop_lease import wait_for_desktop_lease
 from .driver import _chrome_launch_command, _find_free_port, _wait_for_cdp
 from .processes import (
     ProfileInUseError,
@@ -289,7 +288,6 @@ class PlaywrightBrowserService:
             ) from exc
 
         executable = self.executable_path or os.getenv("CLI_TOOLS_CHROME_BINARY") or _chrome_binary()
-        wait_for_desktop_lease(executable)
         profile_dir = resolve_user_data_dir(persistent_profile_dir)
         profile_dir.mkdir(parents=True, exist_ok=True)
         self._user_data_dir = profile_dir

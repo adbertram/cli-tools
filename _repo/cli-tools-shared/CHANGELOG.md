@@ -22,6 +22,13 @@
   `get_config` still builds twice per invocation. Tests:
   `tests/test_config_for.py`.
 
+### Removed
+- The pre-launch wait for a demo-desktop lease on real Google Chrome launches
+  (CDP, Playwright, Webwright local CDP, manual login), with its module,
+  config, tests and docs. Engine launches no longer consult any lease ledger
+  and no replacement mechanism exists. Whop's catalog reader dropped its
+  matching held-desktop refusal.
+
 ### Fixes
 - A CLI invocation now runs the secret manager once per profile secret instead
   of once per config build. The command credential check and the API client
@@ -38,16 +45,6 @@
   is missing it now watches the owned leader's exit through a kqueue
   `EVFILT_PROC`/`NOTE_EXIT` event, which, like `WNOWAIT`, never reaps it, so the
   PID/PGID stays reserved until cleanup. Tests: `tests/test_bounded_read.py`.
-- Every engine launch of the real Google Chrome app (CDP, Playwright,
-  Webwright local CDP, manual login) now waits while a Tether UI lease holds
-  the `remote-bare` demo desktop (`warden status --provider remote-bare`, any
-  state), polling every 10s and failing with the holding lease after 600s.
-  A Chrome from the same bundle, even headless, made Ronin prep's
-  by-name Chrome lookups hit the wrong process (agent-issues#1277). A process
-  inside the lease's own Tether session is not held; a host without
-  `~/.tether/venv/bin/warden` is never held; an unreadable ledger fails the
-  launch. `cli_tools_shared/browser/desktop_lease.py`, tests:
-  `tests/test_browser_desktop_lease.py`.
 - `data_cache.cached` no longer refuses to serve cached values for
   non-browser methods on a multi-credential CLI. `_cache_allowed_for_instance`
   gated EVERY cached method on a saved browser session whenever the tool

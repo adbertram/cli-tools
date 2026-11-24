@@ -66,8 +66,7 @@ class GarrulBrowser(BrowserAutomation):
     def is_authenticated(self) -> AuthResult:
         """Report whether the session actually works, without launching Chrome.
 
-        The inherited check drives a live page, which on this host queues behind
-        the shared desktop lease and can wait ten minutes for a demo to finish.
+        The inherited check drives a live page, which launches Chrome.
         When the CLI holds the cookie the Worker issued, one admin GET is the
         same ground truth: 200 means the session is live, 401 means it is not.
         """
