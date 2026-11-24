@@ -39,7 +39,7 @@ No create, delete, rotation, or bearer-value command is provided.
 
 ```bash
 cloudflare account-tokens list ACCOUNT_ID --limit 0
-cloudflare account-tokens list ACCOUNT_ID --filter 'name:eq:Issue Manager Queue' --properties id,name,status
+cloudflare account-tokens list ACCOUNT_ID --filter 'name:eq:My Queue Token' --properties id,name,status
 cloudflare account-tokens get TOKEN_ID ACCOUNT_ID --table
 cloudflare account-tokens permissions list ACCOUNT_ID --filter 'name:contains:Queues' --limit 0
 cloudflare account-tokens permissions get PERMISSION_ID ACCOUNT_ID --table
