@@ -1,7 +1,7 @@
 """Vues CLI: clipping campaigns, linked accounts, submissions and earnings.
 
-Command surface and JSON conventions mirror the `clipster` CLI so the Trawler
-clipping system can treat Vues as a campaign provider the same way. JSON on
+Command surface and JSON conventions mirror the `clipster` CLI so clipping
+automation can treat Vues as a campaign provider the same way. JSON on
 stdout is the contract; `--table` is a convenience view.
 """
 

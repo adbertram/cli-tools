@@ -2,7 +2,7 @@
 
 Vues (operated by evrgreen) clipping-campaign CLI. Clippers post short-form
 clips for brand campaigns and earn a CPM per 1,000 tracked views. This CLI gives
-the Trawler clipping system everything it needs to treat Vues as a campaign
+clipping automation everything it needs to treat Vues as a campaign
 provider, mirroring the `clipster` CLI's command surface and JSON shapes.
 
 ## DESCRIPTION
@@ -40,7 +40,7 @@ profile, until the refresh token itself stops working and `auth status` reports
 
 First time only: you need a Vues creator account. Sign up free at
 <https://vues.app/login> with Google or Apple and link your TikTok account
-(Trawler uses `@ata_clipper`) under **Accounts** in the Vues app. If the login
+under **Accounts** in the Vues app. If the login
 browser ends without a Vues account, `vues auth login` says so and points here.
 
 No reusable credential is ever stored in a `.env` file. The Supabase tokens are
