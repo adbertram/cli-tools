@@ -294,10 +294,6 @@ def gmail_list(
         results = service.users().messages().list(**query_params).execute()
         messages = results.get('messages', [])
 
-        if not messages:
-            print_json([])
-            return
-
         # Get details for each message
         detailed_messages = []
         for msg in messages:
@@ -490,10 +486,6 @@ def gmail_search(
         ).execute()
 
         messages = results.get('messages', [])
-
-        if not messages:
-            print_json([])
-            return
 
         # Get details for each message
         detailed_messages = []

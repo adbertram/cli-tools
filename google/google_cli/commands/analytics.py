@@ -173,10 +173,6 @@ def analytics_accounts(
         result = service.accountSummaries().list(pageSize=limit).execute()
         account_summaries = result.get("accountSummaries", [])
 
-        if not account_summaries:
-            print_error("No GA4 accounts found")
-            raise typer.Exit(1)
-
         formatted = _format_account_properties(account_summaries)
         # Filter on the full records, before --properties narrows them, so a
         # filter field the caller does not display still works.
@@ -212,10 +208,6 @@ def analytics_properties(
 
         result = service.accountSummaries().list(pageSize=limit).execute()
         formatted = _format_account_properties(result.get("accountSummaries", []))
-
-        if not formatted:
-            print_error("No GA4 properties found")
-            raise typer.Exit(1)
 
         formatted = _project_properties(formatted, properties)[:limit]
 
@@ -287,12 +279,8 @@ def analytics_report(
 
         results = _format_report_rows(response)
 
-        if not results:
-            print_error("No data returned for this report")
-            raise typer.Exit(1)
-
         if table:
-            cols = list(results[0].keys())
+            cols = list(results[0].keys()) if results else []
             print_table(results, cols, [c for c in cols])
         else:
             print_json(results)
@@ -334,10 +322,6 @@ def analytics_top_pages(
         ).execute()
 
         results = _format_report_rows(response)
-
-        if not results:
-            print_error("No page data found")
-            raise typer.Exit(1)
 
         if table:
             print_table(results, ["pagePath", "screenPageViews"], ["Page", "Views"])
@@ -382,10 +366,6 @@ def analytics_traffic(
 
         results = _format_report_rows(response)
 
-        if not results:
-            print_error("No traffic data found")
-            raise typer.Exit(1)
-
         if table:
             print_table(
                 results,
@@ -424,10 +404,6 @@ def analytics_realtime(
         ).execute()
 
         results = _format_report_rows(response)
-
-        if not results:
-            print_error("No real-time data available")
-            raise typer.Exit(1)
 
         if table:
             print_table(results, ["unifiedScreenName", "activeUsers"], ["Page/Screen", "Active Users"])

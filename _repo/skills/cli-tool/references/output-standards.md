@@ -265,6 +265,8 @@ def list_items(
 
 The `--properties/-p` option allows users to select which fields appear in the output, reducing response size and focusing on relevant data.
 
+**An empty result is success.** A `list` (or list-style `search`) command that matches nothing exits `0`, prints `[]` to stdout for JSON output (an empty table for `--table`), and writes nothing to stderr. Never `raise typer.Exit(1)`, `print_error("No ... found")`, or print nothing and `return` on an empty list. Run the normal formatting and output path with the empty list so JSON and `--table` both work. Exit non-zero only for real errors (API failure, invalid input, a specific requested ID not found).
+
 **Dot-notation for nested properties:**
 ```bash
 # Select top-level fields

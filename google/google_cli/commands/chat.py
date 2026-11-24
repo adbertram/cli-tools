@@ -105,9 +105,6 @@ def spaces_list(
 
         all_spaces = all_spaces[:limit]
 
-        if not all_spaces:
-            return
-
         # Default properties
         default_props = ["name", "displayName", "type", "spaceType"]
         props_to_include = properties if properties else default_props
@@ -229,9 +226,6 @@ def messages_list(
                 break
 
         all_messages = all_messages[:limit]
-
-        if not all_messages:
-            return
 
         # Default properties
         default_props = ["name", "sender", "createTime", "text"]

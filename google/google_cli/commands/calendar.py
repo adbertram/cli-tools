@@ -56,10 +56,6 @@ def calendar_list(
 
         events = events_result.get('items', [])
 
-        if not events:
-            print_error("No upcoming events found")
-            raise typer.Exit(1)
-
         # Default properties
         default_props = ['id', 'summary', 'start', 'end', 'location']
         props_to_include = properties if properties else default_props
@@ -160,10 +156,6 @@ def calendar_search(
 
         events = events_result.get('items', [])
 
-        if not events:
-            print_error("No events found")
-            raise typer.Exit(1)
-
         # Default properties
         default_props = ['id', 'summary', 'start', 'end', 'location']
         props_to_include = properties if properties else default_props
@@ -228,10 +220,6 @@ def calendar_today(
         ).execute()
 
         events = events_result.get('items', [])
-
-        if not events:
-            print_error("No events today")
-            raise typer.Exit(1)
 
         # Format events
         formatted_events = []
