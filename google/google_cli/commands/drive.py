@@ -4,6 +4,9 @@ COMMAND_CREDENTIALS = {
     "get": ["custom"],
     "search": ["custom"],
     "download": ["custom"],
+    "copy": ["custom"],
+    "create-folder": ["custom"],
+    "move": ["custom"],
 }
 
 import re
@@ -21,6 +24,19 @@ app = typer.Typer(help="Manage Google Drive files")
 # Google Drive IDs are URL-safe base64-ish tokens; anything else would build a
 # malformed ``q`` clause, so reject it before the API request is made.
 _FOLDER_ID_PATTERN = re.compile(r'^[A-Za-z0-9_-]{10,}$')
+
+_DRIVE_URL_ID_PATTERN = re.compile(r'(?:/(?:d|folders)/|[?&]id=)([A-Za-z0-9_-]+)')
+
+
+def parse_drive_id(file_id_or_url: str) -> str:
+    """Return the Drive file ID from a Drive/Docs URL, or the value itself when it is an ID."""
+    if file_id_or_url.startswith(("http://", "https://")):
+        match = _DRIVE_URL_ID_PATTERN.search(file_id_or_url)
+        if not match:
+            raise typer.BadParameter(f"Could not extract file ID from URL: {file_id_or_url}")
+        return match.group(1)
+    return file_id_or_url
+
 
 @app.command("list")
 @command
@@ -205,6 +221,112 @@ def drive_download(
 
         print_success(f"Downloaded to {output_path}")
         print_json({'file': file_name, 'path': output_path})
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("copy")
+@command
+def drive_copy(
+    file_id_or_url: str = typer.Argument(..., help="File ID or URL"),
+    name: str = typer.Option(..., "--name", help="Name of the copy"),
+    parent: Optional[str] = typer.Option(None, "--parent", help="Folder ID to place the copy in"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Copy a file."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_drive_service()
+
+        body = {"name": name}
+        if parent:
+            body["parents"] = [parent]
+        copied = service.files().copy(
+            fileId=parse_drive_id(file_id_or_url),
+            body=body,
+            fields="id, name, webViewLink, parents",
+            **DRIVE_ALL_DRIVES,
+        ).execute()
+
+        print_json({
+            "id": copied.get("id"),
+            "name": copied.get("name"),
+            "url": copied.get("webViewLink"),
+            "parents": copied.get("parents"),
+        })
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("create-folder")
+@command
+def drive_create_folder(
+    name: str = typer.Option(..., "--name", help="Folder name"),
+    parent: Optional[str] = typer.Option(None, "--parent", help="Folder ID to create the folder in"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Create a folder."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_drive_service()
+
+        body = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
+        if parent:
+            body["parents"] = [parent]
+        folder = service.files().create(
+            body=body,
+            fields="id, name, webViewLink",
+            **DRIVE_ALL_DRIVES,
+        ).execute()
+
+        print_json({
+            "id": folder.get("id"),
+            "name": folder.get("name"),
+            "url": folder.get("webViewLink"),
+        })
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("move")
+@command
+def drive_move(
+    file_id_or_url: str = typer.Argument(..., help="File ID or URL"),
+    to: str = typer.Option(..., "--to", help="Destination folder ID"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Move a file to a folder, removing it from all its current parents."""
+    try:
+        client = get_client(profile=profile)
+        service = client.get_drive_service()
+        file_id = parse_drive_id(file_id_or_url)
+
+        current = service.files().get(fileId=file_id, fields="id, parents", **DRIVE_ALL_DRIVES).execute()
+        moved = service.files().update(
+            fileId=file_id,
+            addParents=to,
+            removeParents=",".join(p for p in current.get("parents", []) if p != to),
+            fields="id, name, parents",
+            **DRIVE_ALL_DRIVES,
+        ).execute()
+
+        print_json({
+            "id": moved.get("id"),
+            "name": moved.get("name"),
+            "parents": moved.get("parents"),
+        })
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")

@@ -1,8 +1,8 @@
 {
   "tool": "google",
   "description": "CLI interface for Google Workspace APIs",
-  "discovered_at": "2026-11-17T21:36:09Z",
-  "total_commands": 111,
+  "discovered_at": "2026-11-24T17:17:20Z",
+  "total_commands": 115,
   "global_options": [
     {
       "name": "--version",
@@ -1981,6 +1981,63 @@
         }
       ],
       "commands": {
+        "copy": {
+          "help": "Copy a file.",
+          "usage_instructions": "Copy a Drive file. FILE_ID_OR_URL is required (positional); --name is the copy's name; --parent places it in a folder ID (omit to keep the source's parent). Works in Shared Drives. Prints JSON {id, name, url, parents}.",
+          "arguments": [
+            {
+              "name": "file_id_or_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "File ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Name of the copy"
+            },
+            {
+              "name": "--parent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Folder ID to place the copy in"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        },
+        "create-folder": {
+          "help": "Create a folder.",
+          "usage_instructions": "Create a Drive folder. --name is required; --parent is the containing folder ID (omit for My Drive root). Works in Shared Drives. Prints JSON {id, name, url}.",
+          "arguments": [],
+          "options": [
+            {
+              "name": "--name",
+              "type": "TEXT",
+              "required": true,
+              "help": "Folder name"
+            },
+            {
+              "name": "--parent",
+              "type": "TEXT",
+              "required": false,
+              "help": "Folder ID to create the folder in"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        },
         "download": {
           "help": "Download a file from Google Drive.",
           "usage_instructions": "Download a file from Drive. FILE_ID is required (positional). Use --output/-o for local path.",
@@ -2077,6 +2134,32 @@
               "required": false,
               "help": "Properties to include in output",
               "short": "-p"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        },
+        "move": {
+          "help": "Move a file to a folder, removing it from all its current parents.",
+          "usage_instructions": "Move a Drive file. FILE_ID_OR_URL is required (positional); --to is the destination folder ID. The file is removed from all its current parents and added to --to. Prints JSON {id, name, parents}.",
+          "arguments": [
+            {
+              "name": "file_id_or_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "File ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--to",
+              "type": "TEXT",
+              "required": true,
+              "help": "Destination folder ID"
             },
             {
               "name": "--profile",
@@ -3967,6 +4050,33 @@
             }
           ]
         },
+        "clear": {
+          "help": "Clear values from ranges (formatting is kept).",
+          "usage_instructions": "Clear values (formatting is kept). SPREADSHEET_ID_OR_URL is required (positional); --range/-r is required and may include a tab (Tab!A2:D). Repeat --range to clear several ranges in one call. One range prints {spreadsheetId, clearedRange}; several print {spreadsheetId, clearedRanges}.",
+          "arguments": [
+            {
+              "name": "spreadsheet_id_or_url",
+              "type": "TEXT",
+              "required": true,
+              "help": "Spreadsheet ID or URL"
+            }
+          ],
+          "options": [
+            {
+              "name": "--range",
+              "type": "TEXT",
+              "required": true,
+              "help": "A1 range to clear, may include Tab! (repeat for several ranges)",
+              "short": "-r"
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Profile name"
+            }
+          ]
+        },
         "create": {
           "help": "Create a new spreadsheet.",
           "arguments": [],
@@ -4058,7 +4168,7 @@
         },
         "read": {
           "help": "Read values from a spreadsheet.",
-          "usage_instructions": "Read cell data from a sheet. SPREADSHEET_ID is required (positional). Use --range/-r with an unqualified first-sheet range such as 'A1:D10', or run `google sheets get SPREADSHEET_ID` to inspect tab names before using a sheet-qualified range such as 'TabName!A1:D10'. Use --table/-t for formatted output.",
+          "usage_instructions": "Read cell data from a sheet. SPREADSHEET_ID is required (positional). Use --range/-r with an unqualified first-sheet range such as 'A1:D10', or run `google sheets get SPREADSHEET_ID` to inspect tab names before using a sheet-qualified range such as 'TabName!A1:D10'. Use --table/-t for formatted output. Add --formulas to return formula text for formula cells instead of computed values.",
           "arguments": [
             {
               "name": "spreadsheet_id_or_url",
@@ -4085,6 +4195,13 @@
               "takes_value": false
             },
             {
+              "name": "--formulas",
+              "type": "bool",
+              "required": false,
+              "help": "Return formula text for formula cells instead of computed values",
+              "takes_value": false
+            },
+            {
               "name": "--profile",
               "type": "TEXT",
               "required": false,
@@ -4099,9 +4216,10 @@
             "google sheets update <id> --range \"Sheet1!A1:C1\" --values \"John,Doe,john@example.com\"",
             "google sheets update <id> --range \"Sheet1!A1:B2\" --values \"Row1Col1,Row1Col2;Row2Col1,Row2Col2\"",
             "google sheets update <id> --range \"Sheet1!A1\" --values \"=SUM(B1:B10)\"",
-            "google sheets update <id> --range \"Sheet1!A1\" --values \"=SUM(B1:B10)\" --raw"
+            "google sheets update <id> --range \"Sheet1!A1\" --values \"=SUM(B1:B10)\" --raw",
+            "google sheets update <id> --range \"Sheet1!A1:B1\" --values-json '[[\"Intro, part 1\", \"Setup; install\"]]'"
           ],
-          "usage_instructions": "Update cells in a sheet. SPREADSHEET_ID is required (positional). Use --range/-r and --values/-v (JSON array of arrays).",
+          "usage_instructions": "Update cells in a sheet. SPREADSHEET_ID_OR_URL is required (positional); --range/-r is required. Provide exactly one of --values/-v (comma-separated cells, semicolon-separated rows) or --values-json (JSON array of rows, e.g. '[[\"Intro, part 1\", \"Setup; install\"]]') for cell values that contain commas or semicolons. Default input is USER_ENTERED (formulas parsed); --raw keeps text literal.",
           "arguments": [
             {
               "name": "spreadsheet_id_or_url",
@@ -4121,9 +4239,15 @@
             {
               "name": "--values",
               "type": "TEXT",
-              "required": true,
+              "required": false,
               "help": "Values to write (comma-separated for row, semicolon-separated for multiple rows)",
               "short": "-v"
+            },
+            {
+              "name": "--values-json",
+              "type": "TEXT",
+              "required": false,
+              "help": "Values to write as a JSON array of rows (e.g. '[[\"a, b\", \"c; d\"]]'); cells may contain commas and semicolons. Mutually exclusive with --values"
             },
             {
               "name": "--raw",

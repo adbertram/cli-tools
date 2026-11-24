@@ -179,6 +179,15 @@ google drive get <file-id>
 # Download a file
 google drive download <file-id>
 google drive download <file-id> --output ~/Downloads
+
+# Copy a file (optionally into a folder); prints id, name, url, parents
+google drive copy <file-id-or-url> --name "Copy of Report" --parent <folder-id>
+
+# Create a folder; prints id, name, url
+google drive create-folder --name "Reports" --parent <folder-id>
+
+# Move a file into a folder, removing it from all its current parents
+google drive move <file-id-or-url> --to <folder-id>
 ```
 
 ### Google Sheets
@@ -198,6 +207,16 @@ google sheets get <spreadsheet-id> | jq '.sheets[].properties.title'
 google sheets read <spreadsheet-id>
 google sheets read <spreadsheet-id> --range "A1:D10"
 google sheets read <spreadsheet-id>
+# Return formula text instead of computed values
+google sheets read <spreadsheet-id> --range "Tab!A1:D10" --formulas
+
+# Clear values only (formatting kept); repeat --range to clear several ranges
+google sheets clear <spreadsheet-id> --range "Tab!A2:D"
+google sheets clear <spreadsheet-id> --range "Tab!A2:D" --range "Other!B:B"
+
+# Update cells; use --values-json when a cell contains commas or semicolons
+google sheets update <spreadsheet-id> --range "Tab!A1:B1" --values "a,b"
+google sheets update <spreadsheet-id> --range "Tab!A1:B1" --values-json '[["Intro, part 1", "Setup; install"]]'
 
 # Create a new spreadsheet
 google sheets create --title "My Spreadsheet"

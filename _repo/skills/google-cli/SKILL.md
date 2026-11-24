@@ -35,6 +35,11 @@ google <service> <action> [arguments] [options]
 | Search Drive | `google drive search "quarterly report" --table` |
 | Read a Google Doc | `google docs read DOCUMENT_ID` |
 | Read a Google Sheet | `google sheets read SPREADSHEET_ID --range "A1:D10" --table` |
+| Read sheet formulas | `google sheets read SPREADSHEET_ID --range "Tab!A1:D10" --formulas` |
+| Clear sheet values | `google sheets clear SPREADSHEET_ID --range "Tab!A2:D"` |
+| Copy a Drive file | `google drive copy FILE_ID_OR_URL --name "New name" --parent FOLDER_ID` |
+| Create a Drive folder | `google drive create-folder --name "Name" --parent FOLDER_ID` |
+| Move a Drive file | `google drive move FILE_ID_OR_URL --to FOLDER_ID` |
 </quick_start>
 
 <essential_principles>
@@ -49,10 +54,10 @@ This file contains complete command syntax, all arguments, all options, and usag
 - **cloud** -- Google Cloud resources (projects, credentials)
 - **contacts** -- Google Contacts through the People API (list, get)
 - **docs** -- Google Docs (list, get, read, create, export, update, tables)
-- **drive** -- Google Drive files (list, get, search, download)
+- **drive** -- Google Drive files (list, get, search, download, copy, create-folder, move)
 - **gmail** -- Gmail messages (list, get, read, search, send, archive, trash, draft, draft-get, draft-delete, send-draft, reply, reply-all, labels, filters, download-attachment)
 - **searchconsole** -- Search Console (index, sites, urls)
-- **sheets** -- Google Sheets (list, get, read, create, append, update)
+- **sheets** -- Google Sheets (list, get, read, create, append, update, clear)
 </principle>
 
 <principle name="Authentication Profile Resolution">

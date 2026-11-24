@@ -6,8 +6,10 @@ COMMAND_CREDENTIALS = {
     "create": ["custom"],
     "append": ["custom"],
     "update": ["custom"],
+    "clear": ["custom"],
 }
 
+import json
 import re
 import typer
 from typing import Optional
@@ -132,6 +134,7 @@ def sheets_read(
     spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
     range_name: str = typer.Option("A:Z", "--range", "-r", help="Range to read (e.g., A1:D10 or TabName!A1:D10)"),
     table: bool = typer.Option(False, "--table", "-t", help="Display as table"),
+    formulas: bool = typer.Option(False, "--formulas", help="Return formula text for formula cells instead of computed values"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
     """Read values from a spreadsheet."""
@@ -140,9 +143,11 @@ def sheets_read(
         client = get_client(profile=profile)
         service = client.get_sheets_service()
 
+        get_kwargs = {"valueRenderOption": "FORMULA"} if formulas else {}
         result = service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
-            range=range_name
+            range=range_name,
+            **get_kwargs,
         ).execute()
 
         values = result.get('values', [])
@@ -249,7 +254,8 @@ def sheets_append(
 def sheets_update(
     spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
     range_name: str = typer.Option(..., "--range", "-r", help="Cell or range to update (e.g., Sheet1!A1, Sheet1!A1:C3)"),
-    values: str = typer.Option(..., "--values", "-v", help="Values to write (comma-separated for row, semicolon-separated for multiple rows)"),
+    values: Optional[str] = typer.Option(None, "--values", "-v", help="Values to write (comma-separated for row, semicolon-separated for multiple rows)"),
+    values_json: Optional[str] = typer.Option(None, "--values-json", help="Values to write as a JSON array of rows (e.g. '[[\"a, b\", \"c; d\"]]'); cells may contain commas and semicolons. Mutually exclusive with --values"),
     raw: bool = typer.Option(False, "--raw", help="Use RAW input (default is USER_ENTERED which parses formulas/numbers)"),
     profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
 ):
@@ -270,18 +276,27 @@ def sheets_update(
 
         # Update with raw text (won't parse formulas)
         google sheets update <id> --range "Sheet1!A1" --values "=SUM(B1:B10)" --raw
+
+        # Cell values containing commas or semicolons (JSON array of rows)
+        google sheets update <id> --range "Sheet1!A1:B1" --values-json '[["Intro, part 1", "Setup; install"]]'
     """
+    if (values is None) == (values_json is None):
+        raise typer.BadParameter("Provide exactly one of --values or --values-json")
+    if values_json is not None:
+        try:
+            parsed_values = json.loads(values_json)
+        except json.JSONDecodeError as e:
+            raise typer.BadParameter(f"--values-json is not valid JSON: {e}")
+        if not isinstance(parsed_values, list) or not all(isinstance(r, list) for r in parsed_values):
+            raise typer.BadParameter("--values-json must be a JSON array of rows (an array of arrays)")
     try:
         spreadsheet_id = parse_spreadsheet_id(spreadsheet_id_or_url)
         client = get_client(profile=profile)
         service = client.get_sheets_service()
 
-        # Parse values: semicolons separate rows, commas separate columns
-        rows = values.split(';')
-        parsed_values = []
-        for row in rows:
-            row_values = [v.strip() for v in row.split(',')]
-            parsed_values.append(row_values)
+        if values is not None:
+            # Parse values: semicolons separate rows, commas separate columns
+            parsed_values = [[v.strip() for v in row.split(',')] for row in values.split(';')]
 
         body = {
             'values': parsed_values
@@ -304,6 +319,35 @@ def sheets_update(
             'updatedColumns': result.get('updatedColumns'),
             'updatedCells': result.get('updatedCells')
         })
+
+    except HttpError as e:
+        print_error(f"HTTP error: {e}")
+        raise typer.Exit(1)
+    except Exception as e:
+        raise typer.Exit(handle_error(e))
+
+
+@app.command("clear")
+@command
+def sheets_clear(
+    spreadsheet_id_or_url: str = typer.Argument(..., help="Spreadsheet ID or URL"),
+    range_names: list[str] = typer.Option(..., "--range", "-r", help="A1 range to clear, may include Tab! (repeat for several ranges)"),
+    profile: Optional[str] = typer.Option(None, "--profile", help="Profile name"),
+):
+    """Clear values from ranges (formatting is kept)."""
+    try:
+        spreadsheet_id = parse_spreadsheet_id(spreadsheet_id_or_url)
+        client = get_client(profile=profile)
+        values = client.get_sheets_service().spreadsheets().values()
+
+        if len(range_names) == 1:
+            result = values.clear(spreadsheetId=spreadsheet_id, range=range_names[0], body={}).execute()
+            output = {"spreadsheetId": result.get("spreadsheetId"), "clearedRange": result.get("clearedRange")}
+        else:
+            result = values.batchClear(spreadsheetId=spreadsheet_id, body={"ranges": range_names}).execute()
+            output = {"spreadsheetId": result.get("spreadsheetId"), "clearedRanges": result.get("clearedRanges")}
+
+        print_json(output)
 
     except HttpError as e:
         print_error(f"HTTP error: {e}")
