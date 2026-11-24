@@ -832,7 +832,7 @@ class CodexSessionsCliTests(unittest.TestCase):
             )
 
     def test_sessions_list_filter_runs_before_limit(self):
-        # agent-issues #584: --limit was applied before --filter, so an exact
+        # --limit was applied before --filter, so an exact
         # id filter with --limit 1 returned [] for any non-newest session.
         with tempfile.TemporaryDirectory() as tmp:
             codex_home = Path(tmp) / ".codex"

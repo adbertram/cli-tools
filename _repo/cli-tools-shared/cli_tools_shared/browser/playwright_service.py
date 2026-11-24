@@ -416,8 +416,7 @@ class PlaywrightBrowserService:
 
         ``--restore-last-session`` keeps session-only cookies across launches
         but also reopens every tab from the last run; on the shared profile
-        that reloaded other CLIs' login pages on every launch
-        (agent-issues#530). One ``about:blank`` tab keeps the restore.
+        that reloaded other CLIs' login pages on every launch. One ``about:blank`` tab keeps the restore.
         """
         for other in list(context.pages):
             if other is not page:

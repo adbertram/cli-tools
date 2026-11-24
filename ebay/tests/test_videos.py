@@ -21,7 +21,7 @@ from ebay_cli.video import (
 
 MP4_CONTAINER = "mov,mp4,m4a,3gp,3g2,mj2"
 
-# ffprobe stream layout of a real iPhone .mov (agent-issues #1381): hevc video,
+# ffprobe stream layout of a real iPhone .mov: hevc video,
 # apple_apac spatial audio, AAC audio, then a data track.
 IPHONE_STREAMS = [
     {"index": 0, "codec_name": "hevc", "codec_type": "video"},

@@ -1,7 +1,7 @@
 """Regression tests for `sessions list --filter` ordering and pruning.
 
 `--filter` must run against the whole result set before `--limit` caps it
-(agent-issues #584: `--filter id:eq:X --limit 1` returned [] whenever X was
+(`--filter id:eq:X --limit 1` returned [] whenever X was
 not the newest session), and an exact `id:eq:` filter must open only the
 named transcript files instead of parsing every session on disk.
 """

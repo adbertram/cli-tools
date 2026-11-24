@@ -434,7 +434,7 @@ class BrowserHarnessService:
         ``--restore-last-session`` is required to keep session-only cookies
         across launches, but it also reopens every tab from the last run. On
         the shared profile that meant each CLI's launch reloaded other CLIs'
-        login/logout pages (agent-issues#530). A single ``about:blank`` tab
+        login/logout pages. A single ``about:blank`` tab
         still counts as a restored session, so session cookies survive.
         """
         helpers = self._bh.h

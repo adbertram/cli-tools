@@ -4,7 +4,7 @@ The root README documents this script as the main way to install a CLI
 (``_repo/_scripts/install-cli-tool.sh <tool-folder>``). It runs
 ``uv tool install --force --editable`` directly and, unlike
 ``_repo/skills/cli-tool/scripts/install-cli-tool.sh``, had no check for a
-linked git worktree -- so running it from an Issue Manager repair worktree
+linked git worktree -- so running it from one
 still installed an editable ``cli-tools-shared`` pointing at the worktree
 into the global ``~/.local/share/uv/tools`` registry. That is exactly the
 failure that broke the production bricklink and garrul CLIs: both declare

@@ -288,7 +288,6 @@ authentication; local IndexedDB drafts and staged media stay on their source hos
 Caption clearing uses the existing framework-input helper's native select-all
 command, then whole-string native insertion to avoid TikTok's per-key hashtag
 autocomplete. Saved caption and controls are checked after rendering and autosave.
-Shared native-input and close repairs are tracked in agent-issues #1156 and #1154.
 
 ## Commands
 

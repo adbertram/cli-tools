@@ -591,7 +591,7 @@ def test_should_emit_distinct_active_item_ids_at_list_command_boundary(
 
 
 def test_should_reject_sku_when_published_offer_and_active_listing_differ(monkeypatch):
-    # Agent-issues #226: the same SKU on an Inventory API offer and on a
+    # The same SKU on an Inventory API offer and on a
     # different Trading API active listing is two records. Preferring the offer
     # silently (the old behaviour) is what let `update` write to the wrong one.
     client = MagicMock()
@@ -702,7 +702,7 @@ def test_should_keep_sold_history_separate_from_current_draft(monkeypatch):
     ]
 
 
-# --- listing_from_offer pricing (agent-issues #610) ---------------------------
+# --- listing_from_offer pricing ---------------------------
 
 from ebay_cli.models.listing import Listing, listing_from_offer
 
@@ -765,7 +765,7 @@ def test_fixed_price_reports_price_and_no_bin_price():
     assert listing.bin_price is None
 
 
-# --- SKU collisions across the two APIs, and legacy writes (agent-issues #226) --
+# --- SKU collisions across the two APIs, and legacy writes --
 
 # The report's records: one SKU naming an orphaned, unpublished Inventory API
 # offer (item 188900455705) and a live legacy Trading API listing (item

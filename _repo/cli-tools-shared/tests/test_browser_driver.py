@@ -2168,7 +2168,7 @@ def test_locator_press_types_each_printable_character_exactly_once(monkeypatch):
 
 
 def test_request_browser_close_leaves_single_blank_tab_before_browser_close():
-    """Restored tabs from other CLIs must not reopen on the next launch (agent-issues#530)."""
+    """Restored tabs from other CLIs must not reopen on the next launch."""
     service = BrowserHarnessService("sample-browser-session")
     service._opened = True
     events: list[str] = []

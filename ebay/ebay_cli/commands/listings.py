@@ -977,7 +977,7 @@ def _reject_cross_api_sku_collision(
     inside the Inventory API's own results. A SKU whose custom label also carries
     a legacy Trading API active listing is a second record: ``update`` would
     write to the Inventory offer and report success while the live listing kept
-    its old values (agent-issues #226). A published offer and its own listing
+    its old values. A published offer and its own listing
     share the item ID, so only differing item IDs count as a collision.
     """
     offer_item_id = offer_listing.item_id or ""
@@ -2197,7 +2197,7 @@ def _revise_legacy_listing(
 ) -> bool:
     """Revise a legacy Trading API listing, which has no Inventory API offer.
 
-    Such listings were read-only through this CLI before (agent-issues #226):
+    Such listings were read-only through this CLI before:
     they carry no inventory item and no offer for the Inventory paths to write,
     so ReviseFixedPriceItem is their only write path.
 

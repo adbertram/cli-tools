@@ -11,7 +11,7 @@ from cli_tools_shared.filters import (
 import pytest
 
 
-# exact_session_ids: consolidated from the three sessions CLIs (agent-issues #588).
+# exact_session_ids: consolidated from the three sessions CLIs.
 def test_exact_session_ids_returns_none_without_filters():
     assert exact_session_ids(None) is None
     assert exact_session_ids([]) is None

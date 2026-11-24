@@ -45,7 +45,7 @@ def test_node_test_preserves_case_sensitive_resource_and_operation(monkeypatch):
             operation="findPullRequest",
             timeout=1,
             no_cleanup=False,
-            params='{"owner":"adbertram","repo":"issue-manager","head":"feature"}',
+            params='{"owner":"adbertram","repo":"example-repo","head":"feature"}',
             credentials=None,
             node_type=None,
             username=None,
@@ -60,6 +60,6 @@ def test_node_test_preserves_case_sensitive_resource_and_operation(monkeypatch):
         "resource": "pullRequest",
         "operation": "findPullRequest",
         "owner": "adbertram",
-        "repo": "issue-manager",
+        "repo": "example-repo",
         "head": "feature",
     }

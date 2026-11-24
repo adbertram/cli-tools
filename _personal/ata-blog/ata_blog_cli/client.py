@@ -256,7 +256,7 @@ def _static_corpus_sha256() -> str:
     these roots -- its markdown generation targets ``dist/`` -- so when this
     membership drifts from the JS side the staged hash can never equal the
     in-transaction build manifest's ``inputs.corpus_sha256`` and the static leg
-    aborts (agent-issues#85). ``test_staged_corpus_hash_matches_release_manifest_hash_corpus``
+    aborts. ``test_staged_corpus_hash_matches_release_manifest_hash_corpus``
     cross-checks the real JS hash against this function on one hermetic staged
     corpus so a future drift fails the suite instead of a live publish.
     """
@@ -1745,8 +1745,7 @@ class AtaBlogClient:
             raise ClientError(
                 f"No media inventory attachment publishes {key}. The static "
                 "mirror cannot enumerate its size variants. An image added "
-                "after the inventory was captured has no record yet: see "
-                "adbertram/agent-issues#343."
+                "after the inventory was captured has no record yet."
             )
         if len(matches) > 1:
             raise ClientError(

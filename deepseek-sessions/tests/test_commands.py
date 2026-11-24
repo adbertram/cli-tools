@@ -130,7 +130,7 @@ OLDEST_ROOT_SESSION = "session-11111111-1111-4111-8111-111111111111"
 
 
 def test_id_filter_with_limit_one_returns_non_newest_session(cli):
-    # agent-issues #584: the compacted session is newest, so a pre-fix
+    # The compacted session is newest, so a pre-fix
     # limit-before-filter run returned [] for this older id.
     payload = json.loads(
         invoke([

@@ -32,7 +32,7 @@ def _write_tool(root: Path, folder: str, scripts: dict[str, str], description: s
 
 
 def test_canonical_command_prefers_folder_name_match():
-    # Regression for agent-issues #689: a tool with more than one console-script
+    # Regression: a tool with more than one console-script
     # alias (gemini ships gemini and gemini-api) must not crash and must pick the
     # alias matching the folder name.
     scripts = {"gemini": "gemini_cli.main:app", "gemini-api": "gemini_cli.main:app"}
@@ -51,7 +51,7 @@ def test_canonical_command_rejects_empty_scripts():
 
 
 def test_read_tool_metadata_handles_multi_alias_tool(tmp_path):
-    # Regression for agent-issues #689: read_tool_metadata previously raised
+    # Regression: read_tool_metadata previously raised
     # "must define exactly one project script" for gemini's two aliases.
     _write_tool(
         tmp_path,

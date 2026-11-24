@@ -109,7 +109,7 @@ def test_playwright_service_uses_real_keychain_like_cdp_backend(tmp_path, monkey
     ``--password-store=basic``. The CDP backend launches plain Chrome, which
     uses the real macOS "Chrome Safe Storage" key. Both backends open the one
     shared user-data-dir, so each purged the other's cookies as undecryptable
-    and every cross-backend CLI run signed the other CLIs out (agent-issues#530).
+    and every cross-backend CLI run signed the other CLIs out.
     """
     from cli_tools_shared.browser import playwright_service as module
     from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
@@ -376,7 +376,7 @@ class _RecordingPage:
 
 
 def test_playwright_service_close_leaves_single_blank_tab_for_next_restore(tmp_path, monkeypatch):
-    """Other tools' restored tabs must not reopen on the next launch (agent-issues#530)."""
+    """Other tools' restored tabs must not reopen on the next launch."""
     from cli_tools_shared.browser.playwright_service import PlaywrightBrowserService
 
     events = []

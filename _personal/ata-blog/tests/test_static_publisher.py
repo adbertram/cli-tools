@@ -606,7 +606,7 @@ def test_active_staged_journal_resumes_with_manifest_corpus_hash(publisher):
 def test_staged_corpus_hash_matches_release_manifest_hash_corpus(publisher, tmp_path):
     """The staged corpus hash must byte-match the build's own hashCorpus().
 
-    Regression guard for agent-issues#85: the publisher's
+    Regression guard: the publisher's
     `_static_corpus_sha256` once omitted several data files that
     release_manifest.mjs's `hashCorpus()` includes, so the staged corpus hash
     could never equal the build manifest's `inputs.corpus_sha256` and the
@@ -1096,7 +1096,7 @@ def test_retry_completes_the_inline_half_of_a_pre_inline_recorded_media_receipt(
 ):
     """A retry migrates a pre-`inline` record instead of failing closed on it.
 
-    Regression guard for agent-issues#343, second defect: the recorded-media
+    Regression guard: the recorded-media
     validation required `media.inline` to be a list, so every transaction
     runtime written before inline mirroring existed aborted the retry with
     "Corrupt publisher runtime: recorded media receipt is invalid" instead of

@@ -519,7 +519,7 @@ def test_login_bootstraps_default_profile_when_none_exist(tmp_path, monkeypatch)
 
 
 def test_login_bootstrap_keeps_declared_root_config_field_out_of_profile_env(tmp_path, monkeypatch):
-    """agent-issues #436: a tool-declared ``ROOT_CONFIG_FIELDS`` name must land
+    """A tool-declared ``ROOT_CONFIG_FIELDS`` name must land
     in the tool's root config ``.env``, never in the profile ``.env`` that the
     login bootstrap creates.
 

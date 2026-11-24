@@ -1,6 +1,6 @@
 """Tests for photos-app album name matching and the albums-move flow.
 
-Regression coverage for agent-issues #611:
+Regression coverage:
 - Album titles can carry incidental leading/trailing whitespace that the
   list/get commands do not surface. _get_album_pk previously trimmed only the
   stored side of the comparison, so no caller input could satisfy both the

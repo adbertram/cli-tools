@@ -1,4 +1,4 @@
-"""Tests for the monarch auth login MFA flow (agent-issues #669).
+"""Tests for the monarch auth login MFA flow.
 
 Adam wants to type a one-time MFA code interactively at login time without
 storing a persistent TOTP secret. The handler must:
