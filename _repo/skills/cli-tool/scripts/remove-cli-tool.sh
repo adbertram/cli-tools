@@ -27,6 +27,18 @@ README_PATH="$CLI_TOOLS_DIR/README.md"
 DOCS_PATH="$CLI_TOOLS_DIR/_repo/docs/cli_tools.md"
 GITIGNORE_PATH="$CLI_TOOLS_DIR/.gitignore"
 SYMLINK_PATH="$HOME/.local/bin/$TOOL_NAME"
+PROFILE_DIR="$HOME/.local/share/cli-tools/$TOOL_NAME"
+STATE_DIR="$HOME/.local/share/$TOOL_NAME"
+
+# The profile and state folders are derived from the tool name, so refuse a name
+# that could resolve outside them (path separators, "." / "..", leading dash) or
+# that would make the state folder the shared "cli-tools" parent of every profile.
+case "$TOOL_NAME" in
+    */* | . | .. | -* | cli-tools )
+        echo "Error: invalid tool name '$TOOL_NAME' (path-like names are refused)" >&2
+        exit 1
+        ;;
+esac
 
 # Resolve the standard location first, then a personal CLI under _personal/.
 IS_PERSONAL_TOOL=false
@@ -40,7 +52,7 @@ else
     exit 1
 fi
 
-# The harness-config and README rows are stripped with python3, so refuse before
+# The harness-config, README and docs rows are stripped with python3, so refuse before
 # deleting anything when it is unavailable.
 PYTHON_BIN="$(command -v python3 || :)"
 if [ -z "$PYTHON_BIN" ]; then
@@ -61,6 +73,13 @@ if [ -d "$SKILL_DIR" ]; then
 else
     echo "  Skill: (not found)"
 fi
+for leftover in "$PROFILE_DIR" "$STATE_DIR"; do
+    if [ -d "$leftover" ]; then
+        echo "  Data folder: $leftover"
+    else
+        echo "  Data folder: (not found) $leftover"
+    fi
+done
 
 # Remove directory
 rm -rf "$TOOL_DIR"
@@ -96,16 +115,27 @@ if [ -d "$SKILL_DIR" ]; then
     echo "Removed: $SKILL_DIR"
 fi
 
+# Remove the tool's profile folder (.env, browser profile, auth state) and its
+# state folder (databases, downloaded data). Both paths come from the tool name.
+for leftover in "$PROFILE_DIR" "$STATE_DIR"; do
+    if [ -d "$leftover" ]; then
+        rm -rf "$leftover"
+        echo "Removed: $leftover"
+    fi
+done
+
 # Strip the tool's registration rows: its [cli_specific.<tool>] section (plus any
-# nested sub-tables) in the harness test config, and its row in the root README.
-"$PYTHON_BIN" - "$TEST_CONFIG" "$README_PATH" "$TOOL_NAME" <<'PY'
+# nested sub-tables) in the harness test config, and its rows in the root README
+# and in docs/cli_tools.md.
+"$PYTHON_BIN" - "$TEST_CONFIG" "$README_PATH" "$DOCS_PATH" "$TOOL_NAME" <<'PY'
 import re
 import sys
 from pathlib import Path
 
 config_path = Path(sys.argv[1])
 readme_path = Path(sys.argv[2])
-tool = sys.argv[3]
+docs_path = Path(sys.argv[3])
+tool = sys.argv[4]
 section = f"cli_specific.{tool}"
 
 if config_path.is_file():
@@ -142,10 +172,22 @@ if readme_path.is_file():
         print(f"Unchanged: no README.md table row for '{tool}'")
 else:
     print(f"Unchanged: {readme_path} not found")
+
+docs_row = re.compile(rf"^\|\s*`{re.escape(tool)}`\s*\|")
+if docs_path.is_file():
+    lines = docs_path.read_text().splitlines(keepends=True)
+    kept = [line for line in lines if not docs_row.match(line)]
+    if len(kept) != len(lines):
+        docs_path.write_text("".join(kept))
+        print(f"Removed: cli_tools.md table row for '{tool}'")
+    else:
+        print(f"Unchanged: no cli_tools.md table row for '{tool}'")
+else:
+    print(f"Unchanged: {docs_path} not found")
 PY
 
 # Uninstall from uv tools. A tool that is not installed (uv exits non-zero) must
 # not strand the rest of the removal, so this step is best-effort.
 uv tool uninstall "${TOOL_NAME}-cli" 2>/dev/null || true
 
-echo "Done. Remember to update $DOCS_PATH manually."
+echo "Done."

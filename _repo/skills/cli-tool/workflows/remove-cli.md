@@ -25,7 +25,9 @@ Present the user with what will be removed:
 - Service skill: `<cli-tools-root>/_repo/skills/<name>-cli/` (if exists)
 - Harness config section: `[cli_specific.<name>]` in `<cli-tools-root>/_repo/skills/cli-tool/tests/cli_test_config.toml` (if exists)
 - README row: the `<name>` row in `<cli-tools-root>/README.md` (if exists)
-- cli_tools.md table entry
+- Profile folder: `~/.local/share/cli-tools/<name>/` (`.env`, browser profile, auth state), if it exists
+- State folder: `~/.local/share/<name>/` (databases, downloaded data), if it exists
+- cli_tools.md table row: the `<name>` row in `<cli-tools-root>/_repo/docs/cli_tools.md` (if it exists)
 
 **Use AskUserQuestion** to confirm:
 - Question: "The following will be permanently removed for '<name>'. Proceed?"
@@ -43,15 +45,14 @@ Present the user with what will be removed:
 
 The script removes the tool directory, the `~/.local/bin/<name>` symlink, the
 `_repo/skills/<name>-cli/` service skill, the `[cli_specific.<name>]` section in
-`_repo/skills/cli-tool/tests/cli_test_config.toml`, and the tool's row in the root
-`README.md`. It also uninstalls the `uv` tool when that tool is installed. Run it
-with `--help` for its usage line.
+`_repo/skills/cli-tool/tests/cli_test_config.toml`, the tool's row in the root
+`README.md`, and the tool's row in `_repo/docs/cli_tools.md`. It also deletes the
+profile folder `~/.local/share/cli-tools/<name>` and the state folder
+`~/.local/share/<name>`, and uninstalls the `uv` tool when that tool is installed.
+The script refuses empty or path-like names (and `cli-tools`) before deleting
+anything. Run it with `--help` for its usage line.
 
-## Step 4: Update cli_tools.md
-
-Edit `<cli-tools-root>/_repo/docs/cli_tools.md` to remove the table row for `<name>` from the CLI tools table. The script prints this exact path when it finishes.
-
-## Step 5: Verify Removal
+## Step 4: Verify Removal
 
 Confirm:
 ```bash
@@ -66,6 +67,10 @@ ls -d <cli-tools-root>/_repo/skills/<name>-cli 2>&1
 grep -n '\[cli_specific\.<name>\]' <cli-tools-root>/_repo/skills/cli-tool/tests/cli_test_config.toml
 # README row should be gone (no output)
 grep -n '\[`<name>`\](<name>/)' <cli-tools-root>/README.md
+# cli_tools.md row should be gone (no output)
+grep -n '^| `<name>` |' <cli-tools-root>/_repo/docs/cli_tools.md
+# Profile and state folders should be gone
+ls -d ~/.local/share/cli-tools/<name> ~/.local/share/<name> 2>&1
 ```
 
 Report removal status to user.
@@ -79,6 +84,7 @@ Removal is complete when:
 - [ ] Service skill `_repo/skills/<name>-cli/` deleted
 - [ ] `[cli_specific.<name>]` section removed from `_repo/skills/cli-tool/tests/cli_test_config.toml`
 - [ ] `<name>` row removed from the root `README.md`
-- [ ] cli_tools.md table entry removed
+- [ ] `<name>` row removed from `_repo/docs/cli_tools.md`
+- [ ] Profile folder `~/.local/share/cli-tools/<name>` and state folder `~/.local/share/<name>` deleted
 - [ ] Verification confirms all artifacts gone
 </success_criteria>

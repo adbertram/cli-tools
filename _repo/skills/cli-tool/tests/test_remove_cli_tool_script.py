@@ -1,5 +1,9 @@
 """Removal completeness contract for ``remove-cli-tool.sh``.
 
+The script also used to leave the tool's profile folder
+(``~/.local/share/cli-tools/<name>``), its state folder (``~/.local/share/<name>``)
+and its ``_repo/docs/cli_tools.md`` row behind; it now removes all three.
+
 The script used to report success while leaving three registration surfaces
 behind -- the tool's own service skill (``_repo/skills/<name>-cli/``), its
 ``[cli_specific.<name>]`` section in
@@ -58,6 +62,13 @@ README_TEMPLATE = """| Tool | Command | What it does |
 | [`zeta`](zeta/) | `zeta` | Another tool that stays. |
 """
 
+DOCS_TEMPLATE = """| CLI | Description |
+|---|---|
+| `{other}` | The tool that stays. |
+| `{tool}` | The tool under removal. |
+| `{tool}-extra` | A different tool whose name starts with the removed name. |
+"""
+
 FAKE_UV = """#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$UV_LOG"
 if [ "${1:-} ${2:-}" = "tool uninstall" ]; then
@@ -102,9 +113,15 @@ def _build_fixture_repo(tmp_path: Path, *, personal: bool = False) -> tuple[Path
     (repo_root / "README.md").write_text(
         README_TEMPLATE.format(tool=TOOL, other=OTHER_TOOL), encoding="utf-8"
     )
-    (docs_dir / "cli_tools.md").write_text(
-        f"| `{TOOL}` | Docs row. |\n| `{OTHER_TOOL}` | Docs row. |\n", encoding="utf-8"
-    )
+    (docs_dir / "cli_tools.md").write_text(DOCS_TEMPLATE.format(tool=TOOL, other=OTHER_TOOL), encoding="utf-8")
+
+    profile_dir = home_dir / ".local" / "share" / "cli-tools" / TOOL
+    state_dir = home_dir / ".local" / "share" / TOOL
+    other_profile_dir = home_dir / ".local" / "share" / "cli-tools" / OTHER_TOOL
+    other_state_dir = home_dir / ".local" / "share" / OTHER_TOOL
+    for directory in (profile_dir, state_dir, other_profile_dir, other_state_dir):
+        directory.mkdir(parents=True)
+        (directory / "data.txt").write_text("data\n", encoding="utf-8")
 
     launcher = bin_dir / TOOL
     launcher.symlink_to(home_dir / ".local" / "share" / "uv" / "tools" / f"{TOOL}-cli" / "bin" / TOOL)
@@ -183,8 +200,10 @@ def test_remover_should_delete_every_registration_surface(tmp_path):
     assert config["cli_specific"][OTHER_TOOL] == {"list_commands": ["things list"]}
     assert config["exclusions"]["no_auth_clis"] == [OTHER_TOOL]
 
-    assert str(repo_root / "_repo" / "docs" / "cli_tools.md") in result.stdout
-    assert str(repo_root / "docs" / "cli_tools.md") not in result.stdout
+    docs_text = (repo_root / "_repo" / "docs" / "cli_tools.md").read_text(encoding="utf-8")
+    assert f"| `{TOOL}` |" not in docs_text
+    assert f"| `{OTHER_TOOL}` |" in docs_text
+    assert f"| `{TOOL}-extra` |" in docs_text
 
     uv_log = (repo_root / "uv.log").read_text(encoding="utf-8")
     assert f"tool uninstall {TOOL}-cli" in uv_log
@@ -229,7 +248,7 @@ def test_remover_should_finish_when_the_uv_tool_is_not_installed(tmp_path):
         repo_root / "_repo" / "skills" / "cli-tool" / "tests" / "cli_test_config.toml"
     ).read_text(encoding="utf-8")
     assert not [line for line in (repo_root / "README.md").read_text(encoding="utf-8").splitlines() if f"[`{TOOL}`]({TOOL}/)" in line]
-    assert str(repo_root / "_repo" / "docs" / "cli_tools.md") in result.stdout
+    assert f"| `{TOOL}` |" not in (repo_root / "_repo" / "docs" / "cli_tools.md").read_text(encoding="utf-8")
 
 
 def test_remover_should_refuse_an_unknown_tool_without_touching_anything(tmp_path):
@@ -264,10 +283,16 @@ def test_remover_should_report_absent_skill_and_config_and_readme_row(tmp_path):
         f"[cli_specific.{OTHER_TOOL}]\nlist_commands = [\"things list\"]\n",
         encoding="utf-8",
     )
+    (repo_root / "_repo" / "docs" / "cli_tools.md").write_text(
+        f"| CLI | Description |\n|---|---|\n| `{OTHER_TOOL}` | The tool that stays. |\n", encoding="utf-8"
+    )
+    shutil.rmtree(home_dir / ".local" / "share" / "cli-tools" / TOOL)
+    shutil.rmtree(home_dir / ".local" / "share" / TOOL)
     readme_before = (repo_root / "README.md").read_text(encoding="utf-8")
     config_before = (
         repo_root / "_repo" / "skills" / "cli-tool" / "tests" / "cli_test_config.toml"
     ).read_text(encoding="utf-8")
+    docs_before = (repo_root / "_repo" / "docs" / "cli_tools.md").read_text(encoding="utf-8")
 
     result = _run_remover(repo_root, home_dir, TOOL)
 
@@ -280,4 +305,62 @@ def test_remover_should_report_absent_skill_and_config_and_readme_row(tmp_path):
     assert (
         repo_root / "_repo" / "skills" / "cli-tool" / "tests" / "cli_test_config.toml"
     ).read_text(encoding="utf-8") == config_before
-    assert str(repo_root / "_repo" / "docs" / "cli_tools.md") in result.stdout
+    assert docs_before == (repo_root / "_repo" / "docs" / "cli_tools.md").read_text(encoding="utf-8")
+    assert f"Unchanged: no cli_tools.md table row for '{TOOL}'" in result.stdout
+    assert f"Data folder: (not found) {home_dir / '.local' / 'share' / TOOL}" in result.stdout
+
+
+def test_remover_should_delete_profile_and_state_folders_of_only_the_removed_tool(tmp_path):
+    repo_root, home_dir = _build_fixture_repo(tmp_path)
+    share = home_dir / ".local" / "share"
+
+    result = _run_remover(repo_root, home_dir, TOOL)
+
+    assert result.returncode == 0, result.stderr
+    assert not (share / "cli-tools" / TOOL).exists()
+    assert not (share / TOOL).exists()
+    assert (share / "cli-tools" / OTHER_TOOL / "data.txt").is_file()
+    assert (share / OTHER_TOOL / "data.txt").is_file()
+    assert f"Removed: {share / 'cli-tools' / TOOL}" in result.stdout
+    assert f"Removed: {share / TOOL}" in result.stdout
+
+
+def test_remover_should_delete_data_folders_of_a_personal_cli(tmp_path):
+    repo_root, home_dir = _build_fixture_repo(tmp_path, personal=True)
+    share = home_dir / ".local" / "share"
+
+    result = _run_remover(repo_root, home_dir, TOOL)
+
+    assert result.returncode == 0, result.stderr
+    assert not (share / "cli-tools" / TOOL).exists()
+    assert not (share / TOOL).exists()
+    assert (share / "cli-tools" / OTHER_TOOL).is_dir()
+
+
+def test_remover_should_delete_only_the_exact_docs_row(tmp_path):
+    repo_root, home_dir = _build_fixture_repo(tmp_path)
+
+    result = _run_remover(repo_root, home_dir, TOOL)
+
+    assert result.returncode == 0, result.stderr
+    assert f"Removed: cli_tools.md table row for '{TOOL}'" in result.stdout
+    assert (repo_root / "_repo" / "docs" / "cli_tools.md").read_text(encoding="utf-8") == (
+        "| CLI | Description |\n|---|---|\n"
+        f"| `{OTHER_TOOL}` | The tool that stays. |\n"
+        f"| `{TOOL}-extra` | A different tool whose name starts with the removed name. |\n"
+    )
+
+
+@pytest.mark.parametrize("bad_name", ["../escape", "a/b", "..", ".", "-rf", "cli-tools"])
+def test_remover_should_refuse_path_like_names_without_deleting_anything(tmp_path, bad_name):
+    repo_root, home_dir = _build_fixture_repo(tmp_path)
+    share = home_dir / ".local" / "share"
+
+    result = _run_remover(repo_root, home_dir, bad_name)
+
+    assert result.returncode == 1
+    assert "invalid tool name" in result.stderr
+    assert (repo_root / TOOL).is_dir()
+    assert (share / "cli-tools" / TOOL / "data.txt").is_file()
+    assert (share / TOOL / "data.txt").is_file()
+    assert (share / "cli-tools" / OTHER_TOOL / "data.txt").is_file()
