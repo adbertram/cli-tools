@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Test: List pending reminders across all workspaces
-# Expected: Only Devolutions should have pending (in_progress) reminders
+# Expected: only workspaces with open reminders list pending (in_progress) reminders
 #
 # Prerequisites:
 #   slack auth login                         (Default workspace)

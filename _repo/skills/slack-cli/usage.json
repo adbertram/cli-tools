@@ -1645,7 +1645,7 @@
           ]
         },
         "list": {
-          "help": "List all reminders from both traditional reminders and saved items (Later). Queries both reminders.list and saved.list APIs, normalizes results into a unified list. Example: slack reminders list slack reminders list --state all slack reminders list --all-profiles slack reminders list --profile devolutions slack reminders list --state all --table slack reminders list --content --table",
+          "help": "List all reminders from both traditional reminders and saved items (Later). Queries both reminders.list and saved.list APIs, normalizes results into a unified list. Example: slack reminders list slack reminders list --state all slack reminders list --all-profiles slack reminders list --profile partner slack reminders list --state all --table slack reminders list --content --table",
           "usage_instructions": "List all reminders from both traditional reminders and saved items (Later). Use --state/-s (in_progress, archived, completed, all; default: in_progress). Use --content/-c to fetch message content (slower). Use --profile for a specific profile, --all-profiles/-a for all profiles. Use --filter/-f, --limit/-l, --properties/-p, --table/-t.",
           "arguments": [],
           "options": [

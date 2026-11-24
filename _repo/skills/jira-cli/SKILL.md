@@ -41,9 +41,9 @@ This file contains complete command syntax, all arguments, all options, and usag
 </principle>
 
 <principle name="Bounded Enhanced JQL">
-Jira Cloud enhanced JQL can reject unbounded searches in the Devolutions tenant with `HTTP 400: Unbounded JQL queries are not allowed here. Please add a search restriction to your query.`
+Jira Cloud enhanced JQL can reject unbounded searches with `HTTP 400: Unbounded JQL queries are not allowed here. Please add a search restriction to your query.`
 
-For smoke tests and exploratory list commands, include at least one real restriction such as `project = ENG`, `status = "To Do"`, or `assignee = currentUser()` before `ORDER BY`. Do not smoke-test the Devolutions profile with only `ORDER BY updated DESC`.
+For smoke tests and exploratory list commands, include at least one real restriction such as `project = ENG`, `status = "To Do"`, or `assignee = currentUser()` before `ORDER BY`. Do not smoke-test with only `ORDER BY updated DESC`.
 </principle>
 
 <principle name="Authentication">
@@ -69,10 +69,10 @@ creation so login can choose the correct resource when the OAuth grant includes
 multiple Jira sites:
 
 ```bash
-jira auth profiles create devolutions \
+jira auth profiles create work \
   --auth-type oauth_authorization_code \
-  --auth-param BASE_URL=https://devolutions.atlassian.net
-jira auth login --profile devolutions
+  --auth-param BASE_URL=https://example.atlassian.net
+jira auth login --profile work
 ```
 
 For ad-hoc Python probes of Jira config, use the installed Jira CLI interpreter
@@ -81,7 +81,7 @@ and pass the profile explicitly:
 ```bash
 launcher="$(command -v jira)"
 interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
-"$interpreter" -c "from jira_cli.config import get_config; print(get_config(profile='devolutions').env_file_path)"
+"$interpreter" -c "from jira_cli.config import get_config; print(get_config(profile='default').env_file_path)"
 ```
 
 Do not expect `JIRA_PROFILE=...` to affect direct imports. Jira's ad-hoc Python

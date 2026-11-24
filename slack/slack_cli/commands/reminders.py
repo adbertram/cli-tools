@@ -191,7 +191,7 @@ def list_reminders(
         slack reminders list
         slack reminders list --state all
         slack reminders list --all-profiles
-        slack reminders list --profile devolutions
+        slack reminders list --profile partner
         slack reminders list --state all --table
         slack reminders list --content --table
     """

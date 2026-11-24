@@ -82,7 +82,7 @@ interpreter and pass the profile explicitly:
 ```bash
 launcher="$(command -v jira)"
 interpreter="$(head -1 "$launcher" | sed 's/^#!//')"
-"$interpreter" -c "from jira_cli.config import get_config; print(get_config(profile='devolutions').env_file_path)"
+"$interpreter" -c "from jira_cli.config import get_config; print(get_config(profile='default').env_file_path)"
 ```
 
 Do not rely on `JIRA_PROFILE=...` for ad-hoc probes. Jira profile resolution
@@ -195,7 +195,7 @@ Default project rows include:
 - `jira tickets list` uses `/rest/api/3/search/jql`, the current enhanced JQL search endpoint.
 - `jira projects list` uses `/rest/api/3/project/search`, Jira's paginated project discovery endpoint.
 - `jira projects get` uses `/rest/api/3/project/{projectIdOrKey}`.
-- The Devolutions Jira tenant rejects unbounded enhanced JQL searches. Smoke tests should include a search restriction such as `project = ENG`, `status = "To Do"`, or `assignee = currentUser()` before `ORDER BY`.
+- Jira Cloud enhanced JQL can reject unbounded searches. Smoke tests should include a search restriction such as `project = ENG`, `status = "To Do"`, or `assignee = currentUser()` before `ORDER BY`.
 - `jira tickets create`, `update`, `delete`, `comment`, and `transition` use Jira Cloud API v3 issue endpoints.
 - `site_basic` calls the Jira site root directly; `oauth_authorization_code` and `scoped_api_token` call `https://api.atlassian.com/ex/jira/{cloudId}`.
 - Descriptions and comments are sent as Atlassian Document Format plain-text paragraphs.

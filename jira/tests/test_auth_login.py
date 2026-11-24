@@ -91,11 +91,11 @@ def test_oauth_profile_base_url_selects_matching_resource(tmp_path, monkeypatch)
             "auth",
             "profiles",
             "create",
-            "devolutions",
+            "acme",
             "--auth-type",
             jira_config.OAUTH_3LO_AUTH_TYPE,
             "--auth-param",
-            "BASE_URL=https://devolutions.atlassian.net",
+            "BASE_URL=https://acme.atlassian.net",
         ],
     )
     assert create_result.exit_code == 0, create_result.output
@@ -117,9 +117,9 @@ def test_oauth_profile_base_url_selects_matching_resource(tmp_path, monkeypatch)
                     "scopes": ["read:jira-work", "write:jira-work"],
                 },
                 {
-                    "id": "devolutions-cloud-id",
-                    "name": "Devolutions Jira",
-                    "url": "https://devolutions.atlassian.net",
+                    "id": "acme-cloud-id",
+                    "name": "Acme Jira",
+                    "url": "https://acme.atlassian.net",
                     "scopes": ["read:jira-work", "write:jira-work"],
                 },
             ]
@@ -129,16 +129,16 @@ def test_oauth_profile_base_url_selects_matching_resource(tmp_path, monkeypatch)
 
     result = runner.invoke(
         app,
-        ["auth", "login", "--profile", "devolutions"],
+        ["auth", "login", "--profile", "acme"],
         input="client-id-123\nclient-secret-456\nhttp://localhost\n",
     )
 
     assert result.exit_code == 0, result.output
-    profile_env = tmp_path / "cli-tools" / "jira" / "authentication_profiles" / "devolutions" / ".env"
+    profile_env = tmp_path / "cli-tools" / "jira" / "authentication_profiles" / "acme" / ".env"
     root_env = tmp_path / "cli-tools" / "jira" / ".env"
     assert dotenv_values(profile_env)["AUTH_TYPE"] == jira_config.OAUTH_3LO_AUTH_TYPE
-    assert dotenv_values(profile_env)["CLOUD_ID"] == "devolutions-cloud-id"
-    assert dotenv_values(root_env)["BASE_URL"] == "https://devolutions.atlassian.net"
+    assert dotenv_values(profile_env)["CLOUD_ID"] == "acme-cloud-id"
+    assert dotenv_values(root_env)["BASE_URL"] == "https://acme.atlassian.net"
 
 
 def test_legacy_profile_without_auth_type_is_migrated_to_site_basic(tmp_path, monkeypatch):
