@@ -27,7 +27,7 @@ coursecraft/
 snagit/
 youtube/
 
-# TikTok clipping lifecycle compliance; preserve n8n local artifacts.
+# Preserve n8n local artifacts.
 scripts/*.log
 authentication_profiles/
 n8n/**/.profiles/
