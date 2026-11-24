@@ -13,7 +13,7 @@ from cli_tools_shared.exceptions import ClientError
 
 
 ACCOUNT = "a" * 32
-QUEUE = {"queue_id": "b" * 32, "queue_name": "issue-manager", "consumers": []}
+QUEUE = {"queue_id": "b" * 32, "queue_name": "my-queue", "consumers": []}
 CONSUMER = {"consumer_id": "c" * 32, "type": "http_pull", "settings": {"batch_size": 1, "visibility_timeout_ms": 30000}}
 
 
@@ -40,6 +40,7 @@ def test_should_expose_queues_at_public_boundary():
     assert "create" in result.output
     assert "list" in result.output
     assert "get" in result.output
+    assert "delete" in result.output
 
 
 def test_should_follow_pages_before_filter_and_limit(transport):
@@ -47,7 +48,7 @@ def test_should_follow_pages_before_filter_and_limit(transport):
         response([{"queue_id": "other", "queue_name": "other"}], result_info={"page": 1, "total_pages": 2}),
         response([QUEUE], result_info={"page": 2, "total_pages": 2}),
     ]
-    rows = CloudflareClient().list_queues(ACCOUNT, limit=1, filters=["queue_name:eq:issue-manager"])
+    rows = CloudflareClient().list_queues(ACCOUNT, limit=1, filters=["queue_name:eq:my-queue"])
     assert rows == [QUEUE]
     assert [call.kwargs["params"] for call in transport.call_args_list] == [{"page": 1}, {"page": 2}]
 
@@ -88,8 +89,8 @@ def test_should_get_queue_by_id(transport):
 @pytest.mark.parametrize("jurisdiction", [None, "eu", "us", "fedramp"])
 def test_should_create_queue_with_native_body(transport, jurisdiction):
     transport.return_value = response(QUEUE)
-    assert CloudflareClient().create_queue(ACCOUNT, "issue-manager", jurisdiction) == QUEUE
-    expected = {"queue_name": "issue-manager"}
+    assert CloudflareClient().create_queue(ACCOUNT, "my-queue", jurisdiction) == QUEUE
+    expected = {"queue_name": "my-queue"}
     if jurisdiction is not None:
         expected["jurisdiction"] = jurisdiction
     assert transport.call_args.kwargs["method"] == "POST"
@@ -101,7 +102,7 @@ def test_should_create_queue_with_native_body(transport, jurisdiction):
 def test_should_never_retry_ambiguous_creation(transport, failure):
     transport.side_effect = failure if isinstance(failure, Exception) else [failure]
     with pytest.raises(ClientError, match="Check.*queues list.*before retrying"):
-        CloudflareClient().create_queue(ACCOUNT, "issue-manager")
+        CloudflareClient().create_queue(ACCOUNT, "my-queue")
     assert transport.call_count == 1
 
 
@@ -111,7 +112,7 @@ def test_should_reject_missing_result_after_create_without_retry(transport):
     res._content = b"{}"
     transport.return_value = res
     with pytest.raises(ClientError, match="Check.*queues list.*before retrying"):
-        CloudflareClient().create_queue(ACCOUNT, "issue-manager")
+        CloudflareClient().create_queue(ACCOUNT, "my-queue")
     assert transport.call_count == 1
 
 
@@ -126,10 +127,10 @@ def test_should_emit_cli_json_and_project_table_properties(monkeypatch, transpor
     monkeypatch.setattr(queues, "get_client", CloudflareClient)
     result = CliRunner().invoke(queues.app, ["list", ACCOUNT, "--properties", "queue_id,queue_name"])
     assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout) == [{"queue_id": QUEUE["queue_id"], "queue_name": "issue-manager"}]
+    assert json.loads(result.stdout) == [{"queue_id": QUEUE["queue_id"], "queue_name": "my-queue"}]
     result = CliRunner().invoke(queues.app, ["list", ACCOUNT, "--table", "--properties", "queue_name"])
     assert result.exit_code == 0, result.output
-    assert "issue-manager" in result.stdout
+    assert "my-queue" in result.stdout
     assert QUEUE["queue_id"] not in result.stdout
 
 
@@ -138,7 +139,7 @@ def test_should_create_then_get_through_cli(monkeypatch, transport):
     transport.return_value = response(QUEUE)
     monkeypatch.setattr(queues, "get_client", CloudflareClient)
     runner = CliRunner()
-    created = runner.invoke(queues.app, ["create", "issue-manager", ACCOUNT, "--jurisdiction", "us"])
+    created = runner.invoke(queues.app, ["create", "my-queue", ACCOUNT, "--jurisdiction", "us"])
     assert created.exit_code == 0, created.output
     queue_id = json.loads(created.stdout)["queue_id"]
     fetched = runner.invoke(queues.app, ["get", queue_id, ACCOUNT])
@@ -147,7 +148,7 @@ def test_should_create_then_get_through_cli(monkeypatch, transport):
 
 
 def test_should_reject_invalid_jurisdiction_without_request(transport):
-    result = CliRunner().invoke(app, ["queues", "create", "issue-manager", ACCOUNT, "--jurisdiction", "invalid"])
+    result = CliRunner().invoke(app, ["queues", "create", "my-queue", ACCOUNT, "--jurisdiction", "invalid"])
     assert result.exit_code != 0
     assert "invalid" in result.output
     transport.assert_not_called()
@@ -223,3 +224,38 @@ def test_should_exercise_consumer_cli_create_get_list(monkeypatch, transport):
     assert listed.exit_code == 0, listed.output
     assert CONSUMER["consumer_id"] in listed.stdout
     assert "http_pull" in listed.stdout
+
+
+def test_should_delete_queue_by_native_endpoint_without_retry(transport):
+    transport.return_value = response(None)
+    CloudflareClient().delete_queue(ACCOUNT, QUEUE["queue_id"])
+    assert transport.call_count == 1
+    assert transport.call_args.kwargs["method"] == "DELETE"
+    assert transport.call_args.kwargs["url"] == f"https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/queues/{QUEUE['queue_id']}"
+
+
+def test_should_raise_on_failed_queue_delete(transport):
+    res = response(None, 404, False)
+    res._content = json.dumps({"success": False, "result": None, "errors": [{"message": "queue not found"}]}).encode()
+    transport.return_value = res
+    with pytest.raises(ClientError, match="queue not found"):
+        CloudflareClient().delete_queue(ACCOUNT, QUEUE["queue_id"])
+
+
+def test_should_delete_queue_through_cli_with_yes(monkeypatch, transport):
+    from cloudflare_cli.commands import queues
+    monkeypatch.setattr(queues, "get_client", CloudflareClient)
+    transport.return_value = response(None)
+    result = CliRunner().invoke(queues.app, ["delete", QUEUE["queue_id"], ACCOUNT, "--yes"])
+    assert result.exit_code == 0, result.output
+    assert transport.call_args.kwargs["method"] == "DELETE"
+    assert transport.call_args.kwargs["url"].endswith(f"/accounts/{ACCOUNT}/queues/{QUEUE['queue_id']}")
+
+
+def test_should_refuse_queue_delete_without_confirmation(monkeypatch, transport):
+    from cloudflare_cli.commands import queues
+    monkeypatch.setattr(queues, "get_client", CloudflareClient)
+    result = CliRunner().invoke(queues.app, ["delete", QUEUE["queue_id"], ACCOUNT])
+    assert result.exit_code != 0
+    assert "--yes" in result.output
+    transport.assert_not_called()

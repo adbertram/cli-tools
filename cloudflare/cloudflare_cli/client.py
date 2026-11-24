@@ -584,6 +584,10 @@ class CloudflareClient:
                 "for the requested queue name before retrying."
             ) from exc
 
+    def delete_queue(self, account_id: str, queue_id: str) -> None:
+        """Delete a queue by its Cloudflare queue ID; the API envelope carries no result to return."""
+        self._envelope("DELETE", f"/accounts/{account_id}/queues/{queue_id}", retry=False)
+
     def list_queue_consumers(self, account_id: str, queue_id: str, limit: int = DEFAULT_LIST_LIMIT, filters: Optional[List[str]] = None) -> List[Dict]:
         """Read the consumer collection, then filter before limiting output."""
         _validate_list_query(limit, filters, "Consumer")

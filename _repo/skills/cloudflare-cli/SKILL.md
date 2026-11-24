@@ -35,7 +35,8 @@ cloudflare <command-group> <action> [arguments] [options]
 | Delete a Worker script | `cloudflare workers delete my-worker --force` |
 | List all queues | `cloudflare queues list --limit 0` |
 | Get queue details | `cloudflare queues get QUEUE_ID ACCOUNT_ID` |
-| Create a queue | `cloudflare queues create issue-manager ACCOUNT_ID` |
+| Create a queue | `cloudflare queues create my-queue ACCOUNT_ID` |
+| Delete a queue | `cloudflare queues delete QUEUE_ID ACCOUNT_ID --yes` |
 </quick_start>
 
 <essential_principles>
@@ -46,7 +47,7 @@ This file contains complete command syntax, all arguments, all options, and usag
 
 <principle name="Command Groups">
 - **queues consumers** — `list QUEUE_ID [ACCOUNT]`, `get QUEUE_ID CONSUMER_ID [ACCOUNT]`, `create QUEUE_ID [ACCOUNT]`. Create enables HTTP pull only, with optional `--batch-size`, `--max-retries`, `--retry-delay` (seconds), `--visibility-timeout-ms` (milliseconds), and `--dead-letter-queue` (name). Omitted settings use Cloudflare defaults. Consumer create sends one POST without retry; inspect consumers list before retrying any failure. It does not remove existing consumers, run a poller, or acknowledge messages. External consumers require their own Queues read/write token. List/get retain shared output/profile options; list filters before limit and 0 returns the entire consumer collection.
-- **queues** — `queues list [ACCOUNT]`, `queues get QUEUE_ID [ACCOUNT]`, and `queues create QUEUE_NAME [ACCOUNT] [--jurisdiction eu|us|fedramp]`. List follows page metadata; client-side filters run before limit (100 by default, 0 means all pages). List/get support properties and table output. Create makes exactly one POST attempt; inspect `queues list ACCOUNT --limit 0` for the requested name before retrying any failure. Read requires Queues Read/Write or Workers Scripts Read/Write; create requires Queues Write or Workers Scripts Write. Read success does not prove write permission. Creation does not configure consumers or purchase a plan.
+- **queues** — `queues list [ACCOUNT]`, `queues get QUEUE_ID [ACCOUNT]`, `queues create QUEUE_NAME [ACCOUNT] [--jurisdiction eu|us|fedramp]`, and `queues delete QUEUE_ID [ACCOUNT] [--yes/-y]`. List follows page metadata; client-side filters run before limit (100 by default, 0 means all pages). List/get support properties and table output. Create makes exactly one POST attempt; inspect `queues list ACCOUNT --limit 0` for the requested name before retrying any failure. Delete makes exactly one DELETE attempt and prompts unless `--yes` is given (non-interactive runs without `--yes` refuse). Read requires Queues Read/Write or Workers Scripts Read/Write; create and delete require Queues Write or Workers Scripts Write. Read success does not prove write permission. Creation does not configure consumers or purchase a plan.
 - **auth** — Manage authentication (login, logout, status, refresh, test)
 - **auth** -- Authentication commands and nested `auth profiles` management
 - **zones** — Manage Cloudflare zones (list, get, update security settings)

@@ -1,5 +1,5 @@
 """Account-level Cloudflare Queues operations."""
-COMMAND_CREDENTIALS = {"list": ["api_key"], "get": ["api_key"], "create": ["api_key"], "consumers": ["api_key"]}
+COMMAND_CREDENTIALS = {"list": ["api_key"], "get": ["api_key"], "create": ["api_key"], "delete": ["api_key"], "consumers": ["api_key"]}
 
 from typing import Optional
 
@@ -7,7 +7,7 @@ import typer
 
 from ..client import DEFAULT_LIST_LIMIT, QueueJurisdiction, get_client
 from ..presentation import print_records as _output
-from cli_tools_shared.output import command
+from cli_tools_shared.output import command, confirm_destructive_action, print_success
 
 
 app = typer.Typer(help="Manage Cloudflare Queues", no_args_is_help=True)
@@ -31,7 +31,7 @@ def list_queues(
 
     Examples:
         cloudflare queues list --limit 0
-        cloudflare queues list --filter "queue_name:eq:issue-manager" --table
+        cloudflare queues list --filter "queue_name:eq:my-queue" --table
     """
     client = get_client()
     _output(client.list_queues(_account_id(client, account), limit, filter_str), table, properties, QUEUE_COLUMNS)
@@ -65,11 +65,35 @@ def create_queue(
     """Create a queue with one POST attempt. Inspect queues list before retrying failures.
 
     Examples:
-        cloudflare queues create issue-manager ACCOUNT_ID
+        cloudflare queues create my-queue ACCOUNT_ID
         cloudflare queues create regional-work ACCOUNT_ID --jurisdiction eu
     """
     client = get_client()
     _output(client.create_queue(_account_id(client, account), queue_name, jurisdiction.value if jurisdiction else None), table, default_columns=QUEUE_COLUMNS)
+
+
+@app.command("delete")
+@command
+def delete_queue(
+    queue_id: str = typer.Argument(..., help="Queue ID from queues list or create"),
+    account: Optional[str] = typer.Argument(None, help="Account name or ID; defaults to the single visible account"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """Delete a queue by ID with one DELETE attempt; prompts unless --yes is given.
+
+    Examples:
+        cloudflare queues delete QUEUE_ID ACCOUNT_ID
+        cloudflare queues delete QUEUE_ID ACCOUNT_ID --yes
+    """
+    confirm_destructive_action(
+        f"Are you sure you want to delete queue {queue_id}?",
+        assume_yes=yes,
+        action_description=f"delete queue {queue_id}",
+        skip_flag_hint="--yes",
+    )
+    client = get_client()
+    client.delete_queue(_account_id(client, account), queue_id)
+    print_success(f"Deleted queue {queue_id}")
 
 
 consumers_app = typer.Typer(help="Inspect consumers and enable HTTP pull", no_args_is_help=True)

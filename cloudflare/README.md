@@ -524,10 +524,11 @@ bucket and object command groups, including upload and synchronization options.
 
 ```bash
 cloudflare queues list --limit 0
-cloudflare queues list ACCOUNT_ID --filter "queue_name:eq:issue-manager" --properties queue_id,queue_name
+cloudflare queues list ACCOUNT_ID --filter "queue_name:eq:my-queue" --properties queue_id,queue_name
 cloudflare queues get QUEUE_ID ACCOUNT_ID --table
-cloudflare queues create issue-manager ACCOUNT_ID
+cloudflare queues create my-queue ACCOUNT_ID
 cloudflare queues create regional-work ACCOUNT_ID --jurisdiction eu
+cloudflare queues delete QUEUE_ID ACCOUNT_ID --yes
 ```
 
 All queue commands accept an optional account name or ID; omit it only when the
@@ -543,13 +544,17 @@ requested name before retrying: the remote write may have succeeded. Creation
 does not configure a consumer, buy a plan, or replace existing resources.
 Optional jurisdictions are `eu`, `us`, and `fedramp`.
 
+Delete sends one DELETE attempt and prompts for confirmation unless `--yes/-y`
+is given; without a terminal and without `--yes` it refuses to run.
+
 Read operations accept Queues Read/Write or Workers Scripts Read/Write; creation
-requires Queues Write or Workers Scripts Write. Successful reads do not prove
+and deletion require Queues Write or Workers Scripts Write. Successful reads do not prove
 write permission.
 
 API references: [list](https://developers.cloudflare.com/api/resources/queues/methods/list/),
 [get](https://developers.cloudflare.com/api/resources/queues/methods/get/),
-[create](https://developers.cloudflare.com/api/resources/queues/methods/create/).
+[create](https://developers.cloudflare.com/api/resources/queues/methods/create/),
+[delete](https://developers.cloudflare.com/api/resources/queues/methods/delete/).
 
 #### HTTP-pull consumers
 

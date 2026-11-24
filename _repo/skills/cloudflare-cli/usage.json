@@ -1,8 +1,8 @@
 {
   "tool": "cloudflare",
   "description": "CLI interface for Cloudflare API",
-  "discovered_at": "2026-09-25T14:15:59Z",
-  "total_commands": 87,
+  "discovered_at": "2026-11-24T14:06:33Z",
+  "total_commands": 88,
   "global_options": [
     {
       "name": "--version",
@@ -3074,7 +3074,7 @@
         "create": {
           "help": "Create a queue with one POST attempt. Inspect queues list before retrying failures.",
           "examples": [
-            "cloudflare queues create issue-manager ACCOUNT_ID",
+            "cloudflare queues create my-queue ACCOUNT_ID",
             "cloudflare queues create regional-work ACCOUNT_ID --jurisdiction eu"
           ],
           "arguments": [
@@ -3104,6 +3104,43 @@
               "required": false,
               "help": "Display as table",
               "short": "-t",
+              "takes_value": false
+            },
+            {
+              "name": "--profile",
+              "type": "TEXT",
+              "required": false,
+              "help": "Auth profile name"
+            }
+          ]
+        },
+        "delete": {
+          "help": "Delete a queue by ID with one DELETE attempt; prompts unless --yes is given.",
+          "examples": [
+            "cloudflare queues delete QUEUE_ID ACCOUNT_ID",
+            "cloudflare queues delete QUEUE_ID ACCOUNT_ID --yes"
+          ],
+          "arguments": [
+            {
+              "name": "queue_id",
+              "type": "TEXT",
+              "required": true,
+              "help": "Queue ID from queues list or create"
+            },
+            {
+              "name": "account",
+              "type": "ACCOUNT",
+              "required": false,
+              "help": "Account name or ID; defaults to the single visible account"
+            }
+          ],
+          "options": [
+            {
+              "name": "--yes",
+              "type": "bool",
+              "required": false,
+              "help": "Skip confirmation prompt",
+              "short": "-y",
               "takes_value": false
             },
             {
@@ -3161,7 +3198,7 @@
           "help": "List queues across pages; filters precede the result limit.",
           "examples": [
             "cloudflare queues list --limit 0",
-            "cloudflare queues list --filter \"queue_name:eq:issue-manager\" --table"
+            "cloudflare queues list --filter \"queue_name:eq:my-queue\" --table"
           ],
           "arguments": [
             {
