@@ -56,6 +56,8 @@ class BricklinkBrowser(PlaywrightBrowserAutomation):
     SESSION_NAME = "bricklink"
     LOGIN_URL = "https://www.bricklink.com/v2/login.page"
     AUTH_CHECK_URL = "https://www.bricklink.com/myMsg.asp"
+    # Run in headed (visible) mode to avoid LEGO bot detection
+    AUTOMATION_HEADED = True
     # ``identity.lego.com/<locale>/login`` is the real expired-session
     # landing page (e.g. ``identity.lego.com/en-US/login?ReturnUrl=...``).
     # The previous pattern ``identity\.lego\.com/login`` did not match
@@ -122,16 +124,24 @@ class BricklinkBrowser(PlaywrightBrowserAutomation):
             username = get_lastpass_credential("username")
             try:
                 self._fill_login_secret(page, self.AUTH_LOGIN_USERNAME_SELECTOR, username)
+                # Human-like delay after filling username (mimics manual typing completion)
+                page.wait_for_timeout(1000)
                 first_step[1][1].first.click()
             finally:
                 username = None
+
+            # Give LEGO identity time to process the username submit and load the
+            # password step before polling. Manual automation that succeeds waits
+            # 4 seconds here; aggressive immediate polling triggers bot detection.
+            page.wait_for_timeout(4000)
 
             password_control = page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)
             password_deadline = time.time() + 15
             while time.time() < password_deadline:
                 if password_control.count() == 1 and password_control.first.is_visible():
                     break
-                page.wait_for_timeout(250)
+                # Human-like polling interval instead of aggressive 250ms checks
+                page.wait_for_timeout(1000)
             else:
                 raise BrowserAutomationError(
                     "BrickLink login did not reveal one visible password control"
@@ -150,6 +160,8 @@ class BricklinkBrowser(PlaywrightBrowserAutomation):
             password = get_lastpass_credential("password")
             try:
                 self._fill_login_secret(page, self.AUTH_LOGIN_PASSWORD_SELECTOR, password)
+                # Human-like delay after filling password
+                page.wait_for_timeout(1000)
                 submit_control.first.click()
             finally:
                 password = None
