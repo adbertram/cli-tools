@@ -12,6 +12,7 @@ from .config import get_config
 PRICING = {
     # Gemini 4 models (rates through 2026-11-30; see PRICE_CHANGES)
     "gemini-4-argon": {"input": 2.00, "output": 10.00},
+    "gemini-4-neon": {"input": 3.00, "output": 15.00},
 
     # Gemini 3 models
     "gemini-3.1-pro-preview": {"input": 2.00, "output": 12.00},

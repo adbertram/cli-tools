@@ -87,7 +87,7 @@ def _record_response_usage(
 class ThinkingLevel(str, Enum):
     """thinking_level values accepted by google-genai ThinkingConfig.
 
-    Supported levels vary by model (e.g. gemini-4-argon: low/medium/high;
+    Supported levels vary by model (e.g. gemini-4-neon: low/medium/high;
     gemini-3.5-flash-lite: minimal/low/medium/high). See
     https://ai.google.dev/gemini-api/docs/thinking
     """
@@ -263,7 +263,7 @@ class GeminiClient:
     def generate_content(
         self,
         prompt: str,
-        model: str = "gemini-4-argon",
+        model: str = "gemini-4-neon",
         file_refs: Optional[List[types.File]] = None,
         operation: str = "generate",
         response_schema: Optional[Dict[str, Any]] = None,
@@ -276,7 +276,7 @@ class GeminiClient:
 
         Args:
             prompt: Text prompt for generation
-            model: Model to use (default: gemini-4-argon)
+            model: Model to use (default: gemini-4-neon)
             file_refs: Optional list of File objects to include
             operation: Operation type for usage tracking
             response_schema: Optional JSON schema for structured output
@@ -339,7 +339,7 @@ class GeminiClient:
         self,
         video_path: str,
         prompt: str,
-        model: str = "gemini-4-argon",
+        model: str = "gemini-4-neon",
         auto_wait: bool = True,
         additional_files: Optional[List[str]] = None,
         response_schema: Optional[Dict[str, Any]] = None,
@@ -353,7 +353,7 @@ class GeminiClient:
         Args:
             video_path: Path to video file
             prompt: Analysis prompt
-            model: Model to use (default: gemini-4-argon)
+            model: Model to use (default: gemini-4-neon)
             auto_wait: Wait for file processing before analysis (default: True)
             additional_files: Optional list of additional file paths to include
             response_schema: Optional JSON schema for structured output

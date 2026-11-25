@@ -17,12 +17,12 @@ def video_analyze(
     prompt: str = typer.Option(None, "--prompt", "-p", help="Analysis prompt (inline text)"),
     prompt_file: str = typer.Option(None, "--prompt-file", "-f", help="Path to file containing prompt"),
     files: List[str] = typer.Option(None, "--files", help="Additional files to include (can specify multiple times)"),
-    model: str = typer.Option("gemini-4-argon", "--model", "-m", help="Model to use"),
+    model: str = typer.Option("gemini-4-neon", "--model", "-m", help="Model to use"),
     no_wait: bool = typer.Option(False, "--no-wait", help="Don't wait for processing (large files only)"),
     json_schema: str = typer.Option(None, "--json-schema", "-s", help="Path to JSON schema file for structured output"),
     fps: float = typer.Option(None, "--fps", help="Frames per second for video sampling (default: 1). Use higher values (2-5) for fast-action or sync detection."),
-    temperature: Optional[float] = typer.Option(None, "--temperature", "-T", help="Sampling temperature. Omit to use the model default. gemini-4-argon and Gemini 3.6+ ignore it."),
-    thinking_level: Optional[ThinkingLevel] = typer.Option(None, "--thinking-level", help="Thinking level (thinking_level). Omit to use the model default. Supported levels vary by model, e.g. gemini-4-argon: low|medium|high."),
+    temperature: Optional[float] = typer.Option(None, "--temperature", "-T", help="Sampling temperature. Omit to use the model default. gemini-4-neon and Gemini 3.6+ ignore it."),
+    thinking_level: Optional[ThinkingLevel] = typer.Option(None, "--thinking-level", help="Thinking level (thinking_level). Omit to use the model default. Supported levels vary by model, e.g. gemini-4-neon: low|medium|high."),
 ):
     """
     Upload and analyze a video file with Gemini.
@@ -38,7 +38,7 @@ def video_analyze(
         gemini-api video analyze video.mp4 --prompt "Summarize this video"
         gemini-api video analyze video.mp4 --prompt-file prompts/review.txt
         gemini-api video analyze lecture.mp4 -p "What are the key topics discussed?"
-        gemini-api video analyze demo.mp4 -f analysis_prompt.txt --model gemini-4-argon
+        gemini-api video analyze demo.mp4 -f analysis_prompt.txt --model gemini-4-neon
         gemini-api video analyze video.mp4 -p "Review this" --files outline.pdf --files notes.txt
         gemini-api video analyze video.mp4 -p "Review this" --json-schema schema.json
     """
