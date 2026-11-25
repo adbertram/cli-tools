@@ -11,6 +11,7 @@ BrowserAutomation from cli_tools_shared.
 """
 import re
 import sys
+import time
 from datetime import datetime
 from typing import List, Optional
 
@@ -27,6 +28,8 @@ class _BrickOwlAutomation(BrowserAutomation):
     AUTH_CHECK_URL = "https://www.brickowl.com/mystore/orders"
     AUTH_URL_PATTERN = r"/user(?:$|[/?].*)"
     AUTH_SUCCESS_SELECTOR = "#dLabel .hello"
+    # Run in headed (visible) mode to avoid Cloudflare bot detection
+    AUTOMATION_HEADED = True
     # Non-interactive credential-fill login, matching the live Brick Owl login
     # form (inputs are named ``main_identifier`` / ``main_password`` and the
     # submit control is ``bottom_op``). Declaring all five hooks makes
@@ -43,6 +46,67 @@ class _BrickOwlAutomation(BrowserAutomation):
     AUTH_LOGIN_SUBMIT_SELECTOR = 'input[name="bottom_op"]'
     AUTH_LOGIN_USERNAME_SECRET = "brickowl-legacy-username"
     AUTH_LOGIN_PASSWORD_SECRET = "brickowl-legacy-password"
+
+    def _complete_noninteractive_login(self, page) -> None:
+        """Authenticate with managed credentials and human-like timing to bypass Cloudflare."""
+        if self._check_auth(page):
+            return
+
+        from cli_tools_shared.config import read_cli_tool_secret
+
+        # Give Cloudflare time to automatically pass the challenge in headed mode
+        # (the "Verifying you are human" interstitial typically takes 3-5 seconds)
+        page.wait_for_timeout(5000)
+
+        # Verify controls are present
+        controls = (
+            ("username", page.locator(self.AUTH_LOGIN_USERNAME_SELECTOR)),
+            ("password", page.locator(self.AUTH_LOGIN_PASSWORD_SELECTOR)),
+            ("submit", page.locator(self.AUTH_LOGIN_SUBMIT_SELECTOR)),
+        )
+        for label, locator in controls:
+            if locator.count() != 1 or not locator.first.is_visible():
+                raise BrowserAutomationError(
+                    f"Brick Owl login requires one visible {label} control."
+                )
+        if not controls[-1][1].first.is_enabled():
+            raise BrowserAutomationError("Brick Owl login submit control is disabled.")
+
+        username = read_cli_tool_secret(self.AUTH_LOGIN_USERNAME_SECRET)
+        password = read_cli_tool_secret(self.AUTH_LOGIN_PASSWORD_SECRET)
+        if username is None:
+            raise BrowserAutomationError(
+                f"Missing browser-login username secret: {self.AUTH_LOGIN_USERNAME_SECRET}"
+            )
+        if password is None:
+            raise BrowserAutomationError(
+                f"Missing browser-login password secret: {self.AUTH_LOGIN_PASSWORD_SECRET}"
+            )
+
+        try:
+            # Fill username and add human-like delay (mimics manual typing completion)
+            page.fill(self.AUTH_LOGIN_USERNAME_SELECTOR, username)
+            page.wait_for_timeout(1000)
+
+            # Fill password and add human-like delay
+            page.fill(self.AUTH_LOGIN_PASSWORD_SELECTOR, password)
+            page.wait_for_timeout(1000)
+
+            # Click submit
+            controls[-1][1].first.click()
+
+            # Wait for page to process login (human-like polling interval)
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                page.wait_for_timeout(1000)
+                if self._check_auth(page):
+                    return
+            raise BrowserAutomationError(
+                "Brick Owl login did not reach an authenticated state within 30 seconds."
+            )
+        finally:
+            username = None
+            password = None
 
 
 # Scrapes Brick Owl's message DataTable rows. The date cell carries a hidden
